@@ -14,10 +14,10 @@ import random
 from enum import Enum, auto
 from typing import Callable, Sequence
 
-from .config import Config
+from ...config import Config
 from .detector import Person, left_to_right, select_players
 from .pose import Pose
-from .scoring import round_score, score_pose
+from ...scoring import round_score, score_pose
 from .screens import (
     CountdownScreen,
     CountdownTick,

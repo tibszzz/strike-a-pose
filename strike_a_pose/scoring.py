@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import math
 
-from .pose import SEGMENTS, Joints, Point, segment_vector
+from strike_a_pose.games.pose.pose import SEGMENTS, Joints, Point, segment_vector
 
 
 def angle_between(a: Point, b: Point) -> float:

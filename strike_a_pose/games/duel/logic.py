@@ -15,7 +15,7 @@ import random
 from dataclasses import dataclass, field
 from enum import Enum
 
-from strike_a_pose.pose import PoseState
+from strike_a_pose.games.pose.gestures import PoseState
 
 
 class Phase(Enum):

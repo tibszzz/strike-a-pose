@@ -16,8 +16,8 @@ import numpy as np
 import pygame
 
 from .audio import init_mixer
-from .pose import SKELETON, PoseFrame
-from .pose.tracker import PoseTracker
+from strike_a_pose.games.pose.pose import SKELETON, PoseFrame
+from strike_a_pose.games.pose.tracker import PoseTracker
 
 PLAYER_COLORS = [(80, 170, 255), (255, 120, 80)]
 

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum, auto
+from typing import Union
 
 from .detector import Box
 from .pose import Point, Pose
@@ -91,7 +92,7 @@ class FinalScreen:
     standings: tuple[Standing, ...]  # best first
 
 
-Screen = LobbyScreen | CountdownScreen | RetryScreen | ResultsScreen | FinalScreen
+Screen = Union[LobbyScreen, CountdownScreen, RetryScreen, ResultsScreen, FinalScreen]
 
 
 # --- events ------------------------------------------------------------------
@@ -119,4 +120,4 @@ class GameOver:
     standings: tuple[Standing, ...]
 
 
-Event = CountdownTick | SnapshotTaken | RoundScored | GameOver
+Event = Union[CountdownTick, SnapshotTaken, RoundScored, GameOver]

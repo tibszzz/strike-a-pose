@@ -6,7 +6,7 @@ import pygame
 
 from strike_a_pose import audio
 from strike_a_pose.app import sepia
-from strike_a_pose.pose import GestureConfig, PoseFrame, PoseState, classify
+from strike_a_pose.games.pose import GestureConfig, PoseFrame, PoseState, classify
 
 from .logic import Duel, DuelConfig, Phase
 

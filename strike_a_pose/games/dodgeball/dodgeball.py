@@ -1,13 +1,10 @@
 """Dodgeball Game: Avoid the bouncing ball! Ball hits body = lose points."""
 
 from __future__ import annotations
-
 import math
 import random
-
 import pygame
-
-from strike_a_pose.pose import PoseFrame
+from strike_a_pose.games.pose import PoseFrame
 
 # Colors
 WHITE = (255, 255, 255)

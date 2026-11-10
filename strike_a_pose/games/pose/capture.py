@@ -18,8 +18,8 @@ from typing import Sequence
 
 import numpy as np
 
-from .camera import Camera, CameraError
-from .config import Config
+from ...camera import Camera, CameraError
+from ...config import Config
 from .detector import Person, PoseDetector
 from .pose import (
     BODY_JOINTS,
@@ -30,7 +30,7 @@ from .pose import (
     pose_from_dict,
     save_pose,
 )
-from .render_cv import (
+from ...render_cv import (
     ACCENT,
     CANVAS_HEIGHT,
     CANVAS_WIDTH,
