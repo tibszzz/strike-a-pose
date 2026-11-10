@@ -19,6 +19,16 @@ On macOS, give your terminal or editor camera access in System Settings > Privac
 
 ## Games
 
+### Body Trace (1-2 players)
+
+```sh
+python -m strike_a_pose body_trace
+```
+
+- Stand in front of the camera. Your body pose and movements are drawn live on the feed.
+- Movement trails show your recent motion (last 15 frames).
+- Filled silhouettes and skeleton lines visualize your body shape.
+
 ### Wild West Duel (2 players)
 
 ```sh

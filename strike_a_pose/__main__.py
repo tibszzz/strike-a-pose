@@ -1,10 +1,11 @@
-"""Usage: python -m strike_a_pose duel [--camera 0] [--imgsz 640] [--device mps]"""
+"""Usage: python -m strike_a_pose [duel|body_trace] [--camera 0] [--imgsz 640] [--device mps]"""
 
 import argparse
 import importlib
 
 GAMES = {
     "duel": "strike_a_pose.games.duel.game:DuelGame",
+    "body_trace": "strike_a_pose.games.body_trace.game:DodgeballGame",
 }
 
 

@@ -100,6 +100,8 @@ def run(make_game, camera_index: int = 0, imgsz: int = 640, device: str | None =
                             if fullscreen
                             else pygame.display.set_mode(window_size, pygame.RESIZABLE)
                         )
+                    elif hasattr(game, 'handle_key'):
+                        game.handle_key(event.key)
 
             game.update(frame)
 
