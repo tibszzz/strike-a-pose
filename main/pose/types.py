@@ -53,6 +53,7 @@ class PoseFrame:
     image: np.ndarray  # BGR camera image, already mirrored
     timestamp: float  # time.perf_counter() right after capture
     players: Players  # (left / P1, right / P2); None when not detected
+    people: list[Person]  # all detections this frame, before 2-player assignment
 
 
 def assign_players(people: list[Person], frame_width: float) -> Players:

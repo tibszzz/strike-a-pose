@@ -69,7 +69,12 @@ class PoseTracker:
             for i in range(len(boxes)):
                 people.append(Person(xy=xy[i], conf=conf[i], box=tuple(map(float, boxes[i]))))
 
-        return PoseFrame(image, timestamp, assign_players(people, image.shape[1]))
+        return PoseFrame(
+            image,
+            timestamp,
+            assign_players(people, image.shape[1]),
+            people,
+        )
 
     def close(self) -> None:
         self.cap.release()

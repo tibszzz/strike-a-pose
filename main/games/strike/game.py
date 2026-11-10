@@ -246,7 +246,7 @@ SIDE_CENTER = SIDE_LEFT + SIDE_WIDTH // 2
 
 def _header(canvas: np.ndarray, text: str) -> None:
     draw_text(canvas, text, 40, 62, 1.3)
-    draw_text(canvas, "Q: quit", CANVAS_WIDTH - 40, 58, 0.7, MUTED, "right")
+    draw_text(canvas, "Esc: menu", CANVAS_WIDTH - 40, 58, 0.7, MUTED, "right")
 
 
 def _target_panel(

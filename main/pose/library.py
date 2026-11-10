@@ -12,7 +12,10 @@ import json
 import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping, Sequence
+from typing import TYPE_CHECKING, Mapping, Sequence
+
+if TYPE_CHECKING:
+    from .types import Person as CocoPerson
 
 Point = tuple[float, float]
 Joints = Mapping[str, Point]
@@ -63,6 +66,25 @@ class Person:
             for name, point in self.joints.items()
             if self.confidence[name] >= min_confidence
         }
+
+
+def from_coco_person(person: "CocoPerson") -> Person:
+    """Convert a tracker `types.Person` (COCO-17 arrays) to named joints."""
+    return Person(
+        joints={
+            name: (float(x), float(y))
+            for name, (x, y) in zip(JOINT_NAMES, person.xy)
+        },
+        confidence={
+            name: float(score) for name, score in zip(JOINT_NAMES, person.conf)
+        },
+        box=(
+            float(person.box[0]),
+            float(person.box[1]),
+            float(person.box[2]),
+            float(person.box[3]),
+        ),
+    )
 
 
 def left_to_right(people: Sequence[Person]) -> list[Person]:

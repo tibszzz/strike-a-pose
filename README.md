@@ -19,6 +19,14 @@ On macOS, give your terminal or editor camera access in System Settings > Privac
 
 ## Games
 
+Launch the shared window (camera + pose stay warm while you switch titles):
+
+```sh
+python -m main
+```
+
+Use Up/Down and Enter on the menu. In a game, `Esc` returns to the menu; `Q` quits the app. Optional: `python -m main <game>` jumps straight into that title (Esc still returns to the menu).
+
 ### Wild West Duel (2 players)
 
 ```sh
@@ -48,7 +56,8 @@ Keys:
 | `D` | Debug view: live camera behind the UI, skeletons, pose state per player, FPS |
 | `R` | Reset the match |
 | `F` | Toggle fullscreen |
-| `Q` / `Esc` | Quit |
+| `Esc` | Back to menu |
+| `Q` | Quit the app |
 
 ### Customising duel
 
@@ -66,7 +75,7 @@ python -m main dodgeball
 - Stand in front of the camera. A ball bounces around the live feed.
 - Avoid the ball: if it touches your body shape, you take a hit and the round pauses.
 - Press **R** to restart (5-second countdown). Lowest hit count wins.
-- Same camera / imgsz / device flags as duel. Keys: D debug, R reset, F fullscreen, Q / Esc quit.
+- Same camera / imgsz / device flags as duel. Keys: D debug, R reset, F fullscreen, Esc menu, Q quit.
 
 Also in the same package: `python -m main cannonball` — a Z-axis ball thrown toward the screen.
 
@@ -86,7 +95,7 @@ A party game for 2 to 4 players sharing one webcam. Each round shows a stick-fig
 
 - Stand far enough back that everyone's whole body is in frame. Players are numbered left to right as they appear on screen.
 - The screen is a mirror: if the figure's raised arm is on the left of the screen, raise the arm you see on the left of your own image.
-- SPACE starts the game and moves on from each results screen. Q quits.
+- SPACE starts the game and moves on from each results screen. Esc returns to the menu; Q quits the app.
 - People in the background are ignored: the snapshot scores the tallest figures in frame, as many as started the game.
 - If the snapshot finds fewer people than started the game, the round is replayed with the same pose.
 
@@ -123,11 +132,14 @@ python scripts/detect_yolo.py # raw YOLO pose debug view
 
 Layout:
 
-- `main/pose/`: live YOLO tracker, P1/P2 assignment, gesture helpers; pose-file types in `library.py`
-- `main/app.py`: shared pygame loop and keys for duel. Games implement `update` / `draw` / `reset`.
+- `main/pose/`: live YOLO tracker, P1/P2 assignment, full `people` list, gesture helpers; pose-file types in `library.py`
+- `main/app.py`: shared pygame shell; swaps `Game` instances without remounting the pose tracker
+- `main/nav.py`: menu commands and `StartGame` / `QuitApp` navigation
+- `main/games/menu.py`: in-window game picker (`MenuGame`)
+- `main/games/registry.py`: playable game factories for CLI + menu
 - `main/games/duel/`: Wild West Duel (from `shooter-v1`)
 - `main/games/dodgeball/`: Dodgeball and Cannonball (from `kaizer1v`)
-- `main/games/strike/`: the party pose game. `logic.py` is the rules, `game.py` draws
+- `main/games/strike/`: party pose game; `play.py` is the pygame adapter, `logic.py` rules, `game.py` compose/draw
 - `main/config.py`: `.env` loading, message lists, and strike `Config`
 - `assets/models/`: pose model weights
 - `assets/poses/`: strike pose library

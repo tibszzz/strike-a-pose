@@ -23,7 +23,7 @@ def test_all_screens_render():
     game = DuelGame(SIZE, config=DuelConfig(lives=1))
     game.duel.rng = FixedRng(1.6)
     canvas = pygame.Surface(SIZE)
-    frame = PoseFrame(np.zeros((SIZE[1], SIZE[0], 3), np.uint8), 0.0, (None, None))
+    frame = PoseFrame(np.zeros((SIZE[1], SIZE[0], 3), np.uint8), 0.0, (None, None), [])
 
     t, seen = 0.0, set()
     floated = False
