@@ -2,7 +2,8 @@
 
 Round flow:
   WAIT_START -> READY -> STEADY -> BANG -> ROUND_OVER -> WAIT_START ...
-  The point that reaches `points_to_win` goes straight to MATCH_OVER.
+  The hit that takes a player's last life goes straight to MATCH_OVER, which first shows
+  that round's result for `round_result_time`, then the winner.
 
 A draw only counts once it has held for `draw_confirm_frames` consecutive frames; its
 time is the capture timestamp of the first of those frames. A draw that started at or
@@ -29,7 +30,7 @@ class Phase(Enum):
 
 @dataclass(frozen=True)
 class DuelConfig:
-    points_to_win: int = 3
+    lives: int = 3  # hits a player can take; the last one loses the match
     start_hold: float = 1.0  # both visible and not drawing this long to start a round
     ready_to_steady: float = 1.5
     bang_delay_min: float = 1.5  # STEADY -> BANG, uniform random
@@ -39,7 +40,7 @@ class DuelConfig:
     settle_time: float = 0.15  # after first draw, wait this long for a possible tie
     draw_confirm_frames: int = 2
     round_result_time: float = 3.0  # how long the round result is shown
-    match_result_min_time: float = 3.0  # winner screen shown at least this long
+    match_result_min_time: float = 3.0  # winner screen shown at least this long (after the round result)
 
 
 @dataclass(frozen=True)
@@ -88,6 +89,20 @@ class Duel:
         self._idle_since: float | None = None
         self._clear_round()
 
+    def lives_left(self, i: int) -> int:
+        return max(0, self.config.lives - self.scores[1 - i])
+
+    def showing_final_round(self, now: float) -> bool:
+        """MATCH_OVER starts by showing the deciding round's result, like ROUND_OVER."""
+        return self.phase == Phase.MATCH_OVER and now - self.phase_start < self.config.round_result_time
+
+    def can_restart(self, now: float) -> bool:
+        cfg = self.config
+        return (
+            self.phase == Phase.MATCH_OVER
+            and now - self.phase_start >= cfg.round_result_time + cfg.match_result_min_time
+        )
+
     def start_progress(self, now: float) -> float:
         if self._idle_since is None:
             return 0.0
@@ -134,9 +149,7 @@ class Duel:
                 self._idle_since = None
 
         elif self.phase == Phase.MATCH_OVER:
-            if now - self.phase_start >= cfg.match_result_min_time and self._both_idle_held(
-                now, states
-            ):
+            if self.can_restart(now) and self._both_idle_held(now, states):
                 self.scores = [0, 0]
                 self.match_winner = None
                 self.last_result = None
@@ -209,7 +222,7 @@ class Duel:
         if winner is not None:
             self.scores[winner] += 1
             events.append(("hit", winner))
-            if self.scores[winner] >= self.config.points_to_win:
+            if self.scores[winner] >= self.config.lives:
                 self.match_winner = winner
                 self._enter(Phase.MATCH_OVER, now)
                 events.append(("match_over", winner))

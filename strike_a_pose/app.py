@@ -3,6 +3,9 @@
 Games draw onto a canvas in camera-pixel coordinates (so keypoints map 1:1); the
 canvas is then scaled to the window with letterboxing.
 
+The canvas is filled with the game's `background` colour; in debug mode the live camera
+image is used instead, with skeletons and debug text on top.
+
 Keys: D debug overlay, R reset, F fullscreen, Q / Esc quit.
 """
 
@@ -12,7 +15,6 @@ import time
 from typing import Protocol
 
 import cv2
-import numpy as np
 import pygame
 
 from .audio import init_mixer
@@ -24,13 +26,11 @@ PLAYER_COLORS = [(80, 170, 255), (255, 120, 80)]
 
 class Game(Protocol):
     title: str
+    background: tuple[int, int, int]
 
     def update(self, frame: PoseFrame) -> None: ...
     def draw(self, canvas: pygame.Surface, frame: PoseFrame) -> None: ...
     def reset(self) -> None: ...
-    def render_camera(self, image_bgr: np.ndarray) -> np.ndarray:
-        """Return an RGB image to use as the background."""
-        ...
     def debug_lines(self) -> list[str]: ...
 
 
@@ -103,8 +103,11 @@ def run(make_game, camera_index: int = 0, imgsz: int = 640, device: str | None =
 
             game.update(frame)
 
-            rgb = game.render_camera(frame.image)
-            canvas.blit(pygame.image.frombuffer(rgb.tobytes(), (cam_w, cam_h), "RGB"), (0, 0))
+            if debug:
+                rgb = cv2.cvtColor(frame.image, cv2.COLOR_BGR2RGB)
+                canvas.blit(pygame.image.frombuffer(rgb.tobytes(), (cam_w, cam_h), "RGB"), (0, 0))
+            else:
+                canvas.fill(game.background)
             game.draw(canvas, frame)
             if debug:
                 draw_skeletons(canvas, frame)
@@ -125,10 +128,3 @@ def run(make_game, camera_index: int = 0, imgsz: int = 640, device: str | None =
         tracker.close()
         pygame.quit()
 
-
-def sepia(image_bgr: np.ndarray) -> np.ndarray:
-    """BGR in, sepia-toned RGB out."""
-    m = np.array(
-        [[0.189, 0.769, 0.393], [0.168, 0.686, 0.349], [0.131, 0.534, 0.272]], dtype=np.float32
-    )
-    return cv2.transform(image_bgr, m)

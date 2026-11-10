@@ -197,7 +197,7 @@ def win_round(s, winner):
     s.step(D if winner == 0 else H, D if winner == 1 else H, frames=10)
 
 
-def test_first_to_three_wins_and_idle_restarts():
+def test_three_lives_then_winner_screen_and_idle_restarts():
     s = Sim()
     win_round(s, 0)
     win_round(s, 1)
@@ -208,7 +208,20 @@ def test_first_to_three_wins_and_idle_restarts():
     assert s.duel.match_winner == 0 and s.duel.scores == [3, 1]
     assert ("match_over", 0) in s.events
 
-    s.step(H, H, frames=30)  # winner screen holds for at least 3 s
-    assert s.duel.phase == Phase.MATCH_OVER
+    assert s.duel.lives_left(0) == 2 and s.duel.lives_left(1) == 0
+    assert s.duel.showing_final_round(s.t)  # the deciding shot is shown first
+
+    s.step(H, H, frames=int(3.0 / DT) + 1)
+    assert not s.duel.showing_final_round(s.t)
+    assert s.duel.phase == Phase.MATCH_OVER  # then the winner screen, at least 3 s more
+    assert not s.duel.can_restart(s.t)
+    s.step(H, H, frames=int(3.0 / DT) + 1)
+    assert s.duel.can_restart(s.t)
     s.run_until(Phase.READY, H, H)
     assert s.duel.scores == [0, 0]
+
+
+def test_lives_setting_changes_match_length():
+    s = Sim(lives=1)
+    win_round(s, 1)
+    assert s.duel.phase == Phase.MATCH_OVER and s.duel.match_winner == 1

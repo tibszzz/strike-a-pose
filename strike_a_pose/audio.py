@@ -1,6 +1,8 @@
-"""Tiny synthesized placeholder sounds, so v1 needs no audio asset files."""
+"""Sounds: optional files in assets/sounds/, with tiny synthesized fallbacks."""
 
 from __future__ import annotations
+
+from pathlib import Path
 
 import numpy as np
 import pygame
@@ -63,6 +65,16 @@ def arpeggio(freqs: list[float], step: float = 0.14) -> pygame.mixer.Sound | Non
         t = np.arange(seg_n) / RATE
         wave[k * n_step :] += 0.35 * np.sin(2 * np.pi * f * t) * np.exp(-t / 0.4)
     return _to_sound(wave)
+
+
+def load_or(path: Path, fallback):
+    """The sound file at `path` if it exists and loads, else `fallback()`."""
+    if pygame.mixer.get_init() and path.is_file():
+        try:
+            return pygame.mixer.Sound(str(path))
+        except pygame.error as exc:
+            print(f"could not load {path}: {exc}; using synthesized sound")
+    return fallback()
 
 
 def play(sound: pygame.mixer.Sound | None) -> None:
