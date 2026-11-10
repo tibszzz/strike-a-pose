@@ -122,6 +122,21 @@ def test_confirm_with_2_to_4_people_starts_round_1(count):
     assert (screen.round_number, screen.total_rounds, screen.seconds_left) == (1, 5, 5)
 
 
+def test_debug_lobby_allows_a_solo_player():
+    game, _ = new_game(min_players=1)
+
+    lobby = game.step(0.0, people=standing_people(1))
+    assert lobby.can_start
+    assert lobby.min_players == 1
+
+    screen = game.step(0.0, confirm=True, people=standing_people(1))
+    assert isinstance(screen, CountdownScreen)
+
+    results = play_round(game, 0.0, everyone_perfect(1))
+    assert isinstance(results, ResultsScreen)
+    assert [player.round_score for player in results.players] == [100]
+
+
 # --- countdown and snapshot --------------------------------------------------
 
 

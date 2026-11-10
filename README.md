@@ -23,6 +23,12 @@ Run it from the repo root, with the virtualenv active:
 python -m strike_a_pose
 ```
 
+For solo testing while developing, pass `--debug` so the lobby accepts one person:
+
+```
+python -m strike_a_pose --debug
+```
+
 - Stand far enough back that everyone's whole body is in frame. Players are numbered left to right as they appear on screen.
 - The screen is a mirror: if the figure's raised arm is on the left of the screen, raise the arm you see on the left of your own image.
 - SPACE starts the game and moves on from each results screen. Q quits.

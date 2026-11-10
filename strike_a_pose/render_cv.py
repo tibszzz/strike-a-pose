@@ -290,7 +290,8 @@ def _compose_lobby(screen: LobbyScreen, frame: np.ndarray) -> np.ndarray:
     count = len(screen.markers)
     dim(canvas, (0, CANVAS_HEIGHT - 84, CANVAS_WIDTH, 84))
     if screen.can_start:
-        message, color = f"{count} players in frame  -  press SPACE to start", ACCENT
+        label = "player" if count == 1 else "players"
+        message, color = f"{count} {label} in frame  -  press SPACE to start", ACCENT
     else:
         message = (
             f"Need {screen.min_players} to {screen.max_players} players in frame"

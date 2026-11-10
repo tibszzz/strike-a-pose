@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import argparse
 import sys
 import time
+from typing import Sequence
 
 from .camera import Camera, CameraError
 from .config import Config
@@ -14,8 +16,22 @@ from .render_cv import CvRenderer
 from .screens import Action
 
 
-def main() -> int:
-    config = Config()
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        prog="python -m strike_a_pose",
+        description="A party game for 2 to 4 players sharing one webcam.",
+    )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="allow a solo game with one person in frame (for development)",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = parse_args(argv)
+    config = Config(min_players=1) if args.debug else Config()
     try:
         game = Game(config, load_library(config.poses_dir))
         detector = PoseDetector(config.model_path)
