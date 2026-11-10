@@ -1,7 +1,7 @@
 import pytest
 from builders import ONE_ARM_UP, T_POSE, mirrored, with_joint_rotated
 
-from strike_a_pose.games.strike.scoring import round_score, score_pose, segment_score
+from main.games.strike.scoring import round_score, score_pose, segment_score
 
 STRICTNESS = 90.0
 

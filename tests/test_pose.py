@@ -3,8 +3,8 @@ import json
 import pytest
 from builders import ONE_ARM_UP, T_POSE
 
-from strike_a_pose.config import Config
-from strike_a_pose.pose import (
+from main.config import Config
+from main.pose import (
     BODY_JOINTS,
     Pose,
     PoseError,
@@ -14,7 +14,7 @@ from strike_a_pose.pose import (
     pose_from_dict,
     save_pose,
 )
-from strike_a_pose.games.strike.scoring import score_pose
+from main.games.strike.scoring import score_pose
 
 
 def as_file_data(joints, name="test-pose"):

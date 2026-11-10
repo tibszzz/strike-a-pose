@@ -19,13 +19,13 @@ A party game for 2 to 4 players sharing one webcam. Each round shows a stick-fig
 Run it from the repo root, with the virtualenv active:
 
 ```
-python -m strike_a_pose
+python -m main
 ```
 
 For solo testing while developing, pass `--debug` so the lobby accepts one person:
 
 ```
-python -m strike_a_pose --debug
+python -m main --debug
 ```
 
 - Stand far enough back that everyone's whole body is in frame. Players are numbered left to right as they appear on screen.
@@ -34,7 +34,7 @@ python -m strike_a_pose --debug
 - People in the background are ignored: the snapshot scores the tallest figures in frame, as many as started the game.
 - If the snapshot finds fewer people than started the game, the round is replayed with the same pose.
 
-Settings (rounds, countdown length, scoring strictness, camera, model) are in `strike_a_pose/config.py`.
+Settings (rounds, countdown length, scoring strictness, camera, model) are in `main/config.py`.
 
 ### Adding poses
 
@@ -43,7 +43,7 @@ Poses are JSON files in `assets/poses/`. Each game picks 5 of them at random.
 To capture one from the webcam:
 
 ```
-python -m strike_a_pose.games.strike.capture my-new-pose
+python -m main.games.strike.capture my-new-pose
 ```
 
 Press SPACE, hold the pose with your whole body in frame for 3 seconds, and it is saved as `assets/poses/my-new-pose.json`.
@@ -51,7 +51,7 @@ Press SPACE, hold the pose with your whole body in frame for 3 seconds, and it i
 To create or edit a pose by dragging joints on a stick figure:
 
 ```
-python -m strike_a_pose.games.strike.edit my-new-pose
+python -m main.games.strike.edit my-new-pose
 ```
 
 New names start from `t-pose`. Drag a joint freely — limb bone lengths stay locked (live IK); drag the background to move the whole figure. C snaps a pose from the webcam into the editor (then keep dragging). SPACE saves (existing files ask before overwrite), R resets, N toggles the nose, Q quits. Restart the game to play a pose you just saved.
@@ -66,8 +66,8 @@ python -m pytest
 
 Layout:
 
-- `strike_a_pose/pose/`: pose-file types, plus the camera and YOLO tracker
-- `strike_a_pose/app.py`: OpenCV loop for the strike game
-- `strike_a_pose/games/strike/`: the party game. `logic.py` is the rules, `game.py` draws
+- `main/pose/`: pose-file types, plus the camera and YOLO tracker
+- `main/app.py`: OpenCV loop for the strike game
+- `main/games/strike/`: the party game. `logic.py` is the rules, `game.py` draws
 - `assets/models/`: pose model weights
 - `assets/poses/`: pose library

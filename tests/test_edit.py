@@ -3,9 +3,9 @@ from pathlib import Path
 
 from builders import T_POSE
 
-from strike_a_pose.games.strike.edit import PoseEditor, nearest_joint
-from strike_a_pose.games.strike.edit_fk import apply_drag
-from strike_a_pose.pose import HEAD_JOINT, Pose, save_pose
+from main.games.strike.edit import PoseEditor, nearest_joint
+from main.games.strike.edit_fk import apply_drag
+from main.pose import HEAD_JOINT, Pose, save_pose
 
 
 def _nudge(editor):

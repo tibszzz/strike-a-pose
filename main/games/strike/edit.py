@@ -1,6 +1,6 @@
 """Visually create or edit a pose by dragging joints.
 
-    python -m strike_a_pose.games.strike.edit <pose-name>
+    python -m main.games.strike.edit <pose-name>
 
 Blank panel, T-pose seed for new names. Drag freely; bone lengths stay locked
 via live IK. Press C to snap a pose from the webcam, then keep dragging.
@@ -20,8 +20,8 @@ from typing import Sequence
 import cv2
 import numpy as np
 
-from strike_a_pose.config import Config
-from strike_a_pose.pose import (
+from main.config import Config
+from main.pose import (
     HEAD_JOINT,
     Pose,
     PoseError,
@@ -30,7 +30,7 @@ from strike_a_pose.pose import (
     pose_from_dict,
     save_pose,
 )
-from strike_a_pose.pose.tracker import Camera, CameraError, PoseDetector
+from main.pose.tracker import Camera, CameraError, PoseDetector
 
 from .capture import (
     CAPTURE_SECONDS,
@@ -353,7 +353,7 @@ def compose_editor(editor: PoseEditor, transform: Transform) -> np.ndarray:
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="python -m strike_a_pose.games.strike.edit",
+        prog="python -m main.games.strike.edit",
         description="Create or edit a pose by dragging stick-figure joints.",
     )
     parser.add_argument("name", help="lowercase words joined by dashes, like arms-up")

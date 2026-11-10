@@ -1,4 +1,4 @@
-"""Run the game: `python -m strike_a_pose`."""
+"""Run the game: `python -m main`."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from .config import Config
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        prog="python -m strike_a_pose",
+        prog="python -m main",
         description="A party game for 2 to 4 players sharing one webcam.",
     )
     parser.add_argument(

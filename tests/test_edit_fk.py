@@ -2,8 +2,8 @@ import math
 
 from builders import T_POSE
 
-from strike_a_pose.games.strike.edit_fk import apply_drag, clip_translation, measure_lengths
-from strike_a_pose.pose import HEAD_JOINT
+from main.games.strike.edit_fk import apply_drag, clip_translation, measure_lengths
+from main.pose import HEAD_JOINT
 
 
 def _dist(joints, a, b):
