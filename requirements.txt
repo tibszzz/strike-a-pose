@@ -23,9 +23,17 @@ opencv-python==5.0.0.93
 packaging==26.3
 pillow==13.0.0
 pluggy==1.7.0
+<<<<<<< HEAD
 polars==2.1.0
+=======
+>>>>>>> kaizer1v-yolo-test
 polars-runtime-32==2.1.0
+polars==2.1.0
 psutil==7.2.2
+<<<<<<< HEAD
+=======
+pygame-ce==2.5.8
+>>>>>>> kaizer1v-yolo-test
 Pygments==2.21.0
 pyparsing==3.3.3
 pytest==9.2.0
@@ -37,7 +45,7 @@ torch==2.15.0
 torchvision==0.29.2
 typing_extensions==4.16.0
 tzdata==2026.6
-ultralytics==8.4.208
 ultralytics-platform==0.1.107
 ultralytics-thop==2.2.5
+ultralytics==8.4.208
 urllib3==2.8.0
