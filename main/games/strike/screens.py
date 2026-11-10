@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum, auto
 
-from main.pose import Box, Point, Pose
+from main.pose.library import Box, Point, Pose
 
 
 class Action(Enum):

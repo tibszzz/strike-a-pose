@@ -13,7 +13,7 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
-from main.pose import BONES, HEAD_JOINT, Box, Joints, Point, Pose, midpoint
+from main.pose.library import BONES, HEAD_JOINT, Box, Joints, Point, Pose, midpoint
 
 from .screens import (
     Action,

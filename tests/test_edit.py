@@ -5,7 +5,7 @@ from builders import T_POSE
 
 from main.games.strike.edit import PoseEditor, nearest_joint
 from main.games.strike.edit_fk import apply_drag
-from main.pose import HEAD_JOINT, Pose, save_pose
+from main.pose.library import HEAD_JOINT, Pose, save_pose
 
 
 def _nudge(editor):

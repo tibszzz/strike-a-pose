@@ -5,7 +5,7 @@ from builders import ONE_ARM_UP, T_POSE, mirrored, person_striking
 
 from main.config import Config
 from main.games.strike.logic import Game, rank
-from main.pose import JOINT_NAMES, Pose, load_library
+from main.pose.library import JOINT_NAMES, Pose, load_library
 from main.games.strike.screens import (
     CountdownScreen,
     CountdownTick,

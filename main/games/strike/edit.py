@@ -21,7 +21,7 @@ import cv2
 import numpy as np
 
 from main.config import Config
-from main.pose import (
+from main.pose.library import (
     HEAD_JOINT,
     Pose,
     PoseError,

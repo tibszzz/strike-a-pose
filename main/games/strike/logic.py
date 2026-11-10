@@ -15,7 +15,7 @@ from enum import Enum, auto
 from typing import Callable, Sequence
 
 from main.config import Config
-from main.pose import Person, Pose, left_to_right, select_players
+from main.pose.library import Person, Pose, left_to_right, select_players
 
 from .scoring import round_score, score_pose
 from .screens import (

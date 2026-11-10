@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import math
 
-from main.pose import Person
-from main.pose import Joints, Point
+from main.pose.library import Person
+from main.pose.library import Joints, Point
 
 # Arms straight out to the sides, legs straight down. Left-right symmetric.
 T_POSE: dict[str, Point] = {

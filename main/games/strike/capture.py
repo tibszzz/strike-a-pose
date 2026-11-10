@@ -19,7 +19,7 @@ from typing import Sequence
 import numpy as np
 
 from main.config import Config
-from main.pose import (
+from main.pose.library import (
     BODY_JOINTS,
     POSE_FILE_JOINTS,
     Person,

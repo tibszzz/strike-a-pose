@@ -1,1 +1,1 @@
-"""Strike a Pose: a local party game scored by pose detection."""
+"""Body-controlled mini games scored by pose detection."""

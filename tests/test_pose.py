@@ -4,7 +4,7 @@ import pytest
 from builders import ONE_ARM_UP, T_POSE
 
 from main.config import Config
-from main.pose import (
+from main.pose.library import (
     BODY_JOINTS,
     Pose,
     PoseError,

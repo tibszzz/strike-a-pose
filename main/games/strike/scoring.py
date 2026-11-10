@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import math
 
-from main.pose import SEGMENTS, Joints, Point, segment_vector
+from main.pose.library import SEGMENTS, Joints, Point, segment_vector
 
 
 def angle_between(a: Point, b: Point) -> float:
