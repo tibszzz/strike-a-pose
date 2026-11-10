@@ -4,9 +4,9 @@ import pytest
 from builders import ONE_ARM_UP, T_POSE, mirrored, person_striking
 
 from strike_a_pose.config import Config
-from strike_a_pose.game import Game, rank
+from strike_a_pose.games.strike.logic import Game, rank
 from strike_a_pose.pose import JOINT_NAMES, Pose, load_library
-from strike_a_pose.screens import (
+from strike_a_pose.games.strike.screens import (
     CountdownScreen,
     CountdownTick,
     FinalScreen,

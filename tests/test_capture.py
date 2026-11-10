@@ -1,9 +1,9 @@
 import pytest
 from builders import ONE_ARM_UP, T_POSE, person_striking
 
-from strike_a_pose.capture import is_valid_name, largest_person, pose_from_person
+from strike_a_pose.games.strike.capture import is_valid_name, largest_person, pose_from_person
+from strike_a_pose.games.strike.scoring import score_pose
 from strike_a_pose.pose import PoseError, load_pose, save_pose
-from strike_a_pose.scoring import score_pose
 
 CONFIDENCE = 0.5
 

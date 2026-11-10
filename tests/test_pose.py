@@ -14,7 +14,7 @@ from strike_a_pose.pose import (
     pose_from_dict,
     save_pose,
 )
-from strike_a_pose.scoring import score_pose
+from strike_a_pose.games.strike.scoring import score_pose
 
 
 def as_file_data(joints, name="test-pose"):

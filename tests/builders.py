@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 
-from strike_a_pose.detector import Person
+from strike_a_pose.pose import Person
 from strike_a_pose.pose import Joints, Point
 
 # Arms straight out to the sides, legs straight down. Left-right symmetric.

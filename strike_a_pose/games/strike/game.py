@@ -13,8 +13,8 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
-from .detector import Box
-from .pose import BONES, HEAD_JOINT, Joints, Point, Pose, midpoint
+from strike_a_pose.pose import BONES, HEAD_JOINT, Box, Joints, Point, Pose, midpoint
+
 from .screens import (
     Action,
     CountdownScreen,

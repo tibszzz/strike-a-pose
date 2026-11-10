@@ -9,9 +9,8 @@ Steps to run:
 2.Install dependencies
     a. pip install -r requirements.txt
 
-3. Run the script:
-    a. cd scripts/
-    b. python3 -m detect_yolo.py
+3. Raw pose debug view, from the repo root:
+    a. python scripts/detect_yolo.py
 
 ## Strike a Pose game
 
@@ -39,20 +38,20 @@ Settings (rounds, countdown length, scoring strictness, camera, model) are in `s
 
 ### Adding poses
 
-Poses are JSON files in `strike_a_pose/poses/`. Each game picks 5 of them at random.
+Poses are JSON files in `assets/poses/`. Each game picks 5 of them at random.
 
 To capture one from the webcam:
 
 ```
-python -m strike_a_pose.capture my-new-pose
+python -m strike_a_pose.games.strike.capture my-new-pose
 ```
 
-Press SPACE, hold the pose with your whole body in frame for 3 seconds, and it is saved as `strike_a_pose/poses/my-new-pose.json`.
+Press SPACE, hold the pose with your whole body in frame for 3 seconds, and it is saved as `assets/poses/my-new-pose.json`.
 
 To create or edit a pose by dragging joints on a stick figure:
 
 ```
-python -m strike_a_pose.edit my-new-pose
+python -m strike_a_pose.games.strike.edit my-new-pose
 ```
 
 New names start from `t-pose`. Drag a joint freely — limb bone lengths stay locked (live IK); drag the background to move the whole figure. C snaps a pose from the webcam into the editor (then keep dragging). SPACE saves (existing files ask before overwrite), R resets, N toggles the nose, Q quits. Restart the game to play a pose you just saved.
@@ -64,3 +63,11 @@ A pose file can also be written or edited by hand. Coordinates run from 0 to 1, 
 ```
 python -m pytest
 ```
+
+Layout:
+
+- `strike_a_pose/pose/`: pose-file types, plus the camera and YOLO tracker
+- `strike_a_pose/app.py`: OpenCV loop for the strike game
+- `strike_a_pose/games/strike/`: the party game. `logic.py` is the rules, `game.py` draws
+- `assets/models/`: pose model weights
+- `assets/poses/`: pose library

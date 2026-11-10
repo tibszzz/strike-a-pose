@@ -12,7 +12,7 @@ import json
 import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping
+from typing import Mapping, Sequence
 
 Point = tuple[float, float]
 Joints = Mapping[str, Point]
@@ -37,6 +37,49 @@ JOINT_NAMES = (
     "left_ankle",
     "right_ankle",
 )
+
+# Left, top, right, bottom, in frame pixels.
+Box = tuple[float, float, float, float]
+
+
+@dataclass(frozen=True)
+class Person:
+    joints: dict[str, Point]
+    confidence: dict[str, float]
+    box: Box
+
+    @property
+    def height(self) -> float:
+        return self.box[3] - self.box[1]
+
+    @property
+    def center_x(self) -> float:
+        return (self.box[0] + self.box[2]) / 2
+
+    def visible_joints(self, min_confidence: float) -> dict[str, Point]:
+        """Only the joints the model is confident it can see."""
+        return {
+            name: point
+            for name, point in self.joints.items()
+            if self.confidence[name] >= min_confidence
+        }
+
+
+def left_to_right(people: Sequence[Person]) -> list[Person]:
+    return sorted(people, key=lambda person: person.center_x)
+
+
+def select_players(people: Sequence[Person], count: int) -> list[Person] | None:
+    """The `count` tallest people in frame, ordered left to right.
+
+    Smaller figures are taken to be bystanders behind the players. Returns
+    None when fewer than `count` people were found.
+    """
+    if len(people) < count:
+        return None
+    tallest = sorted(people, key=lambda person: person.height, reverse=True)[:count]
+    return left_to_right(tallest)
+
 
 HEAD_JOINT = "nose"
 BODY_JOINTS = JOINT_NAMES[5:]

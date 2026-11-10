@@ -1,6 +1,6 @@
 """Add a pose to the library by striking it at the webcam.
 
-    python -m strike_a_pose.capture <pose-name>
+    python -m strike_a_pose.games.strike.capture <pose-name>
 
 Shows the mirrored feed with a skeleton on the largest person in frame. SPACE
 starts a 3 second countdown; at zero that person's pose is saved to the pose
@@ -18,19 +18,20 @@ from typing import Sequence
 
 import numpy as np
 
-from .camera import Camera, CameraError
-from .config import Config
-from .detector import Person, PoseDetector
-from .pose import (
+from strike_a_pose.config import Config
+from strike_a_pose.pose import (
     BODY_JOINTS,
     POSE_FILE_JOINTS,
+    Person,
     Pose,
     PoseError,
     normalize_joints,
     pose_from_dict,
     save_pose,
 )
-from .render_cv import (
+from strike_a_pose.pose.tracker import Camera, CameraError, PoseDetector
+
+from .game import (
     ACCENT,
     CANVAS_HEIGHT,
     CANVAS_WIDTH,
@@ -118,7 +119,7 @@ def compose_saved(pose: Pose) -> np.ndarray:
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="python -m strike_a_pose.capture",
+        prog="python -m strike_a_pose.games.strike.capture",
         description="Save a pose from the webcam into the pose library.",
     )
     parser.add_argument("name", help="lowercase words joined by dashes, like arms-up")

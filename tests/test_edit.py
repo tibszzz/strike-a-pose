@@ -3,8 +3,8 @@ from pathlib import Path
 
 from builders import T_POSE
 
-from strike_a_pose.edit import PoseEditor, nearest_joint
-from strike_a_pose.edit_fk import apply_drag
+from strike_a_pose.games.strike.edit import PoseEditor, nearest_joint
+from strike_a_pose.games.strike.edit_fk import apply_drag
 from strike_a_pose.pose import HEAD_JOINT, Pose, save_pose
 
 

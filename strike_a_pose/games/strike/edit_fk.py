@@ -10,7 +10,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
-from .pose import HEAD_JOINT, Joints, Point, midpoint
+from strike_a_pose.pose import HEAD_JOINT, Joints, Point, midpoint
 
 TORSO_JOINTS = frozenset(
     {"left_shoulder", "right_shoulder", "left_hip", "right_hip"}

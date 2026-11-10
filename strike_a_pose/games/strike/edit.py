@@ -1,6 +1,6 @@
 """Visually create or edit a pose by dragging joints.
 
-    python -m strike_a_pose.edit <pose-name>
+    python -m strike_a_pose.games.strike.edit <pose-name>
 
 Blank panel, T-pose seed for new names. Drag freely; bone lengths stay locked
 via live IK. Press C to snap a pose from the webcam, then keep dragging.
@@ -20,25 +20,8 @@ from typing import Sequence
 import cv2
 import numpy as np
 
-from .camera import Camera, CameraError
-from .capture import (
-    CAPTURE_SECONDS,
-    compose_live,
-    is_valid_name,
-    largest_person,
-    pose_from_person,
-)
-from .config import Config
-from .detector import PoseDetector
-from .edit_fk import (
-    TORSO_JOINTS,
-    BoneLengths,
-    apply_drag,
-    clip_translation,
-    measure_lengths,
-    mid_shoulder,
-)
-from .pose import (
+from strike_a_pose.config import Config
+from strike_a_pose.pose import (
     HEAD_JOINT,
     Pose,
     PoseError,
@@ -47,7 +30,24 @@ from .pose import (
     pose_from_dict,
     save_pose,
 )
-from .render_cv import (
+from strike_a_pose.pose.tracker import Camera, CameraError, PoseDetector
+
+from .capture import (
+    CAPTURE_SECONDS,
+    compose_live,
+    is_valid_name,
+    largest_person,
+    pose_from_person,
+)
+from .edit_fk import (
+    TORSO_JOINTS,
+    BoneLengths,
+    apply_drag,
+    clip_translation,
+    measure_lengths,
+    mid_shoulder,
+)
+from .game import (
     ACCENT,
     CANVAS_HEIGHT,
     CANVAS_WIDTH,
@@ -353,7 +353,7 @@ def compose_editor(editor: PoseEditor, transform: Transform) -> np.ndarray:
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="python -m strike_a_pose.edit",
+        prog="python -m strike_a_pose.games.strike.edit",
         description="Create or edit a pose by dragging stick-figure joints.",
     )
     parser.add_argument("name", help="lowercase words joined by dashes, like arms-up")

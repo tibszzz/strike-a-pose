@@ -3,16 +3,16 @@
 from dataclasses import dataclass
 from pathlib import Path
 
-PACKAGE_DIR = Path(__file__).resolve().parent
-REPO_ROOT = PACKAGE_DIR.parent
+ROOT = Path(__file__).resolve().parents[1]
+ASSETS = ROOT / "assets"
 
 
 @dataclass(frozen=True)
 class Config:
     # Pose model weights. Swap for a larger model if far-away players get
     # wrong skeletons.
-    model_path: Path = REPO_ROOT / "scripts" / "yolo26n-pose.pt"
-    poses_dir: Path = PACKAGE_DIR / "poses"
+    model_path: Path = ASSETS / "models" / "yolo26n-pose.pt"
+    poses_dir: Path = ASSETS / "poses"
     camera_index: int = 0
 
     rounds: int = 5

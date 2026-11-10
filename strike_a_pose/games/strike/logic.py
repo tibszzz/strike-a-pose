@@ -14,9 +14,9 @@ import random
 from enum import Enum, auto
 from typing import Callable, Sequence
 
-from .config import Config
-from .detector import Person, left_to_right, select_players
-from .pose import Pose
+from strike_a_pose.config import Config
+from strike_a_pose.pose import Person, Pose, left_to_right, select_players
+
 from .scoring import round_score, score_pose
 from .screens import (
     CountdownScreen,

@@ -1,9 +1,9 @@
 """What the game shows and announces, as plain data.
 
-This is the seam between game logic and presentation. `game.py` returns one
+This is the seam between game logic and presentation. `logic.py` returns one
 of the screen types below on every step and sends events to its listeners;
 it never draws or plays anything itself. A renderer turns a screen into
-pixels (`render_cv.py` is the only one so far), and anything that should
+pixels (`game.py` is the only one so far), and anything that should
 react to a moment in the game, such as sound, subscribes to events.
 """
 
@@ -12,8 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum, auto
 
-from .detector import Box
-from .pose import Point, Pose
+from strike_a_pose.pose import Box, Point, Pose
 
 
 class Action(Enum):
