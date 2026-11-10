@@ -6,6 +6,7 @@ import importlib
 GAMES = {
     "duel": "strike_a_pose.games.duel.game:DuelGame",
     "body_trace": "strike_a_pose.games.body_trace.game:DodgeballGame",
+    "dodgeball": "strike_a_pose.games.dodgeball.game:DodgeballGame",
 }
 
 
