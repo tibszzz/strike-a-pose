@@ -16,14 +16,14 @@ class Config:
     camera_index: int = 0
 
     rounds: int = 5
-    countdown_seconds: float = 5.0
+    countdown_seconds: float = 3.0
     min_players: int = 2
     max_players: int = 4
 
     # A segment scores 100 when it points the same way as the target and
     # falls in a straight line to 0 at this many degrees off. Lower is
     # stricter.
-    strictness_degrees: float = 90.0
+    strictness_degrees: float = 50.0
 
     # A joint the model reports below this confidence counts as hidden.
     joint_confidence: float = 0.5
