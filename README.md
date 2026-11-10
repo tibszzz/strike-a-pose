@@ -49,6 +49,14 @@ python -m strike_a_pose.capture my-new-pose
 
 Press SPACE, hold the pose with your whole body in frame for 3 seconds, and it is saved as `strike_a_pose/poses/my-new-pose.json`.
 
+To create or edit a pose by dragging joints on a stick figure:
+
+```
+python -m strike_a_pose.edit my-new-pose
+```
+
+New names start from `t-pose`. Drag a joint freely — limb bone lengths stay locked (live IK); drag the background to move the whole figure. C snaps a pose from the webcam into the editor (then keep dragging). SPACE saves (existing files ask before overwrite), R resets, N toggles the nose, Q quits. Restart the game to play a pose you just saved.
+
 A pose file can also be written or edited by hand. Coordinates run from 0 to 1, with x growing toward the right of the screen and y growing downward. `left_*` joints are the figure's own left, which is the right side of the screen. All 12 body joints are required; `nose` is optional and only places the head.
 
 ### Tests

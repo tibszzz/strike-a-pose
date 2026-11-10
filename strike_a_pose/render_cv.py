@@ -399,16 +399,40 @@ def _compose_final(screen: FinalScreen) -> np.ndarray:
 # --- the window --------------------------------------------------------------
 
 
+@dataclass(frozen=True)
+class MouseEvent:
+    """A pointer event in canvas pixel coordinates."""
+
+    kind: str  # "down", "up", or "move"
+    x: int
+    y: int
+
+
 class CvRenderer:
     def __init__(self) -> None:
         cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)
         cv2.resizeWindow(WINDOW_NAME, CANVAS_WIDTH, CANVAS_HEIGHT)
+        self._mouse_events: list[MouseEvent] = []
+        cv2.setMouseCallback(WINDOW_NAME, self._on_mouse)
+
+    def _on_mouse(self, event: int, x: int, y: int, _flags: int, _param: object) -> None:
+        if event == cv2.EVENT_LBUTTONDOWN:
+            self._mouse_events.append(MouseEvent("down", x, y))
+        elif event == cv2.EVENT_LBUTTONUP:
+            self._mouse_events.append(MouseEvent("up", x, y))
+        elif event == cv2.EVENT_MOUSEMOVE and (_flags & cv2.EVENT_FLAG_LBUTTON):
+            self._mouse_events.append(MouseEvent("move", x, y))
 
     def show(self, screen: Screen, frame: np.ndarray) -> None:
         self.show_image(compose(screen, frame))
 
     def show_image(self, image: np.ndarray) -> None:
         cv2.imshow(WINDOW_NAME, image)
+
+    def poll_mouse(self) -> list[MouseEvent]:
+        events = self._mouse_events
+        self._mouse_events = []
+        return events
 
     def poll_action(self) -> Action | None:
         """Let the window update, and report a key press if there was one."""
@@ -417,6 +441,21 @@ class CvRenderer:
             return Action.QUIT
         if key == ord(" "):
             return Action.CONFIRM
+        return None
+
+    def poll_edit_action(self) -> str | None:
+        """Keys for the pose editor: confirm, quit, reset, nose, capture."""
+        key = cv2.waitKey(1) & 0xFF
+        if key in (ord("q"), ord("Q")):
+            return "quit"
+        if key == ord(" "):
+            return "confirm"
+        if key in (ord("r"), ord("R")):
+            return "reset"
+        if key in (ord("n"), ord("N")):
+            return "nose"
+        if key in (ord("c"), ord("C")):
+            return "capture"
         return None
 
     def close(self) -> None:

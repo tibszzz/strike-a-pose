@@ -86,6 +86,7 @@ def compose_live(
     min_confidence: float,
     seconds_left: int | None,
     message: str,
+    title: str | None = None,
 ) -> np.ndarray:
     canvas = new_canvas()
     transform = draw_frame(canvas, frame, FULL_CANVAS)
@@ -93,7 +94,8 @@ def compose_live(
         draw_skeleton(canvas, person.visible_joints(min_confidence), transform, ACCENT)
 
     dim(canvas, (0, 0, CANVAS_WIDTH, 84))
-    draw_text(canvas, f"New pose: {name}", CANVAS_WIDTH // 2, 58, 1.4, WHITE, "center")
+    header = title if title is not None else f"New pose: {name}"
+    draw_text(canvas, header, CANVAS_WIDTH // 2, 58, 1.4, WHITE, "center")
     if seconds_left is not None:
         # Off to the side, so the number does not cover the person posing.
         draw_text(
