@@ -57,6 +57,19 @@ Keys:
 - **Win pictures:** any PNG in `assets/sprites/cowboys/` can come up on the win screen.
 - **Sounds:** drop `ready.wav`, `steady.wav`, `bang.wav`, `early.wav`, `hit.wav` or `match_over.wav` into `assets/sounds/` to replace the built-in synthesized sounds.
 
+### Dodgeball (1-2 players)
+
+```sh
+python -m main dodgeball
+```
+
+- Stand in front of the camera. A ball bounces around the live feed.
+- Avoid the ball: if it touches your body shape, you take a hit and the round pauses.
+- Press **R** to restart (5-second countdown). Lowest hit count wins.
+- Same camera / imgsz / device flags as duel. Keys: D debug, R reset, F fullscreen, Q / Esc quit.
+
+Also in the same package: `python -m main cannonball` — a Z-axis ball thrown toward the screen.
+
 ### Strike a Pose (2 to 4 players)
 
 ```sh
@@ -113,6 +126,7 @@ Layout:
 - `main/pose/`: live YOLO tracker, P1/P2 assignment, gesture helpers; pose-file types in `library.py`
 - `main/app.py`: shared pygame loop and keys for duel. Games implement `update` / `draw` / `reset`.
 - `main/games/duel/`: Wild West Duel (from `shooter-v1`)
+- `main/games/dodgeball/`: Dodgeball and Cannonball (from `kaizer1v`)
 - `main/games/strike/`: the party pose game. `logic.py` is the rules, `game.py` draws
 - `main/config.py`: `.env` loading, message lists, and strike `Config`
 - `assets/models/`: pose model weights

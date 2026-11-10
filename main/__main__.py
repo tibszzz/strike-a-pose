@@ -1,8 +1,10 @@
 """Usage:
   python -m main duel [--camera 0] [--imgsz 640] [--device mps]
+  python -m main dodgeball [--camera 0] [--imgsz 640] [--device mps]
+  python -m main cannonball [--camera 0] [--imgsz 640] [--device mps]
   python -m main strike [--debug]
 
-Defaults for duel come from `.env` (CAMERA, IMGSZ, DEVICE); flags override them.
+Defaults for pygame games come from `.env` (CAMERA, IMGSZ, DEVICE); flags override them.
 """
 
 from __future__ import annotations
@@ -14,16 +16,18 @@ from typing import Sequence
 
 from .config import Config, env
 
-GAMES = {
+PYGAME_GAMES = {
     "duel": "main.games.duel.game:DuelGame",
+    "dodgeball": "main.games.dodgeball.dodgeball:DodgeballGame",
+    "cannonball": "main.games.dodgeball.cannonball:CannonballGame",
 }
 
 
-def _run_duel(argv: Sequence[str] | None) -> int:
+def _run_pygame(game: str, argv: Sequence[str] | None) -> int:
     camera, imgsz, device = env("CAMERA", 0), env("IMGSZ", 640), env("DEVICE", "") or None
     parser = argparse.ArgumentParser(
-        prog="python -m main duel",
-        description="Wild West Duel",
+        prog=f"python -m main {game}",
+        description=f"Play {game}",
     )
     parser.add_argument("--camera", type=int, default=camera, help=f"camera index (default {camera})")
     parser.add_argument(
@@ -34,7 +38,7 @@ def _run_duel(argv: Sequence[str] | None) -> int:
 
     from .app import run
 
-    module, cls = GAMES["duel"].split(":")
+    module, cls = PYGAME_GAMES[game].split(":")
     game_cls = getattr(importlib.import_module(module), cls)
     run(game_cls, camera_index=args.camera, imgsz=args.imgsz, device=args.device)
     return 0
@@ -59,15 +63,16 @@ def _run_strike(argv: Sequence[str] | None) -> int:
 
 def main(argv: Sequence[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
+    choices = (*sorted(PYGAME_GAMES), "strike")
     parser = argparse.ArgumentParser(
         prog="python -m main",
         description="Body-controlled mini games",
     )
-    parser.add_argument("game", choices=("duel", "strike"))
+    parser.add_argument("game", choices=choices)
     args, rest = parser.parse_known_args(argv)
-    if args.game == "duel":
-        return _run_duel(rest)
-    return _run_strike(rest)
+    if args.game == "strike":
+        return _run_strike(rest)
+    return _run_pygame(args.game, rest)
 
 
 if __name__ == "__main__":

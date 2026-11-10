@@ -3,8 +3,10 @@
 Games draw onto a canvas in camera-pixel coordinates (so keypoints map 1:1); the
 canvas is then scaled to the window with letterboxing.
 
-The canvas is filled with the game's `background` colour; in debug mode the live camera
-image is used instead, with skeletons and debug text on top.
+Background rules:
+- If the game defines `render_camera`, that image is always used (dodgeball).
+- Else the canvas is filled with `background`; debug mode (D) swaps in the live
+  camera with skeletons on top (duel).
 
 Keys: D debug overlay, R reset, F fullscreen, Q / Esc quit.
 """
@@ -15,6 +17,7 @@ import time
 from typing import Protocol
 
 import cv2
+import numpy as np
 import pygame
 
 from .audio import init_mixer
@@ -26,7 +29,6 @@ PLAYER_COLORS = [(80, 170, 255), (255, 120, 80)]
 
 class Game(Protocol):
     title: str
-    background: tuple[int, int, int]
 
     def update(self, frame: PoseFrame) -> None: ...
     def draw(self, canvas: pygame.Surface, frame: PoseFrame) -> None: ...
@@ -60,6 +62,11 @@ def draw_skeletons(canvas: pygame.Surface, frame: PoseFrame, min_conf: float = 0
         for i, pt in enumerate(pts):
             if person.conf[i] >= min_conf:
                 pygame.draw.circle(canvas, (255, 255, 255), pt, 5)
+
+
+def _blit_bgr(canvas: pygame.Surface, image_bgr: np.ndarray, size: tuple[int, int]) -> None:
+    rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
+    canvas.blit(pygame.image.frombuffer(rgb.tobytes(), size, "RGB"), (0, 0))
 
 
 def run(make_game, camera_index: int = 0, imgsz: int = 640, device: str | None = None) -> None:
@@ -100,12 +107,15 @@ def run(make_game, camera_index: int = 0, imgsz: int = 640, device: str | None =
                             if fullscreen
                             else pygame.display.set_mode(window_size, pygame.RESIZABLE)
                         )
+                    elif hasattr(game, "handle_key"):
+                        game.handle_key(event.key)
 
             game.update(frame)
 
-            if debug:
-                rgb = cv2.cvtColor(frame.image, cv2.COLOR_BGR2RGB)
-                canvas.blit(pygame.image.frombuffer(rgb.tobytes(), (cam_w, cam_h), "RGB"), (0, 0))
+            if hasattr(game, "render_camera"):
+                _blit_bgr(canvas, game.render_camera(frame.image), (cam_w, cam_h))
+            elif debug:
+                _blit_bgr(canvas, frame.image, (cam_w, cam_h))
             else:
                 canvas.fill(game.background)
             game.draw(canvas, frame)
