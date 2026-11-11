@@ -24,7 +24,6 @@ import numpy as np
 import pygame
 
 from .audio import init_mixer
-<<<<<<< HEAD:main/app.py
 from .games.registry import GameEntry
 from .nav import (
     GestureCommandMapper,
@@ -36,10 +35,6 @@ from .nav import (
 )
 from .pose import SKELETON, PoseFrame
 from .pose.tracker import PoseTracker
-=======
-from strike_a_pose.games.pose.pose import SKELETON, PoseFrame
-from strike_a_pose.games.pose.tracker import PoseTracker
->>>>>>> a5c2b4e2b1e19ba05695e0d9c0f3ae70c39c3cc5:strike_a_pose/app.py
 
 PLAYER_COLORS = [(80, 170, 255), (255, 120, 80)]
 
@@ -189,17 +184,12 @@ def run(
                             if fullscreen
                             else pygame.display.set_mode(window_size, pygame.RESIZABLE)
                         )
-<<<<<<< HEAD:main/app.py
                     else:
                         command = KEY_TO_COMMAND.get(event.key)
                         if command is not None and hasattr(game, "handle_command"):
                             game.handle_command(command)
                         elif hasattr(game, "handle_key"):
                             game.handle_key(event.key)
-=======
-                    elif hasattr(game, 'handle_key'):
-                        game.handle_key(event.key)
->>>>>>> a5c2b4e2b1e19ba05695e0d9c0f3ae70c39c3cc5:strike_a_pose/app.py
 
             if gestures.active:
                 snap = gestures.recognize(frame.image, _timestamp_ms(frame))

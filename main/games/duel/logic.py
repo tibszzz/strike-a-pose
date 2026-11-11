@@ -16,11 +16,7 @@ import random
 from dataclasses import dataclass, field
 from enum import Enum
 
-<<<<<<< HEAD:main/games/duel/logic.py
 from main.pose import PoseState
-=======
-from strike_a_pose.games.pose.gestures import PoseState
->>>>>>> a5c2b4e2b1e19ba05695e0d9c0f3ae70c39c3cc5:strike_a_pose/games/duel/logic.py
 
 
 class Phase(Enum):

@@ -14,6 +14,7 @@ python -m main dodgeball
 - Avoid getting hit. If the ball touches your body shape, you lose a life and the round pauses.
 - Press **R** to resume (5-second countdown). A player with no lives left is out.
 - Last player standing wins (solo: play until your lives run out). Press **R** to start a new match.
+- If you move out of the screen for long (3 seconds), you lose a life
 
 ## Keys
 

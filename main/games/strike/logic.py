@@ -13,18 +13,9 @@ import math
 import random
 from enum import Enum, auto
 from typing import Callable, Sequence
-
-<<<<<<<< HEAD:main/games/strike/logic.py
 from main.config import Config
 from main.pose.library import Person, Pose, left_to_right, select_players
-
 from .scoring import round_score, score_pose
-========
-from ...config import Config
-from .detector import Person, left_to_right, select_players
-from .pose import Pose
-from ...scoring import round_score, score_pose
->>>>>>>> a5c2b4e2b1e19ba05695e0d9c0f3ae70c39c3cc5:strike_a_pose/games/pose/game.py
 from .screens import (
     CountdownScreen,
     CountdownTick,

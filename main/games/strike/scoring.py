@@ -9,12 +9,7 @@ from __future__ import annotations
 
 import math
 
-<<<<<<< HEAD:main/games/strike/scoring.py
 from main.pose.library import SEGMENTS, Joints, Point, segment_vector
-=======
-from strike_a_pose.games.pose.pose import SEGMENTS, Joints, Point, segment_vector
->>>>>>> a5c2b4e2b1e19ba05695e0d9c0f3ae70c39c3cc5:strike_a_pose/scoring.py
-
 
 def angle_between(a: Point, b: Point) -> float:
     """Angle between two directions, in degrees from 0 to 180."""
