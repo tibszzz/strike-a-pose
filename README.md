@@ -44,15 +44,17 @@ Thumbs_Up to start. With `--debug`, arrow keys (including Left/Right) move the
 hard-lock and Enter confirms. In a game, `Esc` returns to the menu; on splash or
 menu, `Esc` quits. `Q` always quits.
 
-Gesture recognition uses MediaPipe (`assets/models/gesture_recognizer.task`). It runs only while the splash/menu (or a game with `wants_gestures`) is active. Env tunables: `MIN_SCORE` (default 0.5), `REFRACTORY_MS` (default 350), `GESTURE_MODEL_PATH`.
+Gesture recognition uses MediaPipe (`assets/models/gesture_recognizer.task`). It runs only while the splash/menu (or a game with `wants_gestures`) is active. When YOLO sees wrists, the shell crops and upscales those regions before MediaPipe so hands stay recognizable farther from the camera (full-frame fallback if no wrist ROI hits). `Thumb_Up` is ignored unless a nearby YOLO wrist is raised above the elbow (filters arms-at-sides false positives). Env tunables: `MIN_SCORE` (default 0.5), `REFRACTORY_MS` (default 350), `GESTURE_MODEL_PATH`, `ROI` (1/0), `ROI_SIZE` (320), `ROI_SCALE` (2.5), `ROI_MIN_PX` (80), `ROI_MAX` (2), `MIN_WRIST_CONF` (0.35), `THUMB_GATE` (1/0), `THUMB_LIFT_FRAC` (0.08), `THUMB_MATCH_FRAC` (0.35).
 
 ### Shared flags
 
 | Flag | What it does |
 |---|---|
 | `--camera N` | Camera index (default 0) |
+| `--width` / `--height` | Requested capture size (default 1920×1080) |
 | `--imgsz 480` | Smaller YOLO input, more speed |
 | `--device cpu` | Force CPU (`mps` when available is the default) |
+| `--windowed` | Start windowed instead of fullscreen |
 
 Defaults also load from `.env` (see `.env.example`). Flags win over `.env`.
 
@@ -61,7 +63,7 @@ Defaults also load from `.env` (see `.env.example`). Flags win over `.env`.
 | Key | Action |
 |---|---|
 | `D` | Pose/FPS overlay |
-| `F` | Toggle fullscreen |
+| `F` | Toggle fullscreen / windowed |
 | `Esc` | Back to menu |
 | `Q` | Quit the app |
 

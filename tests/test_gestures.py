@@ -1,6 +1,14 @@
 import numpy as np
 
-from main.pose import KP, Person, PoseState, assign_players, classify, is_arm_extended
+from main.pose import (
+    KP,
+    Person,
+    PoseState,
+    assign_players,
+    classify,
+    is_arm_extended,
+    is_wrist_raised,
+)
 
 # Image coordinates: y grows downward. A person facing the camera, ~1:1 scale.
 BASE = {
@@ -73,3 +81,16 @@ def test_lone_player_placed_by_half():
     p = person(box=(700, 0, 900, 500))
     assert assign_players([p], 1000) == (None, p)
     assert assign_players([], 1000) == (None, None)
+
+
+def test_arms_down_wrists_not_raised():
+    p = person()  # default arms hang at sides
+    assert not is_wrist_raised(p, "left")
+    assert not is_wrist_raised(p, "right")
+
+
+def test_raised_hand_wrist_is_raised():
+    # Wrist above elbow (y smaller); torso from shoulder→hip in BASE.
+    p = person({KP.R_ELBOW: (250, 160), KP.R_WRIST: (250, 80)})
+    assert is_wrist_raised(p, "right")
+    assert not is_wrist_raised(p, "left")

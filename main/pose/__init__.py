@@ -1,4 +1,11 @@
-from .gestures import GestureConfig, PoseState, classify, is_arm_extended, is_drawn
+from .gestures import (
+    GestureConfig,
+    PoseState,
+    classify,
+    is_arm_extended,
+    is_drawn,
+    is_wrist_raised,
+)
 from .types import KP, SKELETON, Person, PoseFrame, assign_players
 
 __all__ = [
@@ -12,4 +19,5 @@ __all__ = [
     "classify",
     "is_arm_extended",
     "is_drawn",
+    "is_wrist_raised",
 ]

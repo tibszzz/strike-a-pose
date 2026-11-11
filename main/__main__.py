@@ -6,8 +6,8 @@
   python -m main strike [--debug]
 
 Bare launch opens the splash, then the in-window menu (pose tracker stays warm
-across switches). Defaults for the shell come from `.env` (CAMERA, IMGSZ,
-DEVICE); flags override them.
+across switches). Defaults for the shell come from `.env` (CAMERA, CAM_WIDTH,
+CAM_HEIGHT, IMGSZ, DEVICE, FULLSCREEN); flags override them.
 """
 
 from __future__ import annotations
@@ -21,7 +21,12 @@ from .config import Config, env
 
 def main(argv: Sequence[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
-    camera, imgsz, device = env("CAMERA", 0), env("IMGSZ", 640), env("DEVICE", "") or None
+    camera = env("CAMERA", 0)
+    cam_width = env("CAM_WIDTH", 1920)
+    cam_height = env("CAM_HEIGHT", 1080)
+    imgsz = env("IMGSZ", 640)
+    device = env("DEVICE", "") or None
+    fullscreen = env("FULLSCREEN", 1) != 0
 
     parser = argparse.ArgumentParser(
         prog="python -m main",
@@ -35,9 +40,26 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument("--camera", type=int, default=camera, help=f"camera index (default {camera})")
     parser.add_argument(
+        "--width",
+        type=int,
+        default=cam_width,
+        help=f"requested camera width (default {cam_width})",
+    )
+    parser.add_argument(
+        "--height",
+        type=int,
+        default=cam_height,
+        help=f"requested camera height (default {cam_height})",
+    )
+    parser.add_argument(
         "--imgsz", type=int, default=imgsz, help=f"YOLO input size; lower = faster (default {imgsz})"
     )
     parser.add_argument("--device", default=device, help="mps / cpu (default: mps if available)")
+    parser.add_argument(
+        "--windowed",
+        action="store_true",
+        help="start in a window instead of fullscreen (F still toggles)",
+    )
     parser.add_argument(
         "--debug",
         action="store_true",
@@ -56,9 +78,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         make_splash=make_splash(),
         initial_game=args.game,
         camera_index=args.camera,
+        camera_width=args.width,
+        camera_height=args.height,
         imgsz=args.imgsz,
         device=args.device,
         debug=args.debug,
+        fullscreen=False if args.windowed else fullscreen,
     )
     return 0
 

@@ -8,7 +8,8 @@ Background rules:
 - Else the canvas is filled with `background`; overlay mode (D) swaps in the live
   camera with skeletons on top (duel).
 
-Keys: D overlay, R reset, F fullscreen, Q quit app.
+Keys: D overlay, R reset, F toggle fullscreen, Q quit app.
+Starts fullscreen by default; pass fullscreen=False / --windowed for a window.
 Esc leaves a playable game for the menu; on the splash or menu Esc quits.
 With `--debug`, arrow keys / Enter also feed MenuCommand (dev keyboard nav).
 When the game sets wants_gestures, MediaPipe runs and attaches a snapshot.
@@ -137,10 +138,19 @@ def run(
     imgsz: int = 640,
     device: str | None = None,
     debug: bool = False,
+    camera_width: int = 1920,
+    camera_height: int = 1080,
+    fullscreen: bool = True,
 ) -> None:
     pygame.init()
     init_mixer()
-    tracker = PoseTracker(camera_index=camera_index, imgsz=imgsz, device=device)
+    tracker = PoseTracker(
+        camera_index=camera_index,
+        width=camera_width,
+        height=camera_height,
+        imgsz=imgsz,
+        device=device,
+    )
     print(f"pose model running on: {tracker.device}")
 
     gesture_config = load_gesture_nav_config()
@@ -154,7 +164,12 @@ def run(
     cam_h, cam_w = first.image.shape[:2]
     size = (cam_w, cam_h)
     window_size = size
-    screen = pygame.display.set_mode(window_size, pygame.RESIZABLE)
+    print(f"camera frame: {cam_w}x{cam_h} (requested {camera_width}x{camera_height})")
+    screen = (
+        pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+        if fullscreen
+        else pygame.display.set_mode(window_size, pygame.RESIZABLE)
+    )
     canvas = pygame.Surface(size)
 
     def start_game(game_id: str | None) -> Game:
@@ -170,7 +185,7 @@ def run(
     _sync_gestures(gestures, mapper, game)
     debug_font = pygame.font.SysFont("menlo,monaco,courier", 20)
 
-    overlay, fullscreen = False, False
+    overlay = False
     fps = FpsMeter()
     frame = first
     try:
@@ -208,7 +223,9 @@ def run(
                             game.handle_key(event.key)
 
             if gestures.active:
-                snap = gestures.recognize(frame.image, _timestamp_ms(frame))
+                snap = gestures.recognize(
+                    frame.image, _timestamp_ms(frame), people=frame.people
+                )
                 if _wants_gestures(game):
                     game.gesture_snapshot = snap
                 # Menu owns spatial gesture select from the snapshot; splash (and
