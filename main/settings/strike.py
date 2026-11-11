@@ -17,7 +17,7 @@ class StrikeConfig:
     camera_index: int = 0
 
     rounds: int = 5
-    countdown_seconds: float = 3.0
+    countdown_seconds: float = 5.0
     min_players: int = 2
     max_players: int = 4
 

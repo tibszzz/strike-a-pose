@@ -192,7 +192,10 @@ def _head(joints: Joints) -> tuple[Point, float]:
 
 
 def draw_stick_figure(
-    canvas: np.ndarray, joints: Joints, rect: Rect, color: tuple[int, int, int] = WHITE
+    canvas: np.ndarray,
+    joints: Joints,
+    rect: Rect,
+    color: tuple[int, int, int] = WHITE,
 ) -> None:
     """Draw a pose as a stick figure, as large as fits inside `rect`."""
     head_center, head_radius = _head(joints)
@@ -242,10 +245,105 @@ TARGET_PANEL: Rect = (40, 90, 740, 590)
 SIDE_LEFT, SIDE_WIDTH = 820, 420
 SIDE_CENTER = SIDE_LEFT + SIDE_WIDTH // 2
 
+# Countdown target HUD: final size ~18% of canvas height, parked top-right
+# under the header. Intro holds 2x at center for 1.5s, then eases over 0.5s.
+HEADER_BOTTOM = 70
+COUNTDOWN_MARGIN = 40
+COUNTDOWN_TARGET_HEIGHT = 130
+COUNTDOWN_TARGET_WIDTH = 200
+COUNTDOWN_HOLD_SECONDS = 1.5
+COUNTDOWN_EASE_SECONDS = 0.5
+TIMER_OPACITY = 0.65
+TIMER_CENTER_SCALE = 16.0
+TIMER_VISIBLE_AT_SECONDS = 3
+TIMER_BLINK_SECONDS = 0.06
+TIMER_FADE_SECONDS = 0.28
 
-def _header(canvas: np.ndarray, text: str) -> None:
+
+def _header(canvas: np.ndarray, text: str, *, show_esc: bool = True) -> None:
     draw_text(canvas, text, 40, 62, 1.3)
-    draw_text(canvas, copy.esc_menu, CANVAS_WIDTH - 40, 58, 0.7, MUTED, "right")
+    if show_esc:
+        draw_text(canvas, copy.esc_menu, CANVAS_WIDTH - 40, 58, 0.7, MUTED, "right")
+
+
+def _ease_out(t: float) -> float:
+    """Cubic ease-out for t in [0, 1]."""
+    u = 1.0 - t
+    return 1.0 - u * u * u
+
+
+def _lerp(a: float, b: float, t: float) -> float:
+    return a + (b - a) * t
+
+
+def _countdown_target_rect(elapsed: float) -> Rect:
+    """Where the target stick figure sits for a given countdown elapsed time."""
+    final_w, final_h = COUNTDOWN_TARGET_WIDTH, COUNTDOWN_TARGET_HEIGHT
+    final_left = CANVAS_WIDTH - final_w - COUNTDOWN_MARGIN
+    final_top = HEADER_BOTTOM
+    final_cx = final_left + final_w / 2
+    final_cy = final_top + final_h / 2
+
+    start_w, start_h = final_w * 2, final_h * 2
+    start_cx = CANVAS_WIDTH / 2
+    start_cy = CANVAS_HEIGHT / 2
+
+    if elapsed < COUNTDOWN_HOLD_SECONDS:
+        t = 0.0
+    elif elapsed < COUNTDOWN_HOLD_SECONDS + COUNTDOWN_EASE_SECONDS:
+        t = _ease_out((elapsed - COUNTDOWN_HOLD_SECONDS) / COUNTDOWN_EASE_SECONDS)
+    else:
+        t = 1.0
+
+    w = _lerp(start_w, final_w, t)
+    h = _lerp(start_h, final_h, t)
+    cx = _lerp(start_cx, final_cx, t)
+    cy = _lerp(start_cy, final_cy, t)
+    return (round(cx - w / 2), round(cy - h / 2), round(w), round(h))
+
+
+def _baseline_for_vertical_center(text: str, center_y: int, scale: float) -> int:
+    """OpenCV baseline that places the glyph's visual center at `center_y`."""
+    thickness = max(1, round(scale * 1.6))
+    (_, height), descent = cv2.getTextSize(text, FONT, scale, thickness)
+    return round(center_y + (height - descent) / 2)
+
+
+def _countdown_timer_style(seconds_left: int) -> tuple[int, int, float]:
+    """Centered large timer layout for a visible countdown digit."""
+    text = str(seconds_left)
+    return (
+        CANVAS_WIDTH // 2,
+        _baseline_for_vertical_center(text, CANVAS_HEIGHT // 2, TIMER_CENTER_SCALE),
+        TIMER_CENTER_SCALE,
+    )
+
+
+def _countdown_timer_opacity(seconds_left: int, digit_age: float) -> float | None:
+    """Hide until 3s; each new digit blinks off briefly then fades in."""
+    if seconds_left > TIMER_VISIBLE_AT_SECONDS or seconds_left <= 0:
+        return None
+    if digit_age < TIMER_BLINK_SECONDS:
+        return 0.0
+    fade_t = (digit_age - TIMER_BLINK_SECONDS) / TIMER_FADE_SECONDS
+    if fade_t >= 1.0:
+        return TIMER_OPACITY
+    return TIMER_OPACITY * _ease_out(max(0.0, min(1.0, fade_t)))
+
+
+def _draw_translucent_text(
+    canvas: np.ndarray,
+    text: str,
+    x: int,
+    y: int,
+    scale: float,
+    color: tuple[int, int, int],
+    opacity: float,
+) -> None:
+    """Draw outlined text blended onto the canvas at `opacity`."""
+    overlay = canvas.copy()
+    draw_text(overlay, text, x, y, scale, color, "center", outline=True)
+    cv2.addWeighted(overlay, opacity, canvas, 1.0 - opacity, 0, canvas)
 
 
 def _target_panel(
@@ -304,17 +402,27 @@ def _compose_lobby(screen: LobbyScreen, frame: np.ndarray) -> np.ndarray:
 
 def _compose_countdown(screen: CountdownScreen, frame: np.ndarray) -> np.ndarray:
     canvas = new_canvas()
+    draw_frame(canvas, frame, FULL_CANVAS)
     _header(
         canvas,
         copy.round_of.format(round_number=screen.round_number, total_rounds=screen.total_rounds),
+        show_esc=False,
     )
-    _large_target_panel(canvas, screen.target)
-
-    draw_text(canvas, str(screen.seconds_left), SIDE_CENTER, 340, 9.0, ACCENT, "center")
-
-    feed: Rect = (SIDE_LEFT, 400, SIDE_WIDTH, 280)
-    fill(canvas, feed, PANEL)
-    draw_frame(canvas, frame, feed)
+    draw_stick_figure(
+        canvas, screen.target.joints, _countdown_target_rect(screen.elapsed), WHITE
+    )
+    opacity = _countdown_timer_opacity(screen.seconds_left, screen.digit_age)
+    if opacity is not None and opacity > 0:
+        timer_x, timer_y, timer_scale = _countdown_timer_style(screen.seconds_left)
+        _draw_translucent_text(
+            canvas,
+            str(screen.seconds_left),
+            timer_x,
+            timer_y,
+            timer_scale,
+            WHITE,
+            opacity,
+        )
     return canvas
 
 

@@ -48,6 +48,8 @@ class CountdownScreen:
     total_rounds: int
     target: Pose
     seconds_left: int
+    elapsed: float
+    digit_age: float
 
 
 @dataclass(frozen=True)

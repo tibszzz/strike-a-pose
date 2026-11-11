@@ -167,6 +167,8 @@ class Game:
                 total_rounds=self._config.rounds,
                 target=self._target,
                 seconds_left=seconds_left,
+                elapsed=max(0.0, self._config.countdown_seconds - remaining),
+                digit_age=max(0.0, seconds_left - remaining),
             )
 
         if people is None:

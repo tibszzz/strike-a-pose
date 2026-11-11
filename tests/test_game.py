@@ -151,6 +151,101 @@ def test_countdown_shows_5_down_to_1_and_ticks_once_per_number():
     assert [tick.seconds_left for tick in of_type(events, CountdownTick)] == [5, 4, 3, 2, 1]
 
 
+def test_countdown_reports_elapsed_seconds():
+    game, _ = new_game()
+    start_game(game)
+
+    assert game.step(0.0).elapsed == pytest.approx(0.0)
+    assert game.step(1.25).elapsed == pytest.approx(1.25)
+    assert game.step(4.5).elapsed == pytest.approx(4.5)
+
+
+def test_countdown_reports_digit_age():
+    game, _ = new_game()
+    start_game(game)
+
+    # At elapsed 2.0, remaining is 3.0 → digit "3" just started.
+    assert game.step(2.0).seconds_left == 3
+    assert game.step(2.0).digit_age == pytest.approx(0.0)
+    assert game.step(2.25).digit_age == pytest.approx(0.25)
+    assert game.step(3.1).seconds_left == 2
+    assert game.step(3.1).digit_age == pytest.approx(0.1)
+
+
+def test_countdown_target_rect_holds_then_eases_to_top_right():
+    from main.games.strike.game import (
+        CANVAS_HEIGHT,
+        CANVAS_WIDTH,
+        COUNTDOWN_MARGIN,
+        COUNTDOWN_TARGET_HEIGHT,
+        COUNTDOWN_TARGET_WIDTH,
+        HEADER_BOTTOM,
+        _countdown_target_rect,
+    )
+
+    hold = _countdown_target_rect(0.5)
+    assert hold[2:] == (COUNTDOWN_TARGET_WIDTH * 2, COUNTDOWN_TARGET_HEIGHT * 2)
+    assert hold[0] + hold[2] // 2 == CANVAS_WIDTH // 2
+    assert hold[1] + hold[3] // 2 == CANVAS_HEIGHT // 2
+
+    # Still holding at 1.4s; final park is after 1.5s hold + 0.5s ease.
+    assert _countdown_target_rect(1.4)[2:] == (COUNTDOWN_TARGET_WIDTH * 2, COUNTDOWN_TARGET_HEIGHT * 2)
+
+    final = _countdown_target_rect(2.0)
+    assert final == (
+        CANVAS_WIDTH - COUNTDOWN_TARGET_WIDTH - COUNTDOWN_MARGIN,
+        HEADER_BOTTOM,
+        COUNTDOWN_TARGET_WIDTH,
+        COUNTDOWN_TARGET_HEIGHT,
+    )
+
+    mid = _countdown_target_rect(1.75)
+    assert hold[3] > mid[3] > final[3]
+    assert mid[1] < hold[1]
+    assert mid[0] > hold[0]
+
+
+def test_countdown_timer_centered_when_visible():
+    from main.games.strike.game import (
+        CANVAS_HEIGHT,
+        CANVAS_WIDTH,
+        TIMER_CENTER_SCALE,
+        _baseline_for_vertical_center,
+        _countdown_timer_style,
+    )
+
+    expected_y = _baseline_for_vertical_center("3", CANVAS_HEIGHT // 2, TIMER_CENTER_SCALE)
+    x, y, scale = _countdown_timer_style(3)
+    assert (x, y, scale) == (CANVAS_WIDTH // 2, expected_y, TIMER_CENTER_SCALE)
+    assert y != CANVAS_HEIGHT // 2  # baseline sits below visual center
+
+    x, y, scale = _countdown_timer_style(1)
+    assert (x, scale) == (CANVAS_WIDTH // 2, TIMER_CENTER_SCALE)
+    assert y == _baseline_for_vertical_center("1", CANVAS_HEIGHT // 2, TIMER_CENTER_SCALE)
+
+
+def test_countdown_timer_hidden_until_three_then_blinks_and_fades():
+    from main.games.strike.game import (
+        TIMER_BLINK_SECONDS,
+        TIMER_FADE_SECONDS,
+        TIMER_OPACITY,
+        _countdown_timer_opacity,
+    )
+
+    assert _countdown_timer_opacity(5, 0.5) is None
+    assert _countdown_timer_opacity(4, 0.5) is None
+    assert _countdown_timer_opacity(0, 0.5) is None
+
+    assert _countdown_timer_opacity(3, 0.0) == 0.0
+    assert _countdown_timer_opacity(3, TIMER_BLINK_SECONDS / 2) == 0.0
+
+    mid_fade = _countdown_timer_opacity(3, TIMER_BLINK_SECONDS + TIMER_FADE_SECONDS / 2)
+    assert 0.0 < mid_fade < TIMER_OPACITY
+
+    assert _countdown_timer_opacity(2, TIMER_BLINK_SECONDS + TIMER_FADE_SECONDS) == TIMER_OPACITY
+    assert _countdown_timer_opacity(1, 1.0) == TIMER_OPACITY
+
+
 def test_countdown_never_starts_above_5():
     # Float error makes (3.3 + 5.0) - 3.3 come out a hair above 5.
     started_at = 3.3
