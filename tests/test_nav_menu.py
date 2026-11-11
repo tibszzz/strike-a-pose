@@ -6,6 +6,7 @@ os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 
 import numpy as np
 import pygame
+import pytest
 
 from main.games.menu import INDEX_FINGERTIP, MenuGame
 from main.games.registry import GameEntry, build_registry
@@ -17,13 +18,19 @@ from main.pose.library import JOINT_NAMES, from_coco_person
 from test_gestures import person
 
 
-def _frame(size=(480, 640)) -> PoseFrame:
+def _frame(size=(480, 640), timestamp: float = 1.0) -> PoseFrame:
     h, w = size
-    return PoseFrame(np.zeros((h, w, 3), np.uint8), 1.0, (None, None), [])
+    return PoseFrame(np.zeros((h, w, 3), np.uint8), timestamp, (None, None), [])
 
 
-def _landmarks_at(x: float, y: float, count: int = 21) -> tuple[tuple[float, float], ...]:
+def _landmarks_at(
+    x: float,
+    y: float,
+    count: int = 21,
+    wrist: tuple[float, float] | None = None,
+) -> tuple[tuple[float, float], ...]:
     pts = [(0.0, 0.0)] * count
+    pts[0] = wrist if wrist is not None else (x, y)
     pts[INDEX_FINGERTIP] = (x, y)
     return tuple(pts)
 
@@ -98,7 +105,27 @@ def test_menu_wants_gestures_and_passthrough_camera():
     assert menu.render_camera(image) is image
 
 
-def test_menu_pointing_up_locks_and_thumbs_up_starts():
+def test_menu_pointing_up_updates_lock_while_moving():
+    pygame.init()
+    menu = MenuGame((640, 480), _entries())
+    r0, r1 = menu.tile_rects()[0], menu.tile_rects()[1]
+    tip0, tip1 = (r0.centerx, r0.centery), (r1.centerx, r1.centery)
+
+    menu.gesture_snapshot = GestureSnapshot(
+        label="Pointing_Up", score=1.0, landmarks=_landmarks_at(*tip0)
+    )
+    menu.update(_frame(timestamp=1.0))
+    assert menu.debug_lines()[0] == "menu lock duel"
+
+    # Still holding Pointing_Up while tip moves — selection follows the tip.
+    menu.gesture_snapshot = GestureSnapshot(
+        label="Pointing_Up", score=1.0, landmarks=_landmarks_at(*tip1)
+    )
+    menu.update(_frame(timestamp=1.1))
+    assert menu.debug_lines()[0] == "menu lock dodgeball"
+
+
+def test_menu_pointing_up_locks_and_held_thumbs_up_starts():
     pygame.init()
     menu = MenuGame((640, 480), _entries())
     rect = menu.tile_rects()[1]
@@ -108,15 +135,16 @@ def test_menu_pointing_up_locks_and_thumbs_up_starts():
         score=1.0,
         landmarks=_landmarks_at(*tip),
     )
-    menu.update(_frame())
-    menu.gesture_snapshot = GestureSnapshot(label=None, score=0.0, landmarks=_landmarks_at(*tip))
-    menu.update(_frame())
+    menu.update(_frame(timestamp=1.0))
     menu.gesture_snapshot = GestureSnapshot(
         label="Thumb_Up",
         score=1.0,
         landmarks=_landmarks_at(*tip),
     )
-    menu.update(_frame())
+    menu.update(_frame(timestamp=1.0))  # hold starts
+    menu.update(_frame(timestamp=2.0))  # 1.0s — not enough
+    assert menu.poll_nav() is None
+    menu.update(_frame(timestamp=2.5))  # 1.5s — confirm
     assert menu.poll_nav() == StartGame("dodgeball")
 
 
@@ -130,49 +158,61 @@ def test_menu_thumbs_up_without_hard_lock_is_noop():
         score=1.0,
         landmarks=_landmarks_at(*tip),
     )
-    menu.update(_frame())
+    menu.update(_frame(timestamp=1.0))
+    menu.update(_frame(timestamp=3.0))
     assert menu.poll_nav() is None
 
 
-def test_menu_must_leave_pointing_up_before_relock():
+def test_menu_thumbs_up_hold_resets_if_released_early():
     pygame.init()
     menu = MenuGame((640, 480), _entries())
-    r0, r1 = menu.tile_rects()[0], menu.tile_rects()[1]
-    tip0, tip1 = (r0.centerx, r0.centery), (r1.centerx, r1.centery)
+    menu.handle_command(MenuCommand.MOVE_DOWN)
+    tip = menu.tile_rects()[0].center
+    menu.gesture_snapshot = GestureSnapshot(
+        label="Thumb_Up", score=1.0, landmarks=_landmarks_at(*tip)
+    )
+    menu.update(_frame(timestamp=1.0))
+    menu.update(_frame(timestamp=2.0))  # 1.0s into hold — not enough
+    assert menu.poll_nav() is None
+
+    menu.gesture_snapshot = GestureSnapshot(label=None, score=0.0, landmarks=_landmarks_at(*tip))
+    menu.update(_frame(timestamp=2.1))
 
     menu.gesture_snapshot = GestureSnapshot(
-        label="Pointing_Up", score=1.0, landmarks=_landmarks_at(*tip0)
+        label="Thumb_Up", score=1.0, landmarks=_landmarks_at(*tip)
     )
-    menu.update(_frame())
-
-    # Still holding Pointing_Up while tip moves — no new lock.
-    menu.gesture_snapshot = GestureSnapshot(
-        label="Pointing_Up", score=1.0, landmarks=_landmarks_at(*tip1)
-    )
-    menu.update(_frame())
-
-    menu.gesture_snapshot = GestureSnapshot(
-        label="Thumb_Up", score=1.0, landmarks=_landmarks_at(*tip1)
-    )
-    menu.update(_frame())
+    menu.update(_frame(timestamp=2.2))
+    menu.update(_frame(timestamp=3.2))  # another 1.0s — still not enough
+    assert menu.poll_nav() is None
+    menu.update(_frame(timestamp=3.7))  # 1.5s of continuous hold
     assert menu.poll_nav() == StartGame("duel")
 
-    menu.reset()
-    menu.gesture_snapshot = GestureSnapshot(
-        label="Pointing_Up", score=1.0, landmarks=_landmarks_at(*tip0)
-    )
-    menu.update(_frame())
-    menu.gesture_snapshot = GestureSnapshot(label=None, score=0.0)
-    menu.update(_frame())
-    menu.gesture_snapshot = GestureSnapshot(
-        label="Pointing_Up", score=1.0, landmarks=_landmarks_at(*tip1)
-    )
-    menu.update(_frame())
-    menu.gesture_snapshot = GestureSnapshot(
-        label="Thumb_Up", score=1.0, landmarks=_landmarks_at(*tip1)
-    )
-    menu.update(_frame())
-    assert menu.poll_nav() == StartGame("dodgeball")
+
+def test_menu_thumbs_up_hold_ignores_other_hand_until_release():
+    pygame.init()
+    menu = MenuGame((640, 480), _entries())
+    menu.handle_command(MenuCommand.MOVE_DOWN)
+    tip = menu.tile_rects()[0].center
+    # Wrist (lm 0) anchors the confirming hand; tip is only for hover.
+    near = _landmarks_at(*tip, wrist=(100.0, 200.0))
+    far = _landmarks_at(*tip, wrist=(500.0, 200.0))
+
+    menu.gesture_snapshot = GestureSnapshot(label="Thumb_Up", score=1.0, landmarks=near)
+    menu.update(_frame(timestamp=1.0))
+    menu.update(_frame(timestamp=2.0))  # 1.0s in
+    assert menu._thumb.progress == pytest.approx(1.0 / 1.5, rel=1e-3)
+
+    # Other hand also Thumb_Up — must not switch or advance the hold clock.
+    menu.gesture_snapshot = GestureSnapshot(label="Thumb_Up", score=1.0, landmarks=far)
+    menu.update(_frame(timestamp=2.4))
+    assert menu._thumb.progress == pytest.approx(1.0 / 1.5, rel=1e-3)
+    assert menu.poll_nav() is None
+
+    # Original hand still holding — progress resumes from where it left off.
+    menu.gesture_snapshot = GestureSnapshot(label="Thumb_Up", score=1.0, landmarks=near)
+    menu.update(_frame(timestamp=2.4))
+    menu.update(_frame(timestamp=2.9))  # +0.5s → 1.5s total
+    assert menu.poll_nav() == StartGame("duel")
 
 
 def test_menu_reset_clears_hard_lock():
@@ -184,14 +224,43 @@ def test_menu_reset_clears_hard_lock():
     assert menu.poll_nav() is None
 
 
-def test_splash_thumbs_up_opens_menu():
+def test_splash_held_thumbs_up_opens_menu():
     pygame.init()
     splash = SplashGame((640, 480))
     assert splash.wants_gestures is True
     assert splash.is_splash is True
-    splash.handle_command(MenuCommand.MOVE_UP)
+    splash.gesture_snapshot = GestureSnapshot(
+        label="Thumb_Up", score=1.0, landmarks=((100.0, 200.0),)
+    )
+    splash.update(_frame(timestamp=1.0))
+    splash.update(_frame(timestamp=2.0))  # 1.0s — not enough
+    assert splash.poll_nav() is None
+    splash.update(_frame(timestamp=2.5))  # 1.5s — open menu
     assert splash.poll_nav() == StartGame(None)
     assert splash.poll_nav() is None
+
+
+def test_splash_thumbs_up_hold_resets_if_released_early():
+    pygame.init()
+    splash = SplashGame((640, 480))
+    splash.gesture_snapshot = GestureSnapshot(
+        label="Thumb_Up", score=1.0, landmarks=((100.0, 200.0),)
+    )
+    splash.update(_frame(timestamp=1.0))
+    splash.update(_frame(timestamp=2.0))
+    assert splash.poll_nav() is None
+
+    splash.gesture_snapshot = GestureSnapshot(label=None, score=0.0)
+    splash.update(_frame(timestamp=2.1))
+
+    splash.gesture_snapshot = GestureSnapshot(
+        label="Thumb_Up", score=1.0, landmarks=((100.0, 200.0),)
+    )
+    splash.update(_frame(timestamp=2.2))
+    splash.update(_frame(timestamp=3.2))
+    assert splash.poll_nav() is None
+    splash.update(_frame(timestamp=3.7))
+    assert splash.poll_nav() == StartGame(None)
 
 
 def test_splash_enter_opens_menu_and_back_quits():

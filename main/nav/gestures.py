@@ -3,9 +3,10 @@
 `GestureCommandMapper` is pure (no MediaPipe import) so unit tests stay camera-free.
 `GestureRecognizerSession` lazy-imports mediapipe and is started/stopped by the shell.
 
-When YOLO people are available, the session crops around wrists, upscales those
-patches, runs the recognizer on the enlarged hands, then maps landmarks back to
-full-frame coordinates. Full-frame recognition is the fallback.
+When YOLO people are available, the session only considers wrists raised above
+the hip: it crops those regions, upscales, runs the recognizer, then maps
+landmarks back to full-frame coordinates. If people are visible but no wrists
+are raised, recognition is skipped (no full-frame fallback).
 """
 
 from __future__ import annotations
@@ -58,10 +59,11 @@ class GestureNavConfig:
     roi_min_px: int = 80  # minimum crop side in source pixels
     roi_max: int = 2  # max wrist ROIs tried per frame
     min_wrist_conf: float = 0.35
-    # 1 = drop Thumb_Up unless a YOLO wrist near the hand is raised (not at side).
-    thumb_gate: int = 1
-    thumb_lift_frac: float = 0.08  # wrist must clear elbow by this × torso length
-    thumb_match_frac: float = 0.35  # max hand↔wrist distance as × person-box height
+    # 1 = ignore hand detection unless a YOLO wrist near the hand is above the hip.
+    raise_gate: int = 1
+    raise_lift_frac: float = 0.08  # wrist must clear hip by this × torso length
+    raise_match_frac: float = 0.35  # max hand↔raised-wrist distance as × person-box height
+    thumb_hold_s: float = 1.5  # seconds Thumb_Up must be held on splash / menu confirm
 
 
 def load_gesture_nav_config() -> GestureNavConfig:
@@ -135,6 +137,22 @@ class GestureCommandMapper:
         self._left_at_ms = None
 
 
+def any_raised_wrists(
+    people: Sequence[Person],
+    *,
+    min_wrist_conf: float = 0.35,
+    lift_frac: float = 0.08,
+) -> bool:
+    """True when any YOLO wrist sits clearly above its hip."""
+    for person in people:
+        for side in ("left", "right"):
+            if is_wrist_raised(
+                person, side, min_conf=min_wrist_conf, min_lift_frac=lift_frac
+            ):
+                return True
+    return False
+
+
 def hand_rois_from_people(
     people: Sequence[Person],
     frame_w: int,
@@ -144,38 +162,42 @@ def hand_rois_from_people(
     scale: float = 2.5,
     min_px: int = 80,
     max_rois: int = 2,
+    lift_frac: float = 0.08,
 ) -> list[HandRoi]:
-    """Build up to `max_rois` square crops centered near visible wrists."""
+    """Build up to `max_rois` square crops centered near wrists raised above the hip."""
     if frame_w <= 0 or frame_h <= 0 or max_rois <= 0:
         return []
 
     candidates: list[HandRoi] = []
     for person in people:
         for wrist_i, elbow_i in _WRIST_ELBOW:
-            if float(person.conf[wrist_i]) < min_wrist_conf:
+            side = "left" if wrist_i == KP.L_WRIST else "right"
+            if not is_wrist_raised(
+                person, side, min_conf=min_wrist_conf, min_lift_frac=lift_frac
+            ):
                 continue
             wx, wy = float(person.xy[wrist_i][0]), float(person.xy[wrist_i][1])
             if not (0 <= wx < frame_w and 0 <= wy < frame_h):
                 continue
 
-            side = float(min_px)
+            side_px = float(min_px)
             cx, cy = wx, wy
             elbow_ok = float(person.conf[elbow_i]) >= min_wrist_conf
             if elbow_ok:
                 ex, ey = float(person.xy[elbow_i][0]), float(person.xy[elbow_i][1])
                 forearm = math.hypot(wx - ex, wy - ey)
-                side = max(side, forearm * scale)
+                side_px = max(side_px, forearm * scale)
                 # Nudge the crop toward the fingers (away from the elbow).
                 if forearm > 1e-3:
-                    cx = wx + (wx - ex) / forearm * (side * 0.15)
-                    cy = wy + (wy - ey) / forearm * (side * 0.15)
+                    cx = wx + (wx - ex) / forearm * (side_px * 0.15)
+                    cy = wy + (wy - ey) / forearm * (side_px * 0.15)
             else:
                 # No elbow: size from person box height when available.
                 box_h = max(0.0, person.box[3] - person.box[1])
                 if box_h > 0:
-                    side = max(side, box_h * 0.25)
+                    side_px = max(side_px, box_h * 0.25)
 
-            half = side / 2.0
+            half = side_px / 2.0
             x0 = int(round(cx - half))
             y0 = int(round(cy - half))
             x1 = int(round(cx + half))
@@ -190,7 +212,7 @@ def hand_rois_from_people(
             if side_i < max(16, min_px // 2):
                 continue
             x1, y1 = x0 + side_i, y0 + side_i
-            priority = float(person.conf[wrist_i]) * side
+            priority = float(person.conf[wrist_i]) * side_px
             candidates.append(HandRoi(x0, y0, x1, y1, priority=priority))
 
     candidates.sort(key=lambda r: r.priority, reverse=True)
@@ -255,7 +277,52 @@ def _hand_anchor(snap: GestureSnapshot) -> tuple[float, float] | None:
     return None
 
 
-def apply_thumb_pose_gate(
+def pick_gesture_snapshot(
+    candidates: Sequence[GestureSnapshot],
+    sticky_anchor: tuple[float, float] | None,
+    *,
+    max_dist: float,
+) -> tuple[GestureSnapshot, tuple[float, float] | None]:
+    """Choose a hand snapshot, sticky on Thumb_Up until that hand loses it.
+
+    While `sticky_anchor` is set, any Thumb_Up whose wrist/anchor stays within
+    `max_dist` of that point wins over higher-scoring other hands. Only when no
+    such Thumb_Up remains do we fall back to normal ranking (and clear sticky
+    unless the new winner is also Thumb_Up).
+    """
+    nonempty = [
+        c
+        for c in candidates
+        if c.label is not None or c.landmarks or c.hand_box is not None
+    ]
+    if not nonempty:
+        return _empty_snapshot(), None
+
+    if sticky_anchor is not None and max_dist > 0:
+        sticky_thumbs: list[GestureSnapshot] = []
+        for c in nonempty:
+            if c.label != "Thumb_Up":
+                continue
+            anchor = _hand_anchor(c)
+            if anchor is None:
+                continue
+            if math.hypot(anchor[0] - sticky_anchor[0], anchor[1] - sticky_anchor[1]) <= max_dist:
+                sticky_thumbs.append(c)
+        if sticky_thumbs:
+            best = sticky_thumbs[0]
+            for c in sticky_thumbs[1:]:
+                best = _better_snapshot(best, c)
+            return best, (_hand_anchor(best) or sticky_anchor)
+
+    best = nonempty[0]
+    for c in nonempty[1:]:
+        best = _better_snapshot(best, c)
+    if best.label == "Thumb_Up":
+        return best, _hand_anchor(best)
+    return best, None
+
+
+def apply_raised_arm_gate(
     snap: GestureSnapshot,
     people: Sequence[Person] | None,
     *,
@@ -264,12 +331,14 @@ def apply_thumb_pose_gate(
     lift_frac: float = 0.08,
     match_frac: float = 0.35,
 ) -> GestureSnapshot:
-    """Clear Thumb_Up when the matching YOLO arm is hanging at the side.
+    """Drop hand detection unless the hand sits near a YOLO wrist above the hip.
 
-    Landmarks stay so menu hover still works. If no people are visible the
-    label is left alone (nothing to verify against).
+    Clears label, score, landmarks, and hand_box together. If no people are
+    visible the snapshot is left alone (nothing to verify against).
     """
-    if not enabled or snap.label != "Thumb_Up" or not people:
+    if not enabled or not people:
+        return snap
+    if snap.label is None and not snap.landmarks and snap.hand_box is None:
         return snap
 
     raised: list[tuple[Person, tuple[float, float]]] = []
@@ -284,11 +353,11 @@ def apply_thumb_pose_gate(
             )
 
     if not raised:
-        return replace(snap, label=None, score=0.0)
+        return _empty_snapshot()
 
     anchor = _hand_anchor(snap)
     if anchor is None:
-        return snap
+        return _empty_snapshot()
 
     ax, ay = anchor
     for person, (wx, wy) in raised:
@@ -296,7 +365,7 @@ def apply_thumb_pose_gate(
         max_dist = box_h * match_frac
         if math.hypot(ax - wx, ay - wy) <= max_dist:
             return snap
-    return replace(snap, label=None, score=0.0)
+    return _empty_snapshot()
 
 
 def _landmarks_to_box_and_pts(
@@ -327,6 +396,8 @@ class GestureRecognizerSession:
         self._recognizer = None
         self._active = False
         self._last_ts_ms = -1
+        # Wrist/anchor of the hand currently holding Thumb_Up; prefer it until gone.
+        self._thumb_sticky_anchor: tuple[float, float] | None = None
 
     @property
     def active(self) -> bool:
@@ -358,6 +429,7 @@ class GestureRecognizerSession:
         self._recognizer = GestureRecognizer.create_from_options(options)
         self._active = True
         self._last_ts_ms = -1
+        self._thumb_sticky_anchor = None
 
     def stop(self) -> None:
         if self._recognizer is not None:
@@ -365,6 +437,7 @@ class GestureRecognizerSession:
             self._recognizer = None
         self._active = False
         self._last_ts_ms = -1
+        self._thumb_sticky_anchor = None
 
     def close(self) -> None:
         self.stop()
@@ -379,9 +452,25 @@ class GestureRecognizerSession:
             return _empty_snapshot()
 
         cfg = self.config
-        best = _empty_snapshot()
+        gate_kw = dict(
+            enabled=bool(cfg.raise_gate),
+            min_wrist_conf=cfg.min_wrist_conf,
+            lift_frac=cfg.raise_lift_frac,
+            match_frac=cfg.raise_match_frac,
+        )
+
+        # People visible with arms down: skip MediaPipe entirely (no full-frame).
+        if people and cfg.raise_gate and not any_raised_wrists(
+            people, min_wrist_conf=cfg.min_wrist_conf, lift_frac=cfg.raise_lift_frac
+        ):
+            self._thumb_sticky_anchor = None
+            return _empty_snapshot()
+
+        h, w = image_bgr.shape[:2]
+        sticky_max_dist = max(40.0, math.hypot(w, h) * 0.15)
+        candidates: list[GestureSnapshot] = []
+
         if cfg.roi and people:
-            h, w = image_bgr.shape[:2]
             rois = hand_rois_from_people(
                 people,
                 w,
@@ -390,36 +479,33 @@ class GestureRecognizerSession:
                 scale=cfg.roi_scale,
                 min_px=cfg.roi_min_px,
                 max_rois=cfg.roi_max,
+                lift_frac=cfg.raise_lift_frac,
             )
             for roi in rois:
                 patch, scale_x, scale_y = prepare_roi(image_bgr, roi, cfg.roi_size)
-                snap = self._recognize_image(patch, timestamp_ms)
+                for snap in self._recognize_hands(patch, timestamp_ms):
+                    candidates.append(remap_snapshot(snap, roi, scale_x, scale_y))
                 timestamp_ms = self._last_ts_ms + 1
-                mapped = remap_snapshot(snap, roi, scale_x, scale_y)
-                best = _better_snapshot(best, mapped)
-                if best.landmarks and best.label is not None:
-                    break
 
-        if best.landmarks:
-            return apply_thumb_pose_gate(
-                best,
-                people,
-                enabled=bool(cfg.thumb_gate),
-                min_wrist_conf=cfg.min_wrist_conf,
-                lift_frac=cfg.thumb_lift_frac,
-                match_frac=cfg.thumb_match_frac,
-            )
+        if not candidates:
+            candidates.extend(self._recognize_hands(image_bgr, timestamp_ms))
 
-        return apply_thumb_pose_gate(
-            self._recognize_image(image_bgr, timestamp_ms),
-            people,
-            enabled=bool(cfg.thumb_gate),
-            min_wrist_conf=cfg.min_wrist_conf,
-            lift_frac=cfg.thumb_lift_frac,
-            match_frac=cfg.thumb_match_frac,
+        best, sticky = pick_gesture_snapshot(
+            candidates,
+            self._thumb_sticky_anchor,
+            max_dist=sticky_max_dist,
         )
+        gated = apply_raised_arm_gate(best, people, **gate_kw)
+        if gated.label == "Thumb_Up":
+            self._thumb_sticky_anchor = _hand_anchor(gated) or sticky
+        else:
+            self._thumb_sticky_anchor = None
+        return gated
 
-    def _recognize_image(self, image_bgr: np.ndarray, timestamp_ms: int) -> GestureSnapshot:
+    def _recognize_hands(
+        self, image_bgr: np.ndarray, timestamp_ms: int
+    ) -> list[GestureSnapshot]:
+        """One snapshot per detected hand (label + landmarks when available)."""
         assert self._recognizer is not None
         import mediapipe as mp
 
@@ -432,28 +518,34 @@ class GestureRecognizerSession:
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
         result = self._recognizer.recognize_for_video(mp_image, timestamp_ms)
 
-        best_label: str | None = None
-        best_score = 0.0
-        best_index = -1
-        for i, hand_gestures in enumerate(result.gestures or ()):
-            if not hand_gestures:
-                continue
-            top = hand_gestures[0]
-            name = getattr(top, "category_name", None) or getattr(top, "display_name", None)
-            score = float(top.score)
-            if name and name != "None" and score > best_score:
-                best_score = score
-                best_label = name
-                best_index = i
-
-        if best_index < 0 or not result.hand_landmarks or best_index >= len(result.hand_landmarks):
-            # Landmarks without a canned gesture still help menu hover.
-            if result.hand_landmarks:
-                h, w = image_bgr.shape[:2]
-                box, pts = _landmarks_to_box_and_pts(result.hand_landmarks[0], w, h)
-                return GestureSnapshot(label=None, score=0.0, hand_box=box, landmarks=pts)
-            return GestureSnapshot(label=best_label, score=best_score)
+        hands = list(result.hand_landmarks or ())
+        gestures = list(result.gestures or ())
+        if not hands and not gestures:
+            return []
 
         h, w = image_bgr.shape[:2]
-        box, pts = _landmarks_to_box_and_pts(result.hand_landmarks[best_index], w, h)
-        return GestureSnapshot(label=best_label, score=best_score, hand_box=box, landmarks=pts)
+        out: list[GestureSnapshot] = []
+        n = max(len(hands), len(gestures))
+        for i in range(n):
+            label: str | None = None
+            score = 0.0
+            if i < len(gestures) and gestures[i]:
+                top = gestures[i][0]
+                name = getattr(top, "category_name", None) or getattr(top, "display_name", None)
+                if name and name != "None":
+                    label = name
+                    score = float(top.score)
+            if i < len(hands):
+                box, pts = _landmarks_to_box_and_pts(hands[i], w, h)
+                out.append(
+                    GestureSnapshot(label=label, score=score, hand_box=box, landmarks=pts)
+                )
+            elif label is not None:
+                out.append(GestureSnapshot(label=label, score=score))
+        return out
+
+    def _recognize_image(self, image_bgr: np.ndarray, timestamp_ms: int) -> GestureSnapshot:
+        """Best single-hand snapshot for this image (no Thumb_Up sticky)."""
+        hands = self._recognize_hands(image_bgr, timestamp_ms)
+        best, _ = pick_gesture_snapshot(hands, None, max_dist=0.0)
+        return best

@@ -13,7 +13,7 @@ Starts fullscreen by default; pass fullscreen=False / --windowed for a window.
 Esc leaves a playable game for the menu; on the splash or menu Esc quits.
 With `--debug`, arrow keys / Enter also feed MenuCommand (dev keyboard nav).
 When the game sets wants_gestures, MediaPipe runs and attaches a snapshot.
-Splash still maps gestures → MenuCommand; the menu reads the snapshot itself.
+Splash and menu read the snapshot themselves (hold Thumb_Up / spatial select).
 """
 
 from __future__ import annotations
@@ -228,9 +228,13 @@ def run(
                 )
                 if _wants_gestures(game):
                     game.gesture_snapshot = snap
-                # Menu owns spatial gesture select from the snapshot; splash (and
-                # any future non-menu gesture games) still use the label mapper.
-                if not _is_menu(game) and hasattr(game, "handle_command"):
+                # Splash/menu own gesture actions from the snapshot; other
+                # gesture games still use the rising-edge label mapper.
+                if (
+                    not _is_menu(game)
+                    and not _is_splash(game)
+                    and hasattr(game, "handle_command")
+                ):
                     command = mapper.feed(snap, _timestamp_ms(frame))
                     if command is not None:
                         game.handle_command(command)

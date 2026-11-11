@@ -1,8 +1,11 @@
 """In-process game picker. Implements the shared Game protocol.
 
-Tile grid: tip soft-hover, Pointing_Up hard-locks, Thumb_Up confirms.
-Shell keyboard (`--debug`) moves hard-lock; gestures are handled here from
-`gesture_snapshot`, not via shell MenuCommand mapping.
+Tile grid: tip soft-hover, Pointing_Up sets hard-lock under the fingertip
+(updates while you move), Thumb_Up held confirms. While a Thumb_Up hold is
+in progress, a different hand's Thumb_Up is ignored until the confirming
+hand drops the gesture. Shell keyboard (`--debug`) moves hard-lock and
+confirms instantly; gestures are handled here from `gesture_snapshot`, not
+via shell MenuCommand mapping.
 """
 
 from __future__ import annotations
@@ -12,7 +15,16 @@ from typing import Sequence
 import pygame
 
 from main.games.registry import GameEntry
-from main.nav import GestureSnapshot, MenuCommand, Nav, QuitApp, StartGame, load_gesture_nav_config
+from main.nav import (
+    GestureSnapshot,
+    MenuCommand,
+    Nav,
+    QuitApp,
+    StartGame,
+    ThumbHoldTracker,
+    effective_label,
+    load_gesture_nav_config,
+)
 from main.pose import PoseFrame
 
 WHITE = (255, 255, 255)
@@ -21,6 +33,7 @@ ACCENT = (255, 220, 80)
 HOVER = (220, 220, 220)
 HAND_BOX = (80, 220, 255)
 TILE_FILL = (0, 0, 0, 120)
+HOLD_FILL = (255, 220, 80, 70)
 
 # MediaPipe hand landmark index for index fingertip.
 INDEX_FINGERTIP = 8
@@ -40,11 +53,10 @@ class MenuGame:
         self._pending: Nav | None = None
         self._frame: PoseFrame | None = None
         self.gesture_snapshot: GestureSnapshot | None = None
-        self._min_score = load_gesture_nav_config().min_score
+        cfg = load_gesture_nav_config()
+        self._thumb = ThumbHoldTracker(hold_s=cfg.thumb_hold_s, min_score=cfg.min_score)
         self._hard_lock: int | None = None
         self._hover: int | None = None
-        self._pointing_held = False
-        self._thumb_held = False
         self._font = pygame.font.SysFont("menlo,monaco,courier", max(18, self.h // 28))
         self._title_font = pygame.font.SysFont("menlo,monaco,courier", max(28, self.h // 16), bold=True)
         self._hint_font = pygame.font.SysFont("menlo,monaco,courier", max(14, self.h // 36))
@@ -56,8 +68,7 @@ class MenuGame:
         self._pending = None
         self._hard_lock = None
         self._hover = None
-        self._pointing_held = False
-        self._thumb_held = False
+        self._thumb.reset()
 
     def tile_rects(self) -> list[pygame.Rect]:
         n = len(self.entries)
@@ -91,25 +102,21 @@ class MenuGame:
                     self._hover = i
                     break
 
-        label = _effective_label(snap, self._min_score)
+        label = effective_label(snap, self._thumb.min_score)
 
-        pointing = label == "Pointing_Up"
-        if pointing:
-            if not self._pointing_held:
-                if self._hover is not None:
-                    self._hard_lock = self._hover
-                self._pointing_held = True
-        else:
-            self._pointing_held = False
+        if label == "Pointing_Up" and self._hover is not None and not self._thumb.active:
+            if self._hard_lock != self._hover:
+                self._hard_lock = self._hover
+                self._thumb.reset()
 
-        thumb = label == "Thumb_Up"
-        if thumb:
-            if not self._thumb_held:
-                if self._hard_lock is not None:
-                    self._pending = StartGame(self.entries[self._hard_lock].id)
-                self._thumb_held = True
-        else:
-            self._thumb_held = False
+        if self._thumb.update(
+            snap,
+            frame.timestamp,
+            frame_size=(self.w, self.h),
+            armed=self._hard_lock is not None,
+        ):
+            assert self._hard_lock is not None
+            self._pending = StartGame(self.entries[self._hard_lock].id)
 
     def render_camera(self, image):
         return image
@@ -135,14 +142,17 @@ class MenuGame:
 
         hint_y = self.h // 10 + title.get_height() + 8
         primary = self._hint_font.render(
-            "Point at a game · Pointing up locks · Thumbs up starts",
+            "Pointing up selects · Hold thumbs up to start",
             True,
             ACCENT,
         )
         canvas.blit(primary, (self.w // 2 - primary.get_width() // 2, hint_y))
 
         status_y = hint_y + primary.get_height() + 12
-        if snap is not None and snap.label:
+        hold = self._thumb.hold_status()
+        if hold is not None:
+            status = self._hint_font.render(hold, True, ACCENT)
+        elif snap is not None and snap.label:
             status = self._hint_font.render(f"{snap.label}  {snap.score:.2f}", True, WHITE)
         else:
             status = self._hint_font.render("show a hand gesture…", True, MUTED)
@@ -155,6 +165,16 @@ class MenuGame:
 
             locked = i == self._hard_lock
             hovered = i == self._hover
+            if locked and self._thumb.progress > 0:
+                hold_surf = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
+                hold_h = max(1, int(rect.height * self._thumb.progress))
+                hold_surf.fill(HOLD_FILL)
+                canvas.blit(
+                    hold_surf,
+                    (rect.left, rect.bottom - hold_h),
+                    area=pygame.Rect(0, rect.height - hold_h, rect.width, hold_h),
+                )
+
             if locked:
                 border_color = ACCENT
                 border_w = 5
@@ -182,15 +202,9 @@ class MenuGame:
     def handle_command(self, command: MenuCommand) -> None:
         n = len(self.entries)
         if command is MenuCommand.MOVE_UP:
-            if self._hard_lock is None:
-                self._hard_lock = n - 1
-            else:
-                self._hard_lock = (self._hard_lock - 1) % n
+            self._set_hard_lock(n - 1 if self._hard_lock is None else (self._hard_lock - 1) % n)
         elif command is MenuCommand.MOVE_DOWN:
-            if self._hard_lock is None:
-                self._hard_lock = 0
-            else:
-                self._hard_lock = (self._hard_lock + 1) % n
+            self._set_hard_lock(0 if self._hard_lock is None else (self._hard_lock + 1) % n)
         elif command is MenuCommand.SELECT:
             if self._hard_lock is not None:
                 self._pending = StartGame(self.entries[self._hard_lock].id)
@@ -208,14 +222,13 @@ class MenuGame:
         locked = self.entries[self._hard_lock].id if self._hard_lock is not None else "-"
         return [f"menu lock {locked}", f"gesture {label}"]
 
+    def _set_hard_lock(self, index: int) -> None:
+        if self._hard_lock != index:
+            self._hard_lock = index
+            self._thumb.reset()
+
 
 def _index_tip(snap: GestureSnapshot | None) -> tuple[float, float] | None:
     if snap is None or len(snap.landmarks) <= INDEX_FINGERTIP:
         return None
     return snap.landmarks[INDEX_FINGERTIP]
-
-
-def _effective_label(snap: GestureSnapshot | None, min_score: float) -> str | None:
-    if snap is None or snap.label is None or snap.score < min_score:
-        return None
-    return snap.label
