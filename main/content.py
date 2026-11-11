@@ -22,6 +22,7 @@ class Duel:
     window_title = "Strike a Pose: Wild West Duel"
     player_names = ("Player 1", "Player 2")
     waiting_for = "WAITING FOR"
+    preview_waiting = "WAITING"
     get_ready = "GET READY, PARTNERS"
     lower_gun = "lower your gun"
     lower_guns_again = "lower your guns to play again"

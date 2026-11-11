@@ -26,6 +26,14 @@ class DuelConfig:
 class ViewConfig:
     early_float_time: float = 2.0  # seconds for "too early" to drift up the path and vanish
     early_fade_start: float = 0.5  # fraction of the trip after which it starts fading
+    # Side camera PiPs: body framing windows under the name/hearts band.
+    preview_width: float = 0.20  # fraction of canvas width
+    preview_height: float = 0.50  # fraction of canvas height
+    preview_top: float = 0.24  # fraction of canvas height; clears the hearts
+    preview_margin_x: float = 0.1  # fraction of canvas width from the outer edge
+    preview_pad: float = 0.18  # pad around Person.box before aspect expand
+    preview_smooth: float = 0.35  # EMA alpha toward the latest crop (higher = snappier)
+    preview_grace: float = 0.3  # seconds to hold last crop after track loss
 
 
 @dataclass(frozen=True)

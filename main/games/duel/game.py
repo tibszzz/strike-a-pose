@@ -1,7 +1,8 @@
 """Wild West Duel: pygame view + sounds on top of the pure Duel rules.
 
-Look follows refrences/: white page, pixel font, hearts for lives. Players don't see the
-camera; debug mode (D) puts the camera image behind the same UI.
+Look follows refrences/: white page, pixel font, hearts for lives. Side portrait
+PiPs show each player's body so they can check framing; debug mode (D) still puts
+the full camera image behind the same UI.
 """
 
 from __future__ import annotations
@@ -9,6 +10,7 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass
 
+import numpy as np
 import pygame
 
 from main import audio, content, styles
@@ -17,6 +19,7 @@ from main.settings import ASSETS, DuelConfig, GestureConfig, Messages, ViewConfi
 
 from .float_path import FloatPath, ease_out, fade
 from .logic import Duel, Phase
+from .preview import PreviewTracker
 
 theme = styles.DUEL
 copy = content.Duel
@@ -60,6 +63,21 @@ class DuelGame:
         self.win_img: pygame.Surface | None = None
         self.floaters: list[_Floater] = []
         self.paths = (FloatPath(size, 0), FloatPath(size, 1))
+        aspect = (self.view.preview_width * self.w) / max(1.0, self.view.preview_height * self.h)
+        self.previews = (
+            PreviewTracker(
+                pad=self.view.preview_pad,
+                smooth=self.view.preview_smooth,
+                grace=self.view.preview_grace,
+                target_aspect=aspect,
+            ),
+            PreviewTracker(
+                pad=self.view.preview_pad,
+                smooth=self.view.preview_smooth,
+                grace=self.view.preview_grace,
+                target_aspect=aspect,
+            ),
+        )
 
         self._fonts: dict[tuple[int, bool], pygame.font.Font] = {}
         self.sz_main = theme.duel_main_px(self.h)
@@ -88,6 +106,8 @@ class DuelGame:
     def reset(self) -> None:
         self.duel.reset()
         self.floaters.clear()
+        for tracker in self.previews:
+            tracker.reset()
 
     def update(self, frame: PoseFrame) -> None:
         self.step(frame.timestamp, tuple(classify(p, self.gestures) for p in frame.players))
@@ -120,6 +140,7 @@ class DuelGame:
             self._draw_winner(canvas)
             return
 
+        self._draw_previews(canvas, frame)
         if d.phase == Phase.ROUND_OVER or d.showing_final_round(self.now):
             self._draw_result(canvas)
         else:
@@ -136,6 +157,58 @@ class DuelGame:
         self._draw_floaters(canvas)
 
     # -- screens ----------------------------------------------------------------------
+
+    def _draw_previews(self, canvas: pygame.Surface, frame: PoseFrame) -> None:
+        fh, fw = frame.image.shape[:2]
+        for i in (0, 1):
+            rect = self._preview_rect(i)
+            box = self.previews[i].update(frame.players[i], self.now, fw, fh)
+            if box is None:
+                self._draw_preview_placeholder(canvas, rect)
+            else:
+                self._blit_preview_crop(canvas, frame.image, box, rect)
+            border = max(2, self.h // 240)
+            pygame.draw.rect(canvas, theme.ink, rect, border)
+
+    def _preview_rect(self, i: int) -> pygame.Rect:
+        pw = int(self.view.preview_width * self.w)
+        ph = int(self.view.preview_height * self.h)
+        margin = int(self.view.preview_margin_x * self.w)
+        rect = pygame.Rect(0, 0, pw, ph)
+        rect.top = int(self.view.preview_top * self.h)
+        if i == 0:
+            rect.left = margin
+        else:
+            rect.right = self.w - margin
+        return rect
+
+    def _draw_preview_placeholder(self, canvas: pygame.Surface, rect: pygame.Rect) -> None:
+        canvas.fill(theme.hint, rect)
+        self._text(
+            canvas,
+            copy.preview_waiting,
+            self.sz_label,
+            rect.center,
+            color=theme.bg,
+            bold=True,
+        )
+
+    def _blit_preview_crop(
+        self,
+        canvas: pygame.Surface,
+        image_bgr: np.ndarray,
+        box: tuple[float, float, float, float],
+        dest: pygame.Rect,
+    ) -> None:
+        x1, y1, x2, y2 = (int(v) for v in box)
+        x1, x2 = max(0, min(x1, x2)), min(image_bgr.shape[1], max(x1, x2))
+        y1, y2 = max(0, min(y1, y2)), min(image_bgr.shape[0], max(y1, y2))
+        if x2 <= x1 or y2 <= y1:
+            self._draw_preview_placeholder(canvas, dest)
+            return
+        crop = np.ascontiguousarray(image_bgr[y1:y2, x1:x2, ::-1])  # BGR -> RGB
+        surf = pygame.image.frombuffer(crop.tobytes(), (crop.shape[1], crop.shape[0]), "RGB")
+        canvas.blit(pygame.transform.smoothscale(surf, dest.size), dest)
 
     def _draw_header(self, canvas):
         heart_w = self.heart_alive.get_width()
