@@ -62,6 +62,33 @@ def test_missing_player_blocks_start():
     assert s.duel.missing == (False, True)
 
 
+def test_debug_solo_starts_against_idle_ghost():
+    s = Sim(debug=True)
+    s.step(H, M, frames=int(1.0 / DT) + 2)
+    assert s.duel.phase == Phase.READY
+    assert s.duel.missing == (False, False)
+    assert ("ready", None) in s.events
+
+
+def test_debug_solo_draw_beats_ghost():
+    s = Sim(debug=True)
+    s.run_until(Phase.READY, H, M)
+    s.run_until(Phase.BANG, H, M)
+    s.step(H, M, frames=6)
+    s.step(D, M, frames=10)
+    r = s.duel.last_result
+    assert r.winner == 0 and r.reason == "hit"
+    assert s.duel.scores == [1, 0]
+
+
+def test_debug_solo_leaving_aborts_countdown():
+    s = Sim(debug=True)
+    s.run_until(Phase.STEADY, H, M)
+    s.step(M, M)
+    assert s.duel.phase == Phase.WAIT_START
+    assert ("abort", None) in s.events
+
+
 def test_ready_steady_bang_timing():
     s = Sim(bang_delay=2.5)
     s.run_until(Phase.READY, H, H)

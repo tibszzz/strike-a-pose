@@ -105,6 +105,7 @@ class Duel:
 
     def update(self, now: float, states: tuple[PoseState, PoseState]) -> list[Event]:
         events: list[Event] = []
+        states = self._with_debug_ghost(states)
         self.missing = tuple(s == PoseState.MISSING for s in states)
         present = not any(self.missing)
         cfg = self.config
@@ -151,6 +152,19 @@ class Duel:
         return events
 
     # -- internals --------------------------------------------------------------------
+
+    def _with_debug_ghost(
+        self, states: tuple[PoseState, PoseState]
+    ) -> tuple[PoseState, PoseState]:
+        """In debug mode, fill the empty half with an idle opponent so one person can play."""
+        if not self.config.debug:
+            return states
+        missing = [i for i, s in enumerate(states) if s == PoseState.MISSING]
+        if len(missing) != 1:
+            return states
+        out = list(states)
+        out[missing[0]] = PoseState.NEUTRAL
+        return (out[0], out[1])
 
     def _enter(self, phase: Phase, now: float | None) -> None:
         self.phase = phase

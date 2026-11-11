@@ -18,6 +18,8 @@ class DuelConfig:
     draw_confirm_frames: int = 2
     round_result_time: float = 3.0  # how long the round result is shown
     match_result_min_time: float = 3.0  # winner screen shown at least this long (after the round result)
+    # Solo testing: the empty half is treated as an idle ghost so one person can play.
+    debug: bool = False
 
 
 @dataclass(frozen=True)

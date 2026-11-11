@@ -1,6 +1,6 @@
 """Usage:
   python -m main
-  python -m main duel [--camera 0] [--imgsz 640] [--device mps]
+  python -m main duel [--camera 0] [--imgsz 640] [--device mps] [--debug]
   python -m main dodgeball ...
   python -m main [--debug]
   python -m main strike [--debug]
@@ -14,9 +14,11 @@ from __future__ import annotations
 
 import argparse
 import sys
+from dataclasses import replace
 from typing import Sequence
 
-from .config import Config, env
+from .config import Config, env, from_env
+from .settings import DuelConfig
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -63,15 +65,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--debug",
         action="store_true",
-        help="enable keyboard menu nav (arrows/Enter); strike solo lobby",
+        help="keyboard menu nav; strike solo lobby; duel solo vs idle ghost",
     )
     args = parser.parse_args(argv)
 
     strike_config = Config(min_players=1, debug=True) if args.debug else Config()
+    duel_config = from_env(DuelConfig)
+    if args.debug:
+        duel_config = replace(duel_config, debug=True)
     from .app import run
     from .games.registry import build_registry, make_menu, make_splash
 
-    registry = build_registry(strike_config=strike_config)
+    registry = build_registry(strike_config=strike_config, duel_config=duel_config)
     run(
         registry=registry,
         make_menu=make_menu(registry),

@@ -6,6 +6,12 @@ Two-player quick-draw. Stand side by side facing the camera. Left half of the sc
 python -m main duel
 ```
 
+For solo testing while developing, pass `--debug` so the empty half is an idle ghost:
+
+```sh
+python -m main duel --debug
+```
+
 ## How to play
 
 - A round starts once both players have been visible and not drawing for about 1 second.
