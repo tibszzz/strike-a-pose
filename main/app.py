@@ -30,6 +30,7 @@ import cv2
 import numpy as np
 import pygame
 
+from . import styles
 from .audio import init_mixer
 from .games.preload import GameCache, preload_games
 from .games.registry import GameEntry
@@ -208,7 +209,7 @@ def run(
         game = start_game(initial_game)
     pygame.display.set_caption(game.title)
     _sync_gestures(gestures, mapper, game)
-    debug_font = pygame.font.SysFont("menlo,monaco,courier", 20)
+    debug_font = styles.load_font(styles.FONT, 20)
 
     overlay = False
     fps = FpsMeter()

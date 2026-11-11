@@ -9,11 +9,14 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from typing import Sequence
 
 import cv2
 import numpy as np
 
+from main import content, styles
 from main.pose.library import BONES, HEAD_JOINT, Box, Joints, Point, Pose, midpoint
+from main.settings import CANVAS_HEIGHT, CANVAS_WIDTH
 
 from .screens import (
     Action,
@@ -25,22 +28,54 @@ from .screens import (
     Screen,
 )
 
-WINDOW_NAME = "Strike a Pose"
-CANVAS_WIDTH, CANVAS_HEIGHT = 1280, 720
-FONT = cv2.FONT_HERSHEY_DUPLEX
+theme = styles.STRIKE
+copy = content.Strike
 
-# Colours are (blue, green, red), as OpenCV expects.
-BACKGROUND = (30, 26, 24)
-PANEL = (52, 46, 42)
-WHITE = (255, 255, 255)
-MUTED = (175, 175, 175)
-ACCENT = (70, 215, 255)
-PLAYER_COLORS = (
-    (95, 95, 255),  # P1 red
-    (255, 175, 70),  # P2 blue
-    (110, 230, 110),  # P3 green
-    (70, 215, 255),  # P4 yellow
+WINDOW_NAME = copy.window_title
+
+# OpenCV wants BGR; Theme stores RGB.
+BACKGROUND = styles.bgr(theme.bg)
+PANEL = styles.bgr(theme.panel)
+WHITE = styles.bgr(theme.ink)
+MUTED = styles.bgr(theme.muted)
+ACCENT = styles.bgr(theme.accent)
+PLAYER_COLORS = tuple(styles.bgr(c) for c in theme.player)
+HOLD_FILL = styles.bgr((85, 221, 224))  # #55dde0 progress arc
+HAND_TRACK = ACCENT  # #f6ae2d skeleton + ring track
+
+# MediaPipe 21-point hand topology (palm + fingers).
+HAND_CONNECTIONS: tuple[tuple[int, int], ...] = (
+    (0, 1),
+    (1, 2),
+    (2, 3),
+    (3, 4),
+    (0, 5),
+    (5, 6),
+    (6, 7),
+    (7, 8),
+    (5, 9),
+    (9, 10),
+    (10, 11),
+    (11, 12),
+    (9, 13),
+    (13, 14),
+    (14, 15),
+    (15, 16),
+    (13, 17),
+    (17, 18),
+    (18, 19),
+    (19, 20),
+    (0, 17),
 )
+# Wrist + finger MCPs — palm center for the hold ring.
+_PALM_LANDMARKS = (0, 5, 9, 13, 17)
+
+# Results score stack: large score over P#, anchored above the head.
+SCORE_SCALE = 1.6
+PLAYER_LABEL_SCALE = 0.9
+SCORE_GAP_ABOVE_LABEL = 28  # score baseline above P# baseline
+LABEL_GAP_ABOVE_HEAD = 10  # P# baseline above head top
+RESULTS_PROMPT_Y = CANVAS_HEIGHT - 48
 
 # Left, top, width, height, in canvas pixels.
 Rect = tuple[int, int, int, int]
@@ -74,7 +109,7 @@ def fit(width: float, height: float, rect: Rect) -> Transform:
 
 
 def player_name(player: int) -> str:
-    return f"P{player}"
+    return copy.player_label.format(player=player)
 
 
 def player_color(player: int) -> tuple[int, int, int]:
@@ -100,28 +135,25 @@ def draw_text(
 ) -> None:
     """Draw text with its baseline at `y`. `align` places `x` at the text's
     left edge, centre or right edge. `outline` keeps text readable over video.
+
+    `color` is BGR (OpenCV); shared renderer wants RGB.
     """
-    thickness = max(1, round(scale * 1.6))
-    (width, _), _ = cv2.getTextSize(text, FONT, scale, thickness)
-    if align == "center":
-        x -= width // 2
-    elif align == "right":
-        x -= width
-    if outline:
-        cv2.putText(canvas, text, (x, y), FONT, scale, (0, 0, 0), thickness + 4, cv2.LINE_AA)
-    cv2.putText(canvas, text, (x, y), FONT, scale, color, thickness, cv2.LINE_AA)
+    styles.draw_text(
+        canvas,
+        text,
+        x,
+        y,
+        scale,
+        color=(color[2], color[1], color[0]),
+        align=align,
+        outline=outline,
+        face=theme.font,
+    )
 
 
 def fill(canvas: np.ndarray, rect: Rect, color: tuple[int, int, int]) -> None:
     left, top, width, height = rect
     canvas[top : top + height, left : left + width] = color
-
-
-def dim(canvas: np.ndarray, rect: Rect, amount: float = 0.35) -> None:
-    """Darken part of the canvas so text on top of video is readable."""
-    left, top, width, height = rect
-    region = canvas[top : top + height, left : left + width]
-    canvas[top : top + height, left : left + width] = (region * amount).astype(np.uint8)
 
 
 def draw_frame(canvas: np.ndarray, frame: np.ndarray, rect: Rect) -> Transform:
@@ -193,7 +225,10 @@ def _head(joints: Joints) -> tuple[Point, float]:
 
 
 def draw_stick_figure(
-    canvas: np.ndarray, joints: Joints, rect: Rect, color: tuple[int, int, int] = WHITE
+    canvas: np.ndarray,
+    joints: Joints,
+    rect: Rect,
+    color: tuple[int, int, int] = WHITE,
 ) -> None:
     """Draw a pose as a stick figure, as large as fits inside `rect`."""
     head_center, head_radius = _head(joints)
@@ -243,10 +278,104 @@ TARGET_PANEL: Rect = (40, 90, 740, 590)
 SIDE_LEFT, SIDE_WIDTH = 820, 420
 SIDE_CENTER = SIDE_LEFT + SIDE_WIDTH // 2
 
+# Countdown target HUD: final size ~18% of canvas height, parked top-right
+# under the header. Intro holds 2x at center for 1.5s, then eases over 0.5s.
+HEADER_BOTTOM = 70
+COUNTDOWN_MARGIN = 40
+COUNTDOWN_TARGET_HEIGHT = 130
+COUNTDOWN_TARGET_WIDTH = 200
+COUNTDOWN_HOLD_SECONDS = 1.5
+COUNTDOWN_EASE_SECONDS = 0.5
+TIMER_OPACITY = 0.65
+TIMER_CENTER_SCALE = 16.0
+TIMER_VISIBLE_AT_SECONDS = 3
+TIMER_BLINK_SECONDS = 0.06
+TIMER_FADE_SECONDS = 0.28
 
-def _header(canvas: np.ndarray, text: str) -> None:
+
+def _header(canvas: np.ndarray, text: str, *, show_esc: bool = True) -> None:
     draw_text(canvas, text, 40, 62, 1.3)
-    draw_text(canvas, "Esc: menu", CANVAS_WIDTH - 40, 58, 0.7, MUTED, "right")
+    if show_esc:
+        draw_text(canvas, copy.esc_menu, CANVAS_WIDTH - 40, 58, 0.7, MUTED, "right")
+
+
+def _ease_out(t: float) -> float:
+    """Cubic ease-out for t in [0, 1]."""
+    u = 1.0 - t
+    return 1.0 - u * u * u
+
+
+def _lerp(a: float, b: float, t: float) -> float:
+    return a + (b - a) * t
+
+
+def _countdown_target_rect(elapsed: float) -> Rect:
+    """Where the target stick figure sits for a given countdown elapsed time."""
+    final_w, final_h = COUNTDOWN_TARGET_WIDTH, COUNTDOWN_TARGET_HEIGHT
+    final_left = CANVAS_WIDTH - final_w - COUNTDOWN_MARGIN
+    final_top = HEADER_BOTTOM
+    final_cx = final_left + final_w / 2
+    final_cy = final_top + final_h / 2
+
+    start_w, start_h = final_w * 2, final_h * 2
+    start_cx = CANVAS_WIDTH / 2
+    start_cy = CANVAS_HEIGHT / 2
+
+    if elapsed < COUNTDOWN_HOLD_SECONDS:
+        t = 0.0
+    elif elapsed < COUNTDOWN_HOLD_SECONDS + COUNTDOWN_EASE_SECONDS:
+        t = _ease_out((elapsed - COUNTDOWN_HOLD_SECONDS) / COUNTDOWN_EASE_SECONDS)
+    else:
+        t = 1.0
+
+    w = _lerp(start_w, final_w, t)
+    h = _lerp(start_h, final_h, t)
+    cx = _lerp(start_cx, final_cx, t)
+    cy = _lerp(start_cy, final_cy, t)
+    return (round(cx - w / 2), round(cy - h / 2), round(w), round(h))
+
+
+def _baseline_for_vertical_center(text: str, center_y: int, scale: float) -> int:
+    """Baseline that places the glyph's visual center at `center_y`."""
+    (_, height), descent = styles.text_size(text, scale, theme.font)
+    return round(center_y + (height - descent) / 2)
+
+
+def _countdown_timer_style(seconds_left: int) -> tuple[int, int, float]:
+    """Centered large timer layout for a visible countdown digit."""
+    text = str(seconds_left)
+    return (
+        CANVAS_WIDTH // 2,
+        _baseline_for_vertical_center(text, CANVAS_HEIGHT // 2, TIMER_CENTER_SCALE),
+        TIMER_CENTER_SCALE,
+    )
+
+
+def _countdown_timer_opacity(seconds_left: int, digit_age: float) -> float | None:
+    """Hide until 3s; each new digit blinks off briefly then fades in."""
+    if seconds_left > TIMER_VISIBLE_AT_SECONDS or seconds_left <= 0:
+        return None
+    if digit_age < TIMER_BLINK_SECONDS:
+        return 0.0
+    fade_t = (digit_age - TIMER_BLINK_SECONDS) / TIMER_FADE_SECONDS
+    if fade_t >= 1.0:
+        return TIMER_OPACITY
+    return TIMER_OPACITY * _ease_out(max(0.0, min(1.0, fade_t)))
+
+
+def _draw_translucent_text(
+    canvas: np.ndarray,
+    text: str,
+    x: int,
+    y: int,
+    scale: float,
+    color: tuple[int, int, int],
+    opacity: float,
+) -> None:
+    """Draw outlined text blended onto the canvas at `opacity`."""
+    overlay = canvas.copy()
+    draw_text(overlay, text, x, y, scale, color, "center", outline=True)
+    cv2.addWeighted(overlay, opacity, canvas, 1.0 - opacity, 0, canvas)
 
 
 def _target_panel(
@@ -283,104 +412,325 @@ def _compose_lobby(screen: LobbyScreen, frame: np.ndarray) -> np.ndarray:
         )
         draw_box_label(canvas, player_name(marker.player), marker.box, transform, color)
 
-    dim(canvas, (0, 0, CANVAS_WIDTH, 84))
-    draw_text(canvas, "STRIKE A POSE", CANVAS_WIDTH // 2, 58, 1.6, WHITE, "center")
-    draw_text(canvas, "Q: quit", CANVAS_WIDTH - 40, 54, 0.7, MUTED, "right")
+    draw_text(canvas, copy.banner, CANVAS_WIDTH // 2, 58, 1.6, WHITE, "center", outline=True)
+    draw_text(canvas, copy.quit_key, CANVAS_WIDTH - 40, 54, 0.7, MUTED, "right", outline=True)
 
     count = len(screen.markers)
-    dim(canvas, (0, CANVAS_HEIGHT - 84, CANVAS_WIDTH, 84))
     if screen.can_start:
         label = "player" if count == 1 else "players"
-        message, color = f"{count} {label} in frame  -  press SPACE to start", ACCENT
+        message = copy.lobby_ready.format(count=count, label=label)
+        color = ACCENT
     else:
         message = (
-            f"Need {screen.min_players} to {screen.max_players} players in frame"
-            f"  -  found {count}"
+            copy.lobby_need.format(min_players=screen.min_players, max_players=screen.max_players)
+            + f"  -  found {count}"
         )
         color = WHITE
-    draw_text(canvas, message, CANVAS_WIDTH // 2, CANVAS_HEIGHT - 32, 1.1, color, "center")
+    draw_text(
+        canvas, message, CANVAS_WIDTH // 2, CANVAS_HEIGHT - 32, 1.1, color, "center", outline=True
+    )
     return canvas
 
 
 def _compose_countdown(screen: CountdownScreen, frame: np.ndarray) -> np.ndarray:
     canvas = new_canvas()
-    _header(canvas, f"Round {screen.round_number} of {screen.total_rounds}")
-    _large_target_panel(canvas, screen.target)
-
-    draw_text(canvas, str(screen.seconds_left), SIDE_CENTER, 340, 9.0, ACCENT, "center")
-
-    feed: Rect = (SIDE_LEFT, 400, SIDE_WIDTH, 280)
-    fill(canvas, feed, PANEL)
-    draw_frame(canvas, frame, feed)
+    draw_frame(canvas, frame, FULL_CANVAS)
+    _header(
+        canvas,
+        copy.round_of.format(round_number=screen.round_number, total_rounds=screen.total_rounds),
+        show_esc=False,
+    )
+    draw_stick_figure(
+        canvas, screen.target.joints, _countdown_target_rect(screen.elapsed), WHITE
+    )
+    opacity = _countdown_timer_opacity(screen.seconds_left, screen.digit_age)
+    if opacity is not None and opacity > 0:
+        timer_x, timer_y, timer_scale = _countdown_timer_style(screen.seconds_left)
+        _draw_translucent_text(
+            canvas,
+            str(screen.seconds_left),
+            timer_x,
+            timer_y,
+            timer_scale,
+            WHITE,
+            opacity,
+        )
     return canvas
 
 
 def _compose_retry(screen: RetryScreen) -> np.ndarray:
     canvas = new_canvas()
-    _header(canvas, f"Round {screen.round_number} of {screen.total_rounds}")
+    _header(
+        canvas,
+        copy.round_of.format(round_number=screen.round_number, total_rounds=screen.total_rounds),
+    )
     _large_target_panel(canvas, screen.target)
 
     draw_text(
         canvas,
-        f"Found {screen.found} of {screen.expected} players",
+        copy.found_players.format(found=screen.found, expected=screen.expected),
         SIDE_CENTER,
         300,
         1.1,
         ACCENT,
         "center",
     )
-    for line_number, line in enumerate(
-        ("Everyone back in frame,", "then press SPACE", "to try this pose again.")
-    ):
+    for line_number, line in enumerate(copy.missing_retry):
         draw_text(canvas, line, SIDE_CENTER, 370 + line_number * 44, 0.9, WHITE, "center")
     return canvas
 
 
+def _parked_target_rect() -> Rect:
+    """Countdown HUD parked top-right (after intro animation)."""
+    return _countdown_target_rect(COUNTDOWN_HOLD_SECONDS + COUNTDOWN_EASE_SECONDS)
+
+
+def _head_anchor_xy(joints: Joints, box: Box, transform: Transform) -> tuple[int, int]:
+    """Canvas pixel at the top of the head (nose if present, else box top center)."""
+    if "nose" in joints:
+        return transform.apply(joints["nose"])
+    left, top = transform.apply((box[0], box[1]))
+    right, _ = transform.apply((box[2], box[1]))
+    return (left + right) // 2, top
+
+
+def _results_score_stack_baselines(head_y: int) -> tuple[int, int]:
+    """Score and P# baselines above the head, clamped below the header."""
+    label_y = head_y - LABEL_GAP_ABOVE_HEAD
+    score_y = label_y - SCORE_GAP_ABOVE_LABEL
+    (_, ascent), _ = styles.text_size("88", SCORE_SCALE, theme.font)
+    score_top = score_y - ascent
+    if score_top < HEADER_BOTTOM:
+        shift = HEADER_BOTTOM - score_top
+        score_y += shift
+        label_y += shift
+    return score_y, label_y
+
+
+def _draw_results_player_stack(
+    canvas: np.ndarray,
+    player_number: int,
+    round_score: int,
+    joints: Joints,
+    box: Box,
+    transform: Transform,
+    color: tuple[int, int, int],
+) -> None:
+    head_x, head_y = _head_anchor_xy(joints, box, transform)
+    score_y, label_y = _results_score_stack_baselines(head_y)
+    draw_text(
+        canvas,
+        str(round_score),
+        head_x,
+        score_y,
+        SCORE_SCALE,
+        color,
+        "center",
+        outline=True,
+    )
+    draw_text(
+        canvas,
+        player_name(player_number),
+        head_x,
+        label_y,
+        PLAYER_LABEL_SCALE,
+        color,
+        "center",
+        outline=True,
+    )
+
+
 def _compose_results(screen: ResultsScreen) -> np.ndarray:
     canvas = new_canvas()
-    _header(canvas, f"Round {screen.round_number} of {screen.total_rounds}  -  results")
+    transform = draw_frame(canvas, screen.snapshot, FULL_CANVAS)
+    _header(
+        canvas,
+        copy.round_results.format(
+            round_number=screen.round_number, total_rounds=screen.total_rounds
+        ),
+        show_esc=False,
+    )
+    draw_stick_figure(canvas, screen.target.joints, _parked_target_rect(), WHITE)
 
-    photo: Rect = (40, 90, 800, 590)
-    fill(canvas, photo, PANEL)
-    transform = draw_frame(canvas, screen.snapshot, photo)
     for player in screen.players:
         color = player_color(player.player)
         draw_skeleton(canvas, player.joints, transform, color)
-        draw_box_label(canvas, player_name(player.player), player.box, transform, color)
+        _draw_results_player_stack(
+            canvas,
+            player.player,
+            player.round_score,
+            player.joints,
+            player.box,
+            transform,
+            color,
+        )
 
-    side_left, side_width = 880, 360
-    side_right = side_left + side_width
-    _target_panel(
-        canvas, screen.target, (side_left, 90, side_width, 240), caption_height=40, caption_scale=0.8
+    if screen.idle:
+        _draw_results_prompt(
+            canvas, final_round=screen.round_number == screen.total_rounds
+        )
+
+    return canvas
+
+
+def _draw_results_prompt(canvas: np.ndarray, *, final_round: bool) -> None:
+    prompt = copy.results_thumbs_final if final_round else copy.results_thumbs
+    draw_text(
+        canvas,
+        prompt,
+        CANVAS_WIDTH // 2,
+        RESULTS_PROMPT_Y,
+        0.9,
+        ACCENT,
+        "center",
+        outline=True,
     )
 
-    draw_text(canvas, "PLAYER", side_left + 10, 378, 0.6, MUTED)
-    draw_text(canvas, "ROUND", side_left + 215, 378, 0.6, MUTED, "right")
-    draw_text(canvas, "TOTAL", side_right - 10, 378, 0.6, MUTED, "right")
-    for row, player in enumerate(screen.players):
-        y = 432 + row * 58
-        color = player_color(player.player)
-        draw_text(canvas, player_name(player.player), side_left + 10, y, 1.3, color)
-        draw_text(canvas, str(player.round_score), side_left + 215, y, 1.3, WHITE, "right")
-        draw_text(canvas, str(player.total), side_right - 10, y, 1.3, WHITE, "right")
 
-    last_round = screen.round_number == screen.total_rounds
-    prompt = "SPACE: final scores" if last_round else "SPACE: next round"
-    draw_text(canvas, prompt, side_left + side_width // 2, 668, 0.8, ACCENT, "center")
-    return canvas
+def palm_center(landmarks: Sequence[tuple[float, float]]) -> tuple[float, float] | None:
+    """Palm midpoint from wrist + finger MCPs when present; else landmark centroid."""
+    if not landmarks:
+        return None
+    idxs = [i for i in _PALM_LANDMARKS if i < len(landmarks)]
+    pts = [landmarks[i] for i in idxs] if len(idxs) >= 2 else list(landmarks)
+    return (sum(p[0] for p in pts) / len(pts), sum(p[1] for p in pts) / len(pts))
+
+
+def hand_ring_radius(box: tuple[float, float, float, float]) -> float:
+    """Half the hand-box diagonal."""
+    x0, y0, x1, y1 = box
+    return 0.5 * math.hypot(x1 - x0, y1 - y0)
+
+
+def hand_owner_player(
+    anchor: tuple[float, float],
+    players: Sequence,
+) -> int | None:
+    """Player whose results box owns this hand; nearest box center as fallback."""
+    if not players:
+        return None
+    ax, ay = anchor
+    for player in players:
+        x0, y0, x1, y1 = player.box
+        if x0 <= ax <= x1 and y0 <= ay <= y1:
+            return player.player
+    return min(
+        players,
+        key=lambda p: abs(ax - (p.box[0] + p.box[2]) / 2.0),
+    ).player
+
+
+def _hand_anchor(hand: object) -> tuple[float, float] | None:
+    landmarks = getattr(hand, "landmarks", ()) or ()
+    if landmarks:
+        return float(landmarks[0][0]), float(landmarks[0][1])
+    box = getattr(hand, "box", None)
+    if box is None:
+        return None
+    x0, y0, x1, y1 = box
+    return ((x0 + x1) / 2.0, (y0 + y1) / 2.0)
+
+
+def draw_hand_skeleton(
+    canvas: np.ndarray,
+    landmarks: Sequence[tuple[float, float]],
+    transform: Transform,
+    color: tuple[int, int, int] = HAND_TRACK,
+) -> None:
+    """Draw MediaPipe hand bones and joints in canvas space."""
+    if len(landmarks) < 2:
+        return
+    pts = [transform.apply(p) for p in landmarks]
+    for a, b in HAND_CONNECTIONS:
+        if a < len(pts) and b < len(pts):
+            cv2.line(canvas, pts[a], pts[b], color, 2, cv2.LINE_AA)
+    for pt in pts:
+        cv2.circle(canvas, pt, 3, color, -1, cv2.LINE_AA)
+
+
+def draw_hold_ring(
+    canvas: np.ndarray,
+    center: tuple[float, float],
+    radius: float,
+    progress: float,
+    transform: Transform,
+    *,
+    track_color: tuple[int, int, int] = HAND_TRACK,
+    fill_color: tuple[int, int, int] = HOLD_FILL,
+) -> None:
+    """Faint track circle + bright progress arc around the palm."""
+    if radius <= 1:
+        return
+    cx, cy = transform.apply(center)
+    r = max(4, round(radius * transform.scale))
+    # Track at lower opacity via a darkened accent blend.
+    track = tuple(int(c * 0.45) for c in track_color)
+    cv2.circle(canvas, (cx, cy), r, track, 3, cv2.LINE_AA)
+    if progress <= 0:
+        return
+    sweep = 360.0 * min(1.0, progress)
+    cv2.ellipse(
+        canvas,
+        (cx, cy),
+        (r, r),
+        0,
+        -90,
+        -90 + sweep,
+        fill_color,
+        5,
+        cv2.LINE_AA,
+    )
+
+
+def overlay_results_hold(
+    canvas: np.ndarray,
+    progress: float,
+    *,
+    final_round: bool,
+    snap: object | None = None,
+    frame_size: tuple[int, int] | None = None,
+    players: Sequence = (),
+) -> None:
+    """Prompt, raised-hand skeletons, and palm hold ring after compose."""
+    _draw_results_prompt(canvas, final_round=final_round)
+    if snap is None or frame_size is None:
+        return
+    fw, fh = frame_size
+    if fw <= 0 or fh <= 0:
+        return
+    transform = fit(fw, fh, FULL_CANVAS)
+
+    hands = getattr(snap, "hands", ()) or ()
+    for hand in hands:
+        landmarks = getattr(hand, "landmarks", ()) or ()
+        if not landmarks:
+            continue
+        anchor = _hand_anchor(hand)
+        owner = hand_owner_player(anchor, players) if anchor is not None else None
+        color = player_color(owner) if owner is not None else HAND_TRACK
+        draw_hand_skeleton(canvas, landmarks, transform, color)
+
+    primary = getattr(snap, "landmarks", ()) or ()
+    box = getattr(snap, "hand_box", None)
+    holding = progress > 0 or getattr(snap, "label", None) == "Thumb_Up"
+    if primary and holding:
+        center = palm_center(primary)
+        if center is not None:
+            radius = hand_ring_radius(box) if box is not None else 40.0
+            draw_hold_ring(canvas, center, radius, progress, transform)
 
 
 def _winners_line(screen: FinalScreen) -> str:
     winners = [player_name(s.player) for s in screen.standings if s.place == 1]
     if len(winners) == 1:
-        return f"{winners[0]} wins!"
+        return copy.winner_one.format(name=winners[0])
     return f"{', '.join(winners[:-1])} and {winners[-1]} share the win!"
 
 
 def _compose_final(screen: FinalScreen) -> np.ndarray:
     canvas = new_canvas()
     center = CANVAS_WIDTH // 2
-    draw_text(canvas, "FINAL SCORES", center, 110, 2.0, WHITE, "center")
+    draw_text(canvas, copy.final_scores, center, 110, 2.0, WHITE, "center")
     draw_text(canvas, _winners_line(screen), center, 190, 1.4, ACCENT, "center")
 
     for row, standing in enumerate(screen.standings):
@@ -392,7 +742,7 @@ def _compose_final(screen: FinalScreen) -> np.ndarray:
         )
         draw_text(canvas, str(standing.total), center + 230, y, 1.5, WHITE, "right")
 
-    draw_text(canvas, "SPACE: new game      Q: quit", center, 680, 0.9, MUTED, "center")
+    draw_text(canvas, copy.space_new_game, center, 680, 0.9, MUTED, "center")
     return canvas
 
 

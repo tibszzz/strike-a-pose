@@ -67,7 +67,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    strike_config = Config(min_players=1) if args.debug else Config()
+    strike_config = Config(min_players=1, debug=True) if args.debug else Config()
     from .app import run
     from .games.registry import build_registry, make_menu, make_splash
 

@@ -9,6 +9,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable
 
+from main import content
+
 Size = tuple[int, int]
 GameFactory = Callable[[Size], Any]
 
@@ -34,18 +36,18 @@ def _dodgeball(size: Size):
 
 def build_registry(*, strike_config=None) -> dict[str, GameEntry]:
     """Factories for every title shown in the menu and accepted on the CLI."""
-    from main.config import Config
     from main.games.strike.play import StrikeGame
+    from main.settings import StrikeConfig
 
-    config = strike_config if strike_config is not None else Config()
+    config = strike_config if strike_config is not None else StrikeConfig()
 
     def strike(size: Size):
         return StrikeGame(size, config=config)
 
     return {
-        "duel": GameEntry("duel", "Wild West Duel", _duel),
-        "dodgeball": GameEntry("dodgeball", "Dodgeball", _dodgeball),
-        "strike": GameEntry("strike", "Strike a Pose", strike),
+        "duel": GameEntry("duel", content.Registry.duel, _duel),
+        "dodgeball": GameEntry("dodgeball", content.Registry.dodgeball, _dodgeball),
+        "strike": GameEntry("strike", content.Registry.strike, strike),
     }
 
 

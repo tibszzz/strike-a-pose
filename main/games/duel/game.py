@@ -11,29 +11,18 @@ from dataclasses import dataclass
 
 import pygame
 
-from main import audio
-from main.config import ASSETS, Messages, from_env
-from main.pose import GestureConfig, PoseFrame, PoseState, classify
+from main import audio, content, styles
+from main.pose import PoseFrame, PoseState, classify
+from main.settings import ASSETS, DuelConfig, GestureConfig, Messages, ViewConfig, from_env
 
 from .float_path import FloatPath, ease_out, fade
-from .logic import Duel, DuelConfig, Phase
+from .logic import Duel, Phase
 
-WHITE = (255, 255, 255)
-INK = (0, 0, 0)
-SHADOW = (190, 190, 190)
-HINT = (140, 140, 140)
-SHOT_BG = (255, 133, 133)
-NAMES = ("Player 1", "Player 2")
-FONT_PATH = ASSETS / "fonts" / "PixelifySans.ttf"
+theme = styles.DUEL
+copy = content.Duel
+
 SPRITES = ASSETS / "sprites"
-MESSAGES = ASSETS / "messages"
 SOUNDS = ASSETS / "sounds"
-
-
-@dataclass(frozen=True)
-class ViewConfig:
-    early_float_time: float = 2.0  # seconds for "too early" to drift up the path and vanish
-    early_fade_start: float = 0.5  # fraction of the trip after which it starts fading
 
 
 @dataclass
@@ -44,8 +33,8 @@ class _Floater:
 
 
 class DuelGame:
-    title = "Strike a Pose: Wild West Duel"
-    background = WHITE
+    title = copy.window_title
+    background = theme.bg
 
     def __init__(
         self,
@@ -63,9 +52,9 @@ class DuelGame:
         self.states = (PoseState.MISSING, PoseState.MISSING)
         self.now = 0.0
 
-        self.shot_msgs = Messages(MESSAGES / "shot.txt", "TOO SLOW HOMBRE", self.rng)
-        self.win_msgs = Messages(MESSAGES / "win.txt", "PAY UP YOU SON OF A GUN!", self.rng)
-        self.early_msgs = Messages(MESSAGES / "early.txt", "too early....", self.rng)
+        self.shot_msgs = Messages(copy.shot_messages, copy.shot_messages[0], self.rng)
+        self.win_msgs = Messages(copy.win_messages, copy.win_messages[0], self.rng)
+        self.early_msgs = Messages(copy.early_messages, copy.early_messages[0], self.rng)
         self.shot_msg = ""
         self.win_msg = ""
         self.win_img: pygame.Surface | None = None
@@ -73,11 +62,11 @@ class DuelGame:
         self.paths = (FloatPath(size, 0), FloatPath(size, 1))
 
         self._fonts: dict[tuple[int, bool], pygame.font.Font] = {}
-        self.sz_main = int(0.11 * self.h)  # READY / STEADY / BANG!
-        self.sz_label = int(0.042 * self.h)  # Player N, ms, too early
-        self.sz_shot = int(0.05 * self.h)  # TOO SLOW HOMBRE
-        self.sz_title = int(0.05 * self.h)  # PLAYER N WINS
-        self.sz_msg = int(0.034 * self.h)  # win message, hints
+        self.sz_main = theme.duel_main_px(self.h)
+        self.sz_label = theme.duel_label_px(self.h)
+        self.sz_shot = theme.duel_shot_px(self.h)
+        self.sz_title = theme.duel_title_px(self.h)
+        self.sz_msg = theme.duel_msg_px(self.h)
 
         heart = int(0.057 * self.h)
         self.heart_alive = pygame.transform.scale(_load_png(SPRITES / "heart-alive.png"), (heart, heart))
@@ -138,7 +127,11 @@ class DuelGame:
             if d.phase == Phase.WAIT_START:
                 self._draw_waiting(canvas)
             elif d.phase in (Phase.READY, Phase.STEADY, Phase.BANG):
-                word = {Phase.READY: "READY", Phase.STEADY: "STEADY", Phase.BANG: "BANG!"}[d.phase]
+                word = {
+                    Phase.READY: copy.phase["ready"],
+                    Phase.STEADY: copy.phase["steady"],
+                    Phase.BANG: copy.phase["bang"],
+                }[d.phase]
                 self._text(canvas, word, self.sz_main, (self.w / 2, self.h / 2), bold=True, shadow=True)
         self._draw_floaters(canvas)
 
@@ -150,7 +143,7 @@ class DuelGame:
         lives = self.duel.config.lives
         for i in (0, 1):
             cx = self._side_x(i)
-            self._text(canvas, NAMES[i], self.sz_label, (cx, 0.09 * self.h))
+            self._text(canvas, copy.player_names[i], self.sz_label, (cx, 0.09 * self.h))
             left = self.duel.lives_left(i)
             x0 = cx - gap * (lives - 1) / 2
             for k in range(lives):
@@ -159,33 +152,47 @@ class DuelGame:
 
     def _draw_waiting(self, canvas):
         d = self.duel
-        missing = [NAMES[i].upper() for i in (0, 1) if d.missing[i]]
+        missing = [copy.player_names[i].upper() for i in (0, 1) if d.missing[i]]
         if missing:
-            self._text(canvas, "WAITING FOR", self.sz_msg, (self.w / 2, 0.44 * self.h))
+            self._text(canvas, copy.waiting_for, self.sz_msg, (self.w / 2, 0.44 * self.h))
             self._text(canvas, " & ".join(missing), self.sz_shot, (self.w / 2, 0.52 * self.h), bold=True)
         else:
-            self._text(canvas, "GET READY, PARTNERS", self.sz_shot, (self.w / 2, 0.47 * self.h), bold=True, shadow=True)
+            self._text(canvas, copy.get_ready, self.sz_shot, (self.w / 2, 0.47 * self.h), bold=True, shadow=True)
             self._progress(canvas, d.start_progress(self.now), 0.56 * self.h)
         for i, state in enumerate(self.states):
             if state == PoseState.DRAWN:
-                self._text(canvas, "lower your gun", self.sz_label, (self._side_x(i), 0.877 * self.h), color=HINT)
+                self._text(
+                    canvas,
+                    copy.lower_gun,
+                    self.sz_label,
+                    (self._side_x(i), 0.877 * self.h),
+                    color=theme.hint,
+                )
 
     def _draw_result(self, canvas):
         r = self.duel.last_result
         if r is not None and r.reason == "hit":
             loser = 1 - r.winner
-            canvas.fill(SHOT_BG, pygame.Rect(0 if loser == 0 else self.w // 2, 0, self.w - self.w // 2, self.h))
+            canvas.fill(theme.shot_bg, pygame.Rect(0 if loser == 0 else self.w // 2, 0, self.w - self.w // 2, self.h))
         self._draw_header(canvas)
         if r is None:
             return
         if r.reason == "hit":
-            self._text(canvas, self.shot_msg.upper(), self.sz_shot, (self._side_x(1 - r.winner), self.h / 2), color=WHITE, bold=True, max_width=0.44 * self.w)
+            self._text(
+                canvas,
+                self.shot_msg.upper(),
+                self.sz_shot,
+                (self._side_x(1 - r.winner), self.h / 2),
+                color=theme.bg,
+                bold=True,
+                max_width=0.44 * self.w,
+            )
         else:
-            headline = {"tie": "DEAD EVEN", "timeout": "NOBODY FIRED", "void": "BOTH TOO EARLY"}[r.reason]
+            headline = copy.result[r.reason]
             self._text(canvas, headline, self.sz_main * 2 // 3, (self.w / 2, self.h / 2), bold=True, shadow=True)
         for i in (0, 1):
             if r.early[i]:
-                text = "too early"
+                text = copy.too_early
             elif r.reaction_ms[i] is not None:
                 text = f"{r.reaction_ms[i]:.0f} ms"
             else:
@@ -194,12 +201,18 @@ class DuelGame:
 
     def _draw_winner(self, canvas):
         d = self.duel
-        self._text(canvas, f"{NAMES[d.match_winner].upper()} WINS", self.sz_title, (self.w / 2, 0.15 * self.h), bold=True)
+        self._text(
+            canvas,
+            f"{copy.player_names[d.match_winner].upper()} {copy.wins_suffix}",
+            self.sz_title,
+            (self.w / 2, 0.15 * self.h),
+            bold=True,
+        )
         if self.win_img is not None:
             canvas.blit(self.win_img, self.win_img.get_rect(center=(self.w // 2, int(0.49 * self.h))))
         self._text(canvas, self.win_msg.upper(), self.sz_msg, (self.w / 2, 0.68 * self.h), bold=True, max_width=0.9 * self.w)
         if d.can_restart(self.now):
-            self._text(canvas, "lower your guns to play again", self.sz_msg, (self.w / 2, 0.9 * self.h), color=HINT)
+            self._text(canvas, copy.lower_guns_again, self.sz_msg, (self.w / 2, 0.9 * self.h), color=theme.hint)
 
     def _draw_floaters(self, canvas):
         dur = max(0.01, self.view.early_float_time)
@@ -227,15 +240,14 @@ class DuelGame:
     def _font(self, size: int, bold: bool) -> pygame.font.Font:
         key = (size, bold)
         if key not in self._fonts:
-            try:
-                font = pygame.font.Font(str(FONT_PATH), size)
-            except (FileNotFoundError, OSError):
-                font = pygame.font.SysFont("menlo,courier", size)
+            font = styles.load_font(theme.font, size)
             font.bold = bold
             self._fonts[key] = font
         return self._fonts[key]
 
-    def _text(self, canvas, text, size, center, color=INK, bold=False, shadow=False, alpha=255, max_width=None):
+    def _text(self, canvas, text, size, center, color=None, bold=False, shadow=False, alpha=255, max_width=None):
+        if color is None:
+            color = theme.ink
         font = self._font(size, bold)
         if max_width is not None and font.size(text)[0] > max_width:  # shrink to fit
             size = max(8, int(size * max_width / font.size(text)[0]))
@@ -244,7 +256,7 @@ class DuelGame:
         rect = surf.get_rect(center=(int(center[0]), int(center[1])))
         if shadow:
             off = max(2, size // 22)
-            shade = font.render(text, True, SHADOW)
+            shade = font.render(text, True, theme.shadow)
             shade.set_alpha(alpha)
             canvas.blit(shade, rect.move(off, off))
         surf.set_alpha(alpha)
@@ -255,9 +267,9 @@ class DuelGame:
         border = max(2, self.h // 240)
         rect = pygame.Rect(0, 0, bw, bh)
         rect.center = (self.w // 2, int(cy))
-        pygame.draw.rect(canvas, WHITE, rect)
-        pygame.draw.rect(canvas, INK, (rect.x, rect.y, int(bw * frac), bh))
-        pygame.draw.rect(canvas, INK, rect, border)
+        pygame.draw.rect(canvas, theme.bg, rect)
+        pygame.draw.rect(canvas, theme.ink, (rect.x, rect.y, int(bw * frac), bh))
+        pygame.draw.rect(canvas, theme.ink, rect, border)
 
     def _pick_cowboy(self) -> pygame.Surface | None:
         if not self.cowboys:

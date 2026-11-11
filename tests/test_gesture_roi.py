@@ -4,8 +4,10 @@ import numpy as np
 
 from main.nav.gestures import (
     GestureSnapshot,
+    HandGesture,
     HandRoi,
     apply_raised_arm_gate,
+    filter_raised_hands,
     hand_rois_from_people,
     pick_gesture_snapshot,
     prepare_roi,
@@ -114,6 +116,43 @@ def test_raised_arm_gate_noop_without_people():
     snap = GestureSnapshot(label="Thumb_Up", score=0.9, landmarks=((10.0, 10.0),))
     assert apply_raised_arm_gate(snap, None).label == "Thumb_Up"
     assert apply_raised_arm_gate(snap, []).label == "Thumb_Up"
+
+
+def test_filter_raised_hands_keeps_only_raised():
+    p = person({KP.R_ELBOW: (250, 160), KP.R_WRIST: (250, 80)})
+    raised = HandGesture(
+        label="Thumb_Up",
+        score=0.9,
+        box=(230.0, 60.0, 270.0, 100.0),
+        landmarks=((250.0, 80.0),),
+    )
+    lowered = HandGesture(
+        label="Open_Palm",
+        score=0.9,
+        box=(160.0, 340.0, 200.0, 380.0),
+        landmarks=((180.0, 360.0),),
+    )
+    kept = filter_raised_hands((raised, lowered), [p])
+    assert kept == (raised,)
+
+
+def test_remap_snapshot_maps_hand_landmarks():
+    snap = GestureSnapshot(
+        label="Thumb_Up",
+        score=0.9,
+        hand_box=(10.0, 10.0, 110.0, 110.0),
+        landmarks=((60.0, 60.0),),
+        hands=(
+            HandGesture(
+                label="Thumb_Up",
+                score=0.9,
+                box=(10.0, 10.0, 110.0, 110.0),
+                landmarks=((60.0, 60.0), (70.0, 50.0)),
+            ),
+        ),
+    )
+    mapped = remap_snapshot(snap, HandRoi(50, 40, 110, 100), 2.0, 2.0)
+    assert mapped.hands[0].landmarks == ((80.0, 70.0), (85.0, 65.0))
 
 
 def test_any_raised_wrists_helper():

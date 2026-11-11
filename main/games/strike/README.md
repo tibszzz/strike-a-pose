@@ -20,7 +20,7 @@ python -m main strike --debug
 - People in the background are ignored: the snapshot scores the tallest figures in frame, as many as started the game.
 - If the snapshot finds fewer people than started the game, the round is replayed with the same pose.
 
-Settings (rounds, countdown length, scoring strictness, camera, model) live in `main/config.py`.
+Settings (rounds, countdown length, scoring strictness, camera, model) live in `main/settings/strike.py`.
 
 ## Adding poses
 
