@@ -59,7 +59,6 @@ from .game import (
     MouseEvent,
     Rect,
     Transform,
-    dim,
     draw_skeleton,
     draw_text,
     fill,
@@ -345,9 +344,15 @@ def compose_editor(editor: PoseEditor, transform: Transform) -> np.ndarray:
         cv2.circle(canvas, transform.apply(point), 8, color, -1, cv2.LINE_AA)
         cv2.circle(canvas, transform.apply(point), 8, ACCENT, 1, cv2.LINE_AA)
 
-    dim(canvas, (0, CANVAS_HEIGHT - 84, CANVAS_WIDTH, 84))
     draw_text(
-        canvas, editor.prompt(), CANVAS_WIDTH // 2, CANVAS_HEIGHT - 32, 0.75, MUTED, "center"
+        canvas,
+        editor.prompt(),
+        CANVAS_WIDTH // 2,
+        CANVAS_HEIGHT - 32,
+        0.75,
+        MUTED,
+        "center",
+        outline=True,
     )
     return canvas
 

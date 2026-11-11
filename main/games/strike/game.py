@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from typing import Sequence
 
 import cv2
 import numpy as np
@@ -39,6 +40,42 @@ WHITE = styles.bgr(theme.ink)
 MUTED = styles.bgr(theme.muted)
 ACCENT = styles.bgr(theme.accent)
 PLAYER_COLORS = tuple(styles.bgr(c) for c in theme.player)
+HOLD_FILL = styles.bgr((85, 221, 224))  # #55dde0 progress arc
+HAND_TRACK = ACCENT  # #f6ae2d skeleton + ring track
+
+# MediaPipe 21-point hand topology (palm + fingers).
+HAND_CONNECTIONS: tuple[tuple[int, int], ...] = (
+    (0, 1),
+    (1, 2),
+    (2, 3),
+    (3, 4),
+    (0, 5),
+    (5, 6),
+    (6, 7),
+    (7, 8),
+    (5, 9),
+    (9, 10),
+    (10, 11),
+    (11, 12),
+    (9, 13),
+    (13, 14),
+    (14, 15),
+    (15, 16),
+    (13, 17),
+    (17, 18),
+    (18, 19),
+    (19, 20),
+    (0, 17),
+)
+# Wrist + finger MCPs — palm center for the hold ring.
+_PALM_LANDMARKS = (0, 5, 9, 13, 17)
+
+# Results score stack: large score over P#, anchored above the head.
+SCORE_SCALE = 1.6
+PLAYER_LABEL_SCALE = 0.9
+SCORE_GAP_ABOVE_LABEL = 28  # score baseline above P# baseline
+LABEL_GAP_ABOVE_HEAD = 10  # P# baseline above head top
+RESULTS_PROMPT_Y = CANVAS_HEIGHT - 48
 
 # Left, top, width, height, in canvas pixels.
 Rect = tuple[int, int, int, int]
@@ -117,13 +154,6 @@ def draw_text(
 def fill(canvas: np.ndarray, rect: Rect, color: tuple[int, int, int]) -> None:
     left, top, width, height = rect
     canvas[top : top + height, left : left + width] = color
-
-
-def dim(canvas: np.ndarray, rect: Rect, amount: float = 0.35) -> None:
-    """Darken part of the canvas so text on top of video is readable."""
-    left, top, width, height = rect
-    region = canvas[top : top + height, left : left + width]
-    canvas[top : top + height, left : left + width] = (region * amount).astype(np.uint8)
 
 
 def draw_frame(canvas: np.ndarray, frame: np.ndarray, rect: Rect) -> Transform:
@@ -382,12 +412,10 @@ def _compose_lobby(screen: LobbyScreen, frame: np.ndarray) -> np.ndarray:
         )
         draw_box_label(canvas, player_name(marker.player), marker.box, transform, color)
 
-    dim(canvas, (0, 0, CANVAS_WIDTH, 84))
-    draw_text(canvas, copy.banner, CANVAS_WIDTH // 2, 58, 1.6, WHITE, "center")
-    draw_text(canvas, copy.quit_key, CANVAS_WIDTH - 40, 54, 0.7, MUTED, "right")
+    draw_text(canvas, copy.banner, CANVAS_WIDTH // 2, 58, 1.6, WHITE, "center", outline=True)
+    draw_text(canvas, copy.quit_key, CANVAS_WIDTH - 40, 54, 0.7, MUTED, "right", outline=True)
 
     count = len(screen.markers)
-    dim(canvas, (0, CANVAS_HEIGHT - 84, CANVAS_WIDTH, 84))
     if screen.can_start:
         label = "player" if count == 1 else "players"
         message = copy.lobby_ready.format(count=count, label=label)
@@ -398,7 +426,9 @@ def _compose_lobby(screen: LobbyScreen, frame: np.ndarray) -> np.ndarray:
             + f"  -  found {count}"
         )
         color = WHITE
-    draw_text(canvas, message, CANVAS_WIDTH // 2, CANVAS_HEIGHT - 32, 1.1, color, "center")
+    draw_text(
+        canvas, message, CANVAS_WIDTH // 2, CANVAS_HEIGHT - 32, 1.1, color, "center", outline=True
+    )
     return canvas
 
 
@@ -455,6 +485,61 @@ def _parked_target_rect() -> Rect:
     return _countdown_target_rect(COUNTDOWN_HOLD_SECONDS + COUNTDOWN_EASE_SECONDS)
 
 
+def _head_anchor_xy(joints: Joints, box: Box, transform: Transform) -> tuple[int, int]:
+    """Canvas pixel at the top of the head (nose if present, else box top center)."""
+    if "nose" in joints:
+        return transform.apply(joints["nose"])
+    left, top = transform.apply((box[0], box[1]))
+    right, _ = transform.apply((box[2], box[1]))
+    return (left + right) // 2, top
+
+
+def _results_score_stack_baselines(head_y: int) -> tuple[int, int]:
+    """Score and P# baselines above the head, clamped below the header."""
+    label_y = head_y - LABEL_GAP_ABOVE_HEAD
+    score_y = label_y - SCORE_GAP_ABOVE_LABEL
+    (_, ascent), _ = styles.text_size("88", SCORE_SCALE, theme.font)
+    score_top = score_y - ascent
+    if score_top < HEADER_BOTTOM:
+        shift = HEADER_BOTTOM - score_top
+        score_y += shift
+        label_y += shift
+    return score_y, label_y
+
+
+def _draw_results_player_stack(
+    canvas: np.ndarray,
+    player_number: int,
+    round_score: int,
+    joints: Joints,
+    box: Box,
+    transform: Transform,
+    color: tuple[int, int, int],
+) -> None:
+    head_x, head_y = _head_anchor_xy(joints, box, transform)
+    score_y, label_y = _results_score_stack_baselines(head_y)
+    draw_text(
+        canvas,
+        str(round_score),
+        head_x,
+        score_y,
+        SCORE_SCALE,
+        color,
+        "center",
+        outline=True,
+    )
+    draw_text(
+        canvas,
+        player_name(player_number),
+        head_x,
+        label_y,
+        PLAYER_LABEL_SCALE,
+        color,
+        "center",
+        outline=True,
+    )
+
+
 def _compose_results(screen: ResultsScreen) -> np.ndarray:
     canvas = new_canvas()
     transform = draw_frame(canvas, screen.snapshot, FULL_CANVAS)
@@ -470,70 +555,169 @@ def _compose_results(screen: ResultsScreen) -> np.ndarray:
     for player in screen.players:
         color = player_color(player.player)
         draw_skeleton(canvas, player.joints, transform, color)
-        draw_box_label(canvas, player_name(player.player), player.box, transform, color)
-        if "nose" in player.joints:
-            head_x, head_y = transform.apply(player.joints["nose"])
-        else:
-            left, top = transform.apply((player.box[0], player.box[1]))
-            right, _ = transform.apply((player.box[2], player.box[1]))
-            head_x = (left + right) // 2
-            head_y = top
-        draw_text(
+        _draw_results_player_stack(
             canvas,
-            str(player.round_score),
-            head_x,
-            max(head_y - 56, 40),
-            1.6,
+            player.player,
+            player.round_score,
+            player.joints,
+            player.box,
+            transform,
             color,
-            "center",
-            outline=True,
         )
 
     if screen.idle:
-        dim(canvas, (0, CANVAS_HEIGHT - 84, CANVAS_WIDTH, 84), amount=0.4)
-        _draw_results_hold_chrome(
-            canvas,
-            progress=0.0,
-            final_round=screen.round_number == screen.total_rounds,
+        _draw_results_prompt(
+            canvas, final_round=screen.round_number == screen.total_rounds
         )
 
     return canvas
 
 
-RESULTS_HOLD_BAR: Rect = (
-    CANVAS_WIDTH // 2 - 140,
-    CANVAS_HEIGHT - 28,
-    280,
-    10,
-)
-
-
-def _draw_results_hold_chrome(
-    canvas: np.ndarray, *, progress: float, final_round: bool
-) -> None:
+def _draw_results_prompt(canvas: np.ndarray, *, final_round: bool) -> None:
     prompt = copy.results_thumbs_final if final_round else copy.results_thumbs
     draw_text(
         canvas,
         prompt,
         CANVAS_WIDTH // 2,
-        CANVAS_HEIGHT - 48,
+        RESULTS_PROMPT_Y,
         0.9,
         ACCENT,
         "center",
         outline=True,
     )
-    bar_x, bar_y, bar_w, bar_h = RESULTS_HOLD_BAR
-    fill(canvas, (bar_x, bar_y, bar_w, bar_h), MUTED)
-    if progress > 0:
-        fill_w = max(1, int(bar_w * min(1.0, progress)))
-        fill(canvas, (bar_x, bar_y, fill_w, bar_h), ACCENT)
+
+
+def palm_center(landmarks: Sequence[tuple[float, float]]) -> tuple[float, float] | None:
+    """Palm midpoint from wrist + finger MCPs when present; else landmark centroid."""
+    if not landmarks:
+        return None
+    idxs = [i for i in _PALM_LANDMARKS if i < len(landmarks)]
+    pts = [landmarks[i] for i in idxs] if len(idxs) >= 2 else list(landmarks)
+    return (sum(p[0] for p in pts) / len(pts), sum(p[1] for p in pts) / len(pts))
+
+
+def hand_ring_radius(box: tuple[float, float, float, float]) -> float:
+    """Half the hand-box diagonal."""
+    x0, y0, x1, y1 = box
+    return 0.5 * math.hypot(x1 - x0, y1 - y0)
+
+
+def hand_owner_player(
+    anchor: tuple[float, float],
+    players: Sequence,
+) -> int | None:
+    """Player whose results box owns this hand; nearest box center as fallback."""
+    if not players:
+        return None
+    ax, ay = anchor
+    for player in players:
+        x0, y0, x1, y1 = player.box
+        if x0 <= ax <= x1 and y0 <= ay <= y1:
+            return player.player
+    return min(
+        players,
+        key=lambda p: abs(ax - (p.box[0] + p.box[2]) / 2.0),
+    ).player
+
+
+def _hand_anchor(hand: object) -> tuple[float, float] | None:
+    landmarks = getattr(hand, "landmarks", ()) or ()
+    if landmarks:
+        return float(landmarks[0][0]), float(landmarks[0][1])
+    box = getattr(hand, "box", None)
+    if box is None:
+        return None
+    x0, y0, x1, y1 = box
+    return ((x0 + x1) / 2.0, (y0 + y1) / 2.0)
+
+
+def draw_hand_skeleton(
+    canvas: np.ndarray,
+    landmarks: Sequence[tuple[float, float]],
+    transform: Transform,
+    color: tuple[int, int, int] = HAND_TRACK,
+) -> None:
+    """Draw MediaPipe hand bones and joints in canvas space."""
+    if len(landmarks) < 2:
+        return
+    pts = [transform.apply(p) for p in landmarks]
+    for a, b in HAND_CONNECTIONS:
+        if a < len(pts) and b < len(pts):
+            cv2.line(canvas, pts[a], pts[b], color, 2, cv2.LINE_AA)
+    for pt in pts:
+        cv2.circle(canvas, pt, 3, color, -1, cv2.LINE_AA)
+
+
+def draw_hold_ring(
+    canvas: np.ndarray,
+    center: tuple[float, float],
+    radius: float,
+    progress: float,
+    transform: Transform,
+    *,
+    track_color: tuple[int, int, int] = HAND_TRACK,
+    fill_color: tuple[int, int, int] = HOLD_FILL,
+) -> None:
+    """Faint track circle + bright progress arc around the palm."""
+    if radius <= 1:
+        return
+    cx, cy = transform.apply(center)
+    r = max(4, round(radius * transform.scale))
+    # Track at lower opacity via a darkened accent blend.
+    track = tuple(int(c * 0.45) for c in track_color)
+    cv2.circle(canvas, (cx, cy), r, track, 3, cv2.LINE_AA)
+    if progress <= 0:
+        return
+    sweep = 360.0 * min(1.0, progress)
+    cv2.ellipse(
+        canvas,
+        (cx, cy),
+        (r, r),
+        0,
+        -90,
+        -90 + sweep,
+        fill_color,
+        5,
+        cv2.LINE_AA,
+    )
 
 
 def overlay_results_hold(
-    canvas: np.ndarray, progress: float, *, final_round: bool
+    canvas: np.ndarray,
+    progress: float,
+    *,
+    final_round: bool,
+    snap: object | None = None,
+    frame_size: tuple[int, int] | None = None,
+    players: Sequence = (),
 ) -> None:
-    """Update idle hold bar after compose (pygame shell)."""
-    _draw_results_hold_chrome(canvas, progress=progress, final_round=final_round)
+    """Prompt, raised-hand skeletons, and palm hold ring after compose."""
+    _draw_results_prompt(canvas, final_round=final_round)
+    if snap is None or frame_size is None:
+        return
+    fw, fh = frame_size
+    if fw <= 0 or fh <= 0:
+        return
+    transform = fit(fw, fh, FULL_CANVAS)
+
+    hands = getattr(snap, "hands", ()) or ()
+    for hand in hands:
+        landmarks = getattr(hand, "landmarks", ()) or ()
+        if not landmarks:
+            continue
+        anchor = _hand_anchor(hand)
+        owner = hand_owner_player(anchor, players) if anchor is not None else None
+        color = player_color(owner) if owner is not None else HAND_TRACK
+        draw_hand_skeleton(canvas, landmarks, transform, color)
+
+    primary = getattr(snap, "landmarks", ()) or ()
+    box = getattr(snap, "hand_box", None)
+    holding = progress > 0 or getattr(snap, "label", None) == "Thumb_Up"
+    if primary and holding:
+        center = palm_center(primary)
+        if center is not None:
+            radius = hand_ring_radius(box) if box is not None else 40.0
+            draw_hold_ring(canvas, center, radius, progress, transform)
 
 
 def _winners_line(screen: FinalScreen) -> str:

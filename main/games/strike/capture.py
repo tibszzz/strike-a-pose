@@ -39,7 +39,6 @@ from .game import (
     PANEL,
     WHITE,
     CvRenderer,
-    dim,
     draw_frame,
     draw_skeleton,
     draw_stick_figure,
@@ -94,16 +93,16 @@ def compose_live(
     if person is not None:
         draw_skeleton(canvas, person.visible_joints(min_confidence), transform, ACCENT)
 
-    dim(canvas, (0, 0, CANVAS_WIDTH, 84))
     header = title if title is not None else f"New pose: {name}"
-    draw_text(canvas, header, CANVAS_WIDTH // 2, 58, 1.4, WHITE, "center")
+    draw_text(canvas, header, CANVAS_WIDTH // 2, 58, 1.4, WHITE, "center", outline=True)
     if seconds_left is not None:
         # Off to the side, so the number does not cover the person posing.
         draw_text(
             canvas, str(seconds_left), CANVAS_WIDTH - 130, 300, 6.0, ACCENT, "center", outline=True
         )
-    dim(canvas, (0, CANVAS_HEIGHT - 84, CANVAS_WIDTH, 84))
-    draw_text(canvas, message, CANVAS_WIDTH // 2, CANVAS_HEIGHT - 32, 0.9, WHITE, "center")
+    draw_text(
+        canvas, message, CANVAS_WIDTH // 2, CANVAS_HEIGHT - 32, 0.9, WHITE, "center", outline=True
+    )
     return canvas
 
 

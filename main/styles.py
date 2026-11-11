@@ -160,8 +160,8 @@ class Theme:
     hand_box: Rgb = (80, 220, 255)
     hover: Rgb = (220, 220, 220)
     hold_track: Rgba = (255, 255, 255, 40)
-    hold_fill: Rgba = (255, 220, 80, 200)
-    hold_fill_tile: Rgba = (255, 220, 80, 70)
+    hold_fill: Rgba = (85, 221, 224, 200)  # #55dde0
+    hold_fill_tile: Rgba = (85, 221, 224, 70)
     tile_fill: Rgba = (0, 0, 0, 120)
     # Duel extras
     shadow: Rgb = (190, 190, 190)
@@ -242,14 +242,14 @@ DUEL = BRAND.with_overrides(
     accent=(0, 0, 0),
 )
 
-# Strike: dark warm bg + cyan accent. Stored RGB; OpenCV uses bgr().
-# Former BGR BACKGROUND (30,26,24) → RGB (24,26,30); ACCENT (70,215,255) → (255,215,70).
+# Strike: dark warm bg + orange accent. Stored RGB; OpenCV uses bgr().
+# Former BGR BACKGROUND (30,26,24) → RGB (24,26,30); accent #f6ae2d.
 STRIKE = BRAND.with_overrides(
     bg=(24, 26, 30),
     panel=(42, 46, 52),
     ink=(255, 255, 255),
     muted=(175, 175, 175),
-    accent=(255, 215, 70),
+    accent=(246, 174, 45),  # #f6ae2d
     player=(
         (255, 95, 95),
         (70, 175, 255),

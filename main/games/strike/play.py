@@ -91,10 +91,14 @@ class StrikeGame:
         source = self._image if self._image is not None else image
         composed = compose(self._screen, source)
         if isinstance(self._screen, ResultsScreen) and self._screen.idle:
+            fh, fw = source.shape[:2]
             overlay_results_hold(
                 composed,
                 self._thumb.progress,
                 final_round=self._screen.round_number == self._screen.total_rounds,
+                snap=self.gesture_snapshot,
+                frame_size=(fw, fh),
+                players=self._screen.players,
             )
         if composed.shape[1] != self.w or composed.shape[0] != self.h:
             composed = cv2.resize(composed, (self.w, self.h))

@@ -191,6 +191,46 @@ def test_countdown_reports_digit_age():
     assert game.step(3.1).digit_age == pytest.approx(0.1)
 
 
+def test_results_score_stack_clamps_below_header():
+    from main.games.strike.game import (
+        HEADER_BOTTOM,
+        LABEL_GAP_ABOVE_HEAD,
+        SCORE_GAP_ABOVE_LABEL,
+        _results_score_stack_baselines,
+        palm_center,
+        hand_ring_radius,
+    )
+
+    # Comfortable head position: fixed gaps, no clamp.
+    score_y, label_y = _results_score_stack_baselines(400)
+    assert label_y == 400 - LABEL_GAP_ABOVE_HEAD
+    assert score_y == label_y - SCORE_GAP_ABOVE_LABEL
+
+    # Near the top: whole stack shifts down so the score clears the header.
+    score_y, label_y = _results_score_stack_baselines(80)
+    assert label_y - score_y == SCORE_GAP_ABOVE_LABEL
+    assert score_y >= HEADER_BOTTOM
+
+    assert palm_center(()) is None
+    assert palm_center(((10.0, 20.0), (30.0, 40.0))) == (20.0, 30.0)
+    assert hand_ring_radius((0.0, 0.0, 60.0, 80.0)) == pytest.approx(50.0)
+
+
+def test_hand_owner_player_matches_box_then_nearest():
+    from main.games.strike.game import hand_owner_player
+    from main.games.strike.screens import PlayerResult
+
+    p1 = PlayerResult(1, {}, (0.0, 0.0, 100.0, 200.0), 0, 0)
+    p2 = PlayerResult(2, {}, (200.0, 0.0, 300.0, 200.0), 0, 0)
+    players = (p1, p2)
+
+    assert hand_owner_player((50.0, 80.0), players) == 1
+    assert hand_owner_player((250.0, 80.0), players) == 2
+    # Outside both boxes: nearest horizontal center (50 vs 250).
+    assert hand_owner_player((160.0, 10.0), players) == 2
+    assert hand_owner_player((50.0, 80.0), ()) is None
+
+
 def test_countdown_target_rect_holds_then_eases_to_top_right():
     from main.games.strike.game import (
         CANVAS_HEIGHT,
