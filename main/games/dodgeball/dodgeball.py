@@ -125,6 +125,13 @@ def draw_text(
     return pygame.Rect(blit_x + pad, blit_y + pad, text_w, text_h)
 
 
+NUMBER_KEYS = {
+    pygame.K_1: 1, pygame.K_KP1: 1,
+    pygame.K_2: 2, pygame.K_KP2: 2,
+    pygame.K_3: 3, pygame.K_KP3: 3,
+}
+
+
 class DodgeballGame:
     title = "Dodgeball"
 
@@ -178,6 +185,24 @@ class DodgeballGame:
         self.player_count = count
         self.lives = [LIVES] * count
         self.game_over = False
+        # Seed slots from the lobby layout so P1..Pn keep their left-to-right order.
+        lobby_x = [p.center_x for p in self.lobby_people]
+        self.last_x = [
+            lobby_x[i] if i < len(lobby_x) else self.w * (i + 1) / (count + 1)
+            for i in range(count)
+        ]
+        self.reset()
+        self.hit_message = "Get ready!"
+
+    @property
+    def can_start(self) -> bool:
+        return MIN_PLAYERS <= len(self.lobby_people) <= MAX_PLAYERS
+
+    def start(self, count: int) -> None:
+        """Leave the lobby and play with `count` players."""
+        self.in_lobby = False
+        self.player_count = count
+        self.hits = [0] * count
         # Seed slots from the lobby layout so P1..Pn keep their left-to-right order.
         lobby_x = [p.center_x for p in self.lobby_people]
         self.last_x = [
