@@ -62,6 +62,43 @@ def is_drawn(p: Person, cfg: GestureConfig = GestureConfig()) -> bool:
     return is_arm_extended(p, "left", cfg) or is_arm_extended(p, "right", cfg)
 
 
+def is_wrist_raised(
+    p: Person,
+    side: str,
+    *,
+    min_conf: float = 0.35,
+    min_lift_frac: float = 0.08,
+) -> bool:
+    """True when the wrist sits clearly above the hip (hand not hanging at the side).
+
+    Image y grows downward. `min_lift_frac` is a fraction of torso length
+    (shoulder→hip) so the margin scales with distance from the camera.
+    """
+    s_i, e_i, w_i = _ARMS[side]
+    hip_i = KP.L_HIP if side == "left" else KP.R_HIP
+    if float(p.conf[w_i]) < min_conf:
+        return False
+    wrist_y = float(p.xy[w_i][1])
+
+    if float(p.conf[hip_i]) >= min_conf:
+        hip_y = float(p.xy[hip_i][1])
+        torso = 0.0
+        if float(p.conf[s_i]) >= min_conf:
+            torso = abs(float(p.xy[s_i][1]) - hip_y)
+        if torso < 1e-3:
+            box_h = max(0.0, float(p.box[3]) - float(p.box[1]))
+            torso = box_h if box_h > 1e-3 else 100.0
+        return wrist_y < hip_y - torso * min_lift_frac
+
+    # No hip: fall back to wrist clearly above elbow.
+    if float(p.conf[e_i]) < min_conf:
+        return False
+    elbow_y = float(p.xy[e_i][1])
+    box_h = max(0.0, float(p.box[3]) - float(p.box[1]))
+    margin = (box_h if box_h > 1e-3 else 100.0) * min_lift_frac
+    return wrist_y < elbow_y - margin
+
+
 def classify(p: Person | None, cfg: GestureConfig = GestureConfig()) -> PoseState:
     if p is None:
         return PoseState.MISSING

@@ -1,6 +1,7 @@
 """Playable games the shell and menu can start.
 
-`MenuGame` is bootstrap-only and is not listed here.
+`SplashGame` / `MenuGame` are bootstrap-only and are not listed here.
+Cannonball remains under `main/games/dodgeball/` but is not registered.
 """
 
 from __future__ import annotations
@@ -55,5 +56,14 @@ def make_menu(registry: dict[str, GameEntry]) -> GameFactory:
 
     def factory(size: Size):
         return MenuGame(size, entries)
+
+    return factory
+
+
+def make_splash() -> GameFactory:
+    from main.games.splash import SplashGame
+
+    def factory(size: Size):
+        return SplashGame(size)
 
     return factory

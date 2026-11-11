@@ -2,11 +2,12 @@
   python -m main
   python -m main duel [--camera 0] [--imgsz 640] [--device mps]
   python -m main dodgeball ...
-  python -m main cannonball ...
+  python -m main [--debug]
   python -m main strike [--debug]
 
-Bare launch opens the in-window menu (pose tracker stays warm across switches).
-Defaults for the shell come from `.env` (CAMERA, IMGSZ, DEVICE); flags override them.
+Bare launch opens the splash, then the in-window menu (pose tracker stays warm
+across switches). Defaults for the shell come from `.env` (CAMERA, CAM_WIDTH,
+CAM_HEIGHT, IMGSZ, DEVICE, FULLSCREEN); flags override them.
 """
 
 from __future__ import annotations
@@ -20,7 +21,12 @@ from .config import Config, env
 
 def main(argv: Sequence[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
-    camera, imgsz, device = env("CAMERA", 0), env("IMGSZ", 640), env("DEVICE", "") or None
+    camera = env("CAMERA", 0)
+    cam_width = env("CAM_WIDTH", 1920)
+    cam_height = env("CAM_HEIGHT", 1080)
+    imgsz = env("IMGSZ", 640)
+    device = env("DEVICE", "") or None
+    fullscreen = env("FULLSCREEN", 1) != 0
 
     parser = argparse.ArgumentParser(
         prog="python -m main",
@@ -29,33 +35,55 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "game",
         nargs="?",
-        choices=("duel", "dodgeball", "cannonball", "strike"),
-        help="optional game to start; omit for the menu",
+        choices=("duel", "dodgeball", "strike"),
+        help="optional game to start; omit for the splash then menu",
     )
     parser.add_argument("--camera", type=int, default=camera, help=f"camera index (default {camera})")
+    parser.add_argument(
+        "--width",
+        type=int,
+        default=cam_width,
+        help=f"requested camera width (default {cam_width})",
+    )
+    parser.add_argument(
+        "--height",
+        type=int,
+        default=cam_height,
+        help=f"requested camera height (default {cam_height})",
+    )
     parser.add_argument(
         "--imgsz", type=int, default=imgsz, help=f"YOLO input size; lower = faster (default {imgsz})"
     )
     parser.add_argument("--device", default=device, help="mps / cpu (default: mps if available)")
     parser.add_argument(
+        "--windowed",
+        action="store_true",
+        help="start in a window instead of fullscreen (F still toggles)",
+    )
+    parser.add_argument(
         "--debug",
         action="store_true",
-        help="strike only: allow a solo lobby with one person in frame",
+        help="enable keyboard menu nav (arrows/Enter); strike solo lobby",
     )
     args = parser.parse_args(argv)
 
     strike_config = Config(min_players=1) if args.debug else Config()
     from .app import run
-    from .games.registry import build_registry, make_menu
+    from .games.registry import build_registry, make_menu, make_splash
 
     registry = build_registry(strike_config=strike_config)
     run(
         registry=registry,
         make_menu=make_menu(registry),
+        make_splash=make_splash(),
         initial_game=args.game,
         camera_index=args.camera,
+        camera_width=args.width,
+        camera_height=args.height,
         imgsz=args.imgsz,
         device=args.device,
+        debug=args.debug,
+        fullscreen=False if args.windowed else fullscreen,
     )
     return 0
 

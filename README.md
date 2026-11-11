@@ -70,37 +70,46 @@ Launch the shared window (camera + pose stay warm while you switch titles):
 python -m main
 ```
 
-Opens the shared window. Camera and pose stay warm while you switch titles.
+Opens the shared window on a splash screen. Hold thumbs up (or Enter with
+`--debug`) advances to the game menu. Camera and pose stay warm while you
+switch titles.
 
 Optional: jump straight into a game (`Esc` still returns to the menu):
 
 ```sh
 python -m main duel
 python -m main dodgeball
-python -m main cannonball
 python -m main strike
-python -m main strike --debug   # solo lobby while developing
+python -m main --debug          # keyboard menu nav + strike solo lobby
+python -m main strike --debug
 ```
 
-### Menu controls
+### Splash / menu controls
 
-| Gesture | Action |
-|---|---|
-| Thumbs up | Selection up |
-| Thumbs down | Selection down |
-| Victory (peace) | Select / start |
+| Gesture | Splash | Menu |
+|---|---|---|
+| Thumbs up | Hold ~1s to open the menu | Hold ~1s to confirm the selected game |
+| Pointing up | — | Select the tile under the index fingertip (follows as you move) |
+| Tip over tile | — | Soft-hover highlight (not enough to select) |
 
-Keyboard: Up/Down, Enter. In a game, `Esc` returns to the menu; on the menu, `Esc` quits. `Q` always quits.
+Hold Thumbs_Up for 1s on the splash to open the menu. Menu shows large square
+tiles: Pointing_Up over a tile selects it (selection follows the fingertip
+while you keep pointing), then hold Thumbs_Up for 1s to start. With
+`--debug`, arrow keys (including Left/Right) move the menu selection and Enter
+confirms instantly (on splash, Enter / Up also advances). In a game, `Esc`
+returns to the menu; on splash or menu, `Esc` quits. `Q` always quits.
 
-Gesture recognition uses MediaPipe (`assets/models/gesture_recognizer.task`). It runs only while the menu (or a game with `wants_gestures`) is active. Env tunables: `MIN_SCORE` (default 0.5), `REFRACTORY_MS` (default 350), `GESTURE_MODEL_PATH`.
+Gesture recognition uses MediaPipe (`assets/models/gesture_recognizer.task`). It runs only while the splash/menu (or a game with `wants_gestures`) is active. When YOLO sees wrists raised above the hip, the shell crops and upscales those regions before MediaPipe so hands stay recognizable farther from the camera. If people are visible but no wrists are above the hip, hand detection is skipped entirely (no full-frame fallback). Env tunables: `MIN_SCORE` (default 0.5), `REFRACTORY_MS` (default 350), `GESTURE_MODEL_PATH`, `ROI` (1/0), `ROI_SIZE` (320), `ROI_SCALE` (2.5), `ROI_MIN_PX` (80), `ROI_MAX` (2), `MIN_WRIST_CONF` (0.35), `RAISE_GATE` (1/0), `RAISE_LIFT_FRAC` (0.08), `RAISE_MATCH_FRAC` (0.35), `THUMB_HOLD_S` (1.0).
 
 ### Shared flags
 
 | Flag | What it does |
 |---|---|
 | `--camera N` | Camera index (default 0) |
+| `--width` / `--height` | Requested capture size (default 1920×1080) |
 | `--imgsz 480` | Smaller YOLO input, more speed |
 | `--device cpu` | Force CPU (`mps` when available is the default) |
+| `--windowed` | Start windowed instead of fullscreen |
 
 Defaults also load from `.env` (see `.env.example`). Flags win over `.env`.
 
@@ -108,10 +117,9 @@ Defaults also load from `.env` (see `.env.example`). Flags win over `.env`.
 
 | Key | Action |
 |---|---|
-| `D` | Debug overlay |
-| `D` | Debug view: live camera behind the UI, skeletons, pose state per player, FPS |
+| `D` | Pose/FPS overlay |
 | `R` | Reset the match |
-| `F` | Toggle fullscreen |
+| `F` | Toggle fullscreen / windowed |
 | `Esc` | Back to menu |
 | `Q` | Quit the app |
 
@@ -121,7 +129,6 @@ Defaults also load from `.env` (see `.env.example`). Flags win over `.env`.
 |---|---|---|---|
 | Wild West Duel | 2 | `python -m main duel` | [main/games/duel/README.md](main/games/duel/README.md) |
 | Dodgeball | 1–2 | `python -m main dodgeball` | [main/games/dodgeball/README.md](main/games/dodgeball/README.md) |
-| Cannonball | 1–2 | `python -m main cannonball` | same package as Dodgeball |
 | Strike a Pose | 2–4 | `python -m main strike` | [main/games/strike/README.md](main/games/strike/README.md) |
 
 ## Development

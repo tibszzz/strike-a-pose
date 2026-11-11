@@ -1,6 +1,14 @@
 import numpy as np
 
-from main.pose import KP, Person, PoseState, assign_players, classify, is_arm_extended
+from main.pose import (
+    KP,
+    Person,
+    PoseState,
+    assign_players,
+    classify,
+    is_arm_extended,
+    is_wrist_raised,
+)
 
 # Image coordinates: y grows downward. A person facing the camera, ~1:1 scale.
 BASE = {
@@ -11,8 +19,8 @@ BASE = {
     KP.L_ANKLE: (330, 520), KP.R_ANKLE: (270, 520),
 }
 ARMS_DOWN = {
-    KP.L_ELBOW: (350, 240), KP.L_WRIST: (355, 315),
-    KP.R_ELBOW: (250, 240), KP.R_WRIST: (245, 315),
+    KP.L_ELBOW: (350, 240), KP.L_WRIST: (355, 360),
+    KP.R_ELBOW: (250, 240), KP.R_WRIST: (245, 360),
 }
 
 
@@ -73,3 +81,27 @@ def test_lone_player_placed_by_half():
     p = person(box=(700, 0, 900, 500))
     assert assign_players([p], 1000) == (None, p)
     assert assign_players([], 1000) == (None, None)
+
+
+def test_arms_down_wrists_not_raised():
+    p = person()  # default wrists hang below hips
+    assert not is_wrist_raised(p, "left")
+    assert not is_wrist_raised(p, "right")
+
+
+def test_wrist_at_hip_is_not_raised():
+    p = person({KP.R_WRIST: (245, 320)})  # same y as R_HIP
+    assert not is_wrist_raised(p, "right")
+
+
+def test_raised_hand_wrist_is_raised():
+    # Wrist above hip (y smaller).
+    p = person({KP.R_ELBOW: (250, 160), KP.R_WRIST: (250, 80)})
+    assert is_wrist_raised(p, "right")
+    assert not is_wrist_raised(p, "left")
+
+
+def test_wrist_between_elbow_and_hip_counts_as_raised():
+    # Above hip even if still below the elbow.
+    p = person({KP.R_ELBOW: (250, 200), KP.R_WRIST: (250, 280)})
+    assert is_wrist_raised(p, "right")
