@@ -1,9 +1,4 @@
-"""Shell navigation and menu command seam.
-
-Keys (and later camera gestures) map to `MenuCommand`. Games that care
-implement `handle_command`. `poll_nav` lets a game ask the shell to swap
-titles or quit without owning the window or pose tracker.
-"""
+"""Menu commands and shell navigation events."""
 
 from __future__ import annotations
 

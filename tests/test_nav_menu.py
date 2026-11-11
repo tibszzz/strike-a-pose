@@ -64,3 +64,12 @@ def test_menu_back_emits_quit_app():
     menu = MenuGame((640, 480), entries)
     menu.handle_command(MenuCommand.BACK)
     assert menu.poll_nav() == QuitApp()
+
+
+def test_menu_wants_gestures_and_passthrough_camera():
+    pygame.init()
+    entries = (GameEntry("duel", "Wild West Duel", lambda size: None),)
+    menu = MenuGame((640, 480), entries)
+    assert menu.wants_gestures is True
+    image = np.zeros((480, 640, 3), np.uint8)
+    assert menu.render_camera(image) is image
