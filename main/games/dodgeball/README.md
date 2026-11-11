@@ -6,14 +6,6 @@ Body-controlled dodgeball: dodge a bouncing ball with your real body, tracked by
 python -m main dodgeball
 ```
 
-Also in this package:
-
-```sh
-python -m main cannonball
-```
-
-Cannonball throws a Z-axis ball toward the screen instead of bouncing one around the feed.
-
 ## How to play
 
 - Stand in front of the camera.
@@ -34,4 +26,3 @@ Shared shell keys (`D` debug, `F` fullscreen, `Esc` menu, `Q` quit) plus:
 ## Files
 
 - `dodgeball.py` — bouncing-ball dodgeball
-- `cannonball.py` — Z-axis ball thrown toward the screen
