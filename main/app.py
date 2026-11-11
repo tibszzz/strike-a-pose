@@ -11,7 +11,8 @@ Background rules:
 Keys: D overlay, R reset, F fullscreen, Q quit app.
 Esc leaves a playable game for the menu; on the splash or menu Esc quits.
 With `--debug`, arrow keys / Enter also feed MenuCommand (dev keyboard nav).
-When the game sets wants_gestures, MediaPipe hand gestures feed MenuCommand.
+When the game sets wants_gestures, MediaPipe runs and attaches a snapshot.
+Splash still maps gestures → MenuCommand; the menu reads the snapshot itself.
 """
 
 from __future__ import annotations
@@ -41,6 +42,8 @@ PLAYER_COLORS = [(80, 170, 255), (255, 120, 80)]
 KEY_TO_COMMAND = {
     pygame.K_UP: MenuCommand.MOVE_UP,
     pygame.K_DOWN: MenuCommand.MOVE_DOWN,
+    pygame.K_LEFT: MenuCommand.MOVE_UP,
+    pygame.K_RIGHT: MenuCommand.MOVE_DOWN,
     pygame.K_RETURN: MenuCommand.SELECT,
     pygame.K_KP_ENTER: MenuCommand.SELECT,
 }
@@ -208,7 +211,9 @@ def run(
                 snap = gestures.recognize(frame.image, _timestamp_ms(frame))
                 if _wants_gestures(game):
                     game.gesture_snapshot = snap
-                if hasattr(game, "handle_command"):
+                # Menu owns spatial gesture select from the snapshot; splash (and
+                # any future non-menu gesture games) still use the label mapper.
+                if not _is_menu(game) and hasattr(game, "handle_command"):
                     command = mapper.feed(snap, _timestamp_ms(frame))
                     if command is not None:
                         game.handle_command(command)

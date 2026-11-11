@@ -2,7 +2,6 @@
   python -m main
   python -m main duel [--camera 0] [--imgsz 640] [--device mps]
   python -m main dodgeball ...
-  python -m main cannonball ...
   python -m main [--debug]
   python -m main strike [--debug]
 
@@ -31,7 +30,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "game",
         nargs="?",
-        choices=("duel", "dodgeball", "cannonball", "strike"),
+        choices=("duel", "dodgeball", "strike"),
         help="optional game to start; omit for the splash then menu",
     )
     parser.add_argument("--camera", type=int, default=camera, help=f"camera index (default {camera})")

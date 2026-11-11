@@ -26,7 +26,6 @@ Optional: jump straight into a game (`Esc` still returns to the menu):
 ```sh
 python -m main duel
 python -m main dodgeball
-python -m main cannonball
 python -m main strike
 python -m main --debug          # keyboard menu nav + strike solo lobby
 python -m main strike --debug
@@ -36,12 +35,14 @@ python -m main strike --debug
 
 | Gesture | Splash | Menu |
 |---|---|---|
-| Thumbs up | Start → menu | Selection up |
-| Thumbs down | — | Selection down |
-| Victory (peace) | — | Select / start |
+| Thumbs up | Start → menu | Confirm hard-locked game |
+| Pointing up | — | Hard-lock the tile under the index fingertip |
+| Tip over tile | — | Soft-hover highlight (not enough to start) |
 
-With `--debug`, Up/Down/Enter also drive splash/menu. In a game, `Esc` returns to
-the menu; on splash or menu, `Esc` quits. `Q` always quits.
+Menu shows large square tiles. Point at a tile, Pointing_Up to lock it, then
+Thumbs_Up to start. With `--debug`, arrow keys (including Left/Right) move the
+hard-lock and Enter confirms. In a game, `Esc` returns to the menu; on splash or
+menu, `Esc` quits. `Q` always quits.
 
 Gesture recognition uses MediaPipe (`assets/models/gesture_recognizer.task`). It runs only while the splash/menu (or a game with `wants_gestures`) is active. Env tunables: `MIN_SCORE` (default 0.5), `REFRACTORY_MS` (default 350), `GESTURE_MODEL_PATH`.
 
@@ -70,7 +71,6 @@ Defaults also load from `.env` (see `.env.example`). Flags win over `.env`.
 |---|---|---|---|
 | Wild West Duel | 2 | `python -m main duel` | [main/games/duel/README.md](main/games/duel/README.md) |
 | Dodgeball | 1–2 | `python -m main dodgeball` | [main/games/dodgeball/README.md](main/games/dodgeball/README.md) |
-| Cannonball | 1–2 | `python -m main cannonball` | same package as Dodgeball |
 | Strike a Pose | 2–4 | `python -m main strike` | [main/games/strike/README.md](main/games/strike/README.md) |
 
 ## Development

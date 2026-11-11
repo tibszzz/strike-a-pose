@@ -1,6 +1,7 @@
 """Playable games the shell and menu can start.
 
 `SplashGame` / `MenuGame` are bootstrap-only and are not listed here.
+Cannonball remains under `main/games/dodgeball/` but is not registered.
 """
 
 from __future__ import annotations
@@ -31,12 +32,6 @@ def _dodgeball(size: Size):
     return DodgeballGame(size)
 
 
-def _cannonball(size: Size):
-    from main.games.dodgeball.cannonball import CannonballGame
-
-    return CannonballGame(size)
-
-
 def build_registry(*, strike_config=None) -> dict[str, GameEntry]:
     """Factories for every title shown in the menu and accepted on the CLI."""
     from main.config import Config
@@ -50,7 +45,6 @@ def build_registry(*, strike_config=None) -> dict[str, GameEntry]:
     return {
         "duel": GameEntry("duel", "Wild West Duel", _duel),
         "dodgeball": GameEntry("dodgeball", "Dodgeball", _dodgeball),
-        "cannonball": GameEntry("cannonball", "Cannonball", _cannonball),
         "strike": GameEntry("strike", "Strike a Pose", strike),
     }
 
