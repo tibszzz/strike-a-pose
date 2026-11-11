@@ -18,8 +18,10 @@ Cannonball throws a Z-axis ball toward the screen instead of bouncing one around
 
 - Stand in front of the camera.
 - A ball appears and moves around the live feed.
-- Avoid getting hit. If the ball touches your body shape, you take a hit and the round pauses.
-- Press **R** to restart (5-second countdown). Lowest hit count wins.
+- Each player starts with **5 lives**, shown as hearts in the top-right.
+- Avoid getting hit. If the ball touches your body shape, you lose a life and the round pauses.
+- Press **R** to resume (5-second countdown). A player with no lives left is out.
+- Last player standing wins (solo: play until your lives run out). Press **R** to start a new match.
 
 ## Keys
 

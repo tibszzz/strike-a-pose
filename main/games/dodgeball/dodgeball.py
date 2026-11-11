@@ -1,4 +1,4 @@
-"""Dodgeball Game: Avoid the bouncing ball! Ball hits body = lose points."""
+"""Dodgeball Game: Avoid the bouncing ball! Each player has 5 lives; a ball hit costs one."""
 
 from __future__ import annotations
 import math
@@ -28,11 +28,35 @@ PLAYER_COLORS = [BLUE, RED, GREEN]
 MIN_PLAYERS = 1
 MAX_PLAYERS = 3
 FPS = 30
+LIVES = 5  # chances per player; at 0 the player is out
 
 # Font style from games/pose/game.py (Strike a Pose)
 FONT = cv2.FONT_HERSHEY_DUPLEX
 
 # number keys for quick start (1..3)
+def _draw_heart(
+    canvas: pygame.Surface, cx: int, cy: int, size: int, color: tuple[int, int, int], filled: bool
+) -> None:
+    """Heart icon centred on (cx, cy), `size` px wide. Lost lives are drawn grey and faded."""
+    pad = 3  # room for the black edge
+    r = size // 4
+    surf = pygame.Surface((size + pad * 2, size + pad * 2), pygame.SRCALPHA)
+    ox, oy = surf.get_width() // 2, r + pad + 1  # heart origin inside the surface
+
+    def shape(fill, grow: int) -> None:
+        for lx in (ox - r, ox + r):
+            pygame.draw.circle(surf, fill, (lx, oy), r + grow)
+        pygame.draw.polygon(
+            surf, fill, [(ox - 2 * r - grow, oy + r // 4), (ox, oy + 3 * r + grow), (ox + 2 * r + grow, oy + r // 4)]
+        )
+
+    shape((*BLACK, 255), 2)  # black edge keeps the icon readable over video
+    shape((*color, 255) if filled else (*MUTED, 255), 0)
+    if not filled:
+        surf.set_alpha(110)
+    canvas.blit(surf, (cx - surf.get_width() // 2, cy - surf.get_height() // 2))
+
+
 NUMBER_KEYS = {
     pygame.K_1: 1, pygame.K_KP1: 1,
     pygame.K_2: 2, pygame.K_KP2: 2,
@@ -122,8 +146,9 @@ class DodgeballGame:
         self.player_count = 0
         self.last_x: list[float] = []  # last known centre x per player slot
 
-        # Hit counters per player (P1..Pn)
-        self.hits: list[int] = []
+        # Lives left per player (P1..Pn)
+        self.lives: list[int] = []
+        self.game_over = False
         
         # Game state
         self.paused = False  # Pause after hit
@@ -138,8 +163,10 @@ class DodgeballGame:
         self.hit_timer = 0
         self.hit_position = (0, 0)
         
-        # Person bounding boxes for visualization
-        self.person_boxes = []
+        # Player bounding boxes (slot, (x1, y1, x2, y2)), refreshed every frame
+        self.person_boxes: list[tuple[int, tuple[float, float, float, float]]] = []
+        # Body outlines used for collision, shown while the ball is moving
+        self.body_polygons: list[tuple[int, list | None]] = []
 
     @property
     def can_start(self) -> bool:
@@ -149,7 +176,8 @@ class DodgeballGame:
         """Leave the lobby and play with `count` players."""
         self.in_lobby = False
         self.player_count = count
-        self.hits = [0] * count
+        self.lives = [LIVES] * count
+        self.game_over = False
         # Seed slots from the lobby layout so P1..Pn keep their left-to-right order.
         lobby_x = [p.center_x for p in self.lobby_people]
         self.last_x = [
@@ -163,13 +191,17 @@ class DodgeballGame:
         """Reset the game - start countdown to restart."""
         if self.in_lobby:
             return
+        if self.game_over:
+            # New match: everyone gets their lives back
+            self.lives = [LIVES] * self.player_count
+            self.game_over = False
         self.paused = False
         self.countdown = 5 * FPS
         self.hit_registered = [False] * self.player_count
         self.hit_message = "Game restarting..."
         self.hit_message_timer = 0
         self.hit_timer = 0
-        self.person_boxes = []
+        self.body_polygons = []
         # Pick the launch spot now so players can see it during the countdown.
         self._start_ball()
 
@@ -213,6 +245,13 @@ class DodgeballGame:
             self.lobby_people = left_to_right(frame.people)
             return
 
+        # Track players every frame (also while paused / counting down) so
+        # their boxes and labels stay on screen.
+        slots = self._assign_players(frame.people)
+        self.person_boxes = [
+            (i, tuple(person.box)) for i, person in enumerate(slots) if person is not None
+        ]
+
         # If paused, only update message timer
         if self.paused:
             return
@@ -220,12 +259,10 @@ class DodgeballGame:
         # Handle countdown
         if self.countdown > 0:
             self.countdown -= 1
-            if self.countdown == 0:
-                self.hits = [0] * self.player_count  # Reset counters when ball starts
             return  # Don't update game during countdown
         
-        # Store person boxes for drawing
-        self.person_boxes = []
+        # Store body outlines for drawing
+        self.body_polygons = []
         
         # Move ball
         self.ball.move()
@@ -244,20 +281,20 @@ class DodgeballGame:
                 self.hit_registered[i] = False
         
         # Check for collisions
-        for player_idx, person in enumerate(self._assign_players(frame.people)):
-            if person is not None:
+        for player_idx, person in enumerate(slots):
+            if person is not None and self.lives[player_idx] > 0:
                 collision, body_polygon = self.ball.check_collision(person)
-                self.person_boxes.append((player_idx, body_polygon))
+                self.body_polygons.append((player_idx, body_polygon))
                 
                 if collision and not self.hit_registered[player_idx]:
-                    # Hit! Increment hit counter ONCE
-                    self.hits[player_idx] += 1
+                    # Hit! Lose ONE life
+                    self.lives[player_idx] = max(0, self.lives[player_idx] - 1)
                     self.hit_registered[player_idx] = True
                     self.hit_timer = 45
                     self.hit_position = (int(self.ball.x), int(self.ball.y))
                     
                     # Show hit message
-                    self.hit_message = f"P{player_idx + 1} HIT! Press R to resume"
+                    self.hit_message = self._hit_message(player_idx)
                     self.hit_message_timer = 0  # Keep showing until reset
                     
                     # Pause the game
@@ -302,6 +339,21 @@ class DodgeballGame:
         else:
             self.ball.color = YELLOW
 
+    def _hit_message(self, player_idx: int) -> str:
+        """Message after P(player_idx+1) is hit; also flags the end of the match."""
+        name = f"P{player_idx + 1}"
+        alive = [i for i, lives in enumerate(self.lives) if lives > 0]
+        if self.player_count == 1 and not alive:
+            self.game_over = True
+            return "GAME OVER! Press R to play again"
+        if self.player_count > 1 and len(alive) <= 1:
+            self.game_over = True
+            winner = f"P{alive[0] + 1} WINS!" if alive else "Nobody wins!"
+            return f"{winner} Press R to play again"
+        if self.lives[player_idx] == 0:
+            return f"{name} is OUT! Press R to resume"
+        return f"{name} HIT! Press R to resume"
+
     def handle_key(self, key: int) -> None:
         """Handle keyboard input. (R is routed to reset() by the app shell.)"""
         if not self.in_lobby:
@@ -319,7 +371,7 @@ class DodgeballGame:
         if self.in_lobby:
             return [f"Lobby: {len(self.lobby_people)} people in frame"]
         return [
-            " | ".join(f"P{i + 1}: {h}" for i, h in enumerate(self.hits)),
+            " | ".join(f"P{i + 1}: {n}/{LIVES} lives" for i, n in enumerate(self.lives)),
             f"Ball speed: {math.sqrt(self.ball.vx**2 + self.ball.vy**2):.1f} px/f",
         ]
 
@@ -366,14 +418,39 @@ class DodgeballGame:
         pygame.draw.polygon(overlay, (*YELLOW, 220), [tip, left, right])
         canvas.blit(overlay, (0, 0))
 
+    def _draw_lives(self, canvas: pygame.Surface) -> None:
+        """One row per player: label plus LIVES hearts (filled = left, outlined = lost)."""
+        size = 26  # heart width in px
+        gap = 8
+        row_h = 42
+        hearts_w = LIVES * size + (LIVES - 1) * gap
+        right = self.w - 24
+        for i in range(self.player_count):
+            color = PLAYER_COLORS[i]
+            cy = 36 + i * row_h
+            label_color = color if self.lives[i] > 0 else MUTED
+            draw_text(canvas, f"P{i + 1}", right - hearts_w - 14, cy + 10, 0.9, label_color, "right", outline=True)
+            for k in range(LIVES):
+                cx = right - hearts_w + k * (size + gap) + size // 2
+                _draw_heart(canvas, cx, cy, size, color, filled=k < self.lives[i])
+
     def draw(self, canvas: pygame.Surface, frame: PoseFrame) -> None:
         """Draw game elements."""
         if self.in_lobby:
             self._draw_lobby(canvas)
             return
 
+        # Draw player bounding boxes with their labels (greyed out once a player is out)
+        for player_idx, box in self.person_boxes:
+            out = self.lives[player_idx] == 0
+            color = MUTED if out else PLAYER_COLORS[player_idx]
+            x1, y1, x2, y2 = (int(v) for v in box)
+            pygame.draw.rect(canvas, color, (x1, y1, x2 - x1, y2 - y1), 2)
+            label = f"P{player_idx + 1}" + (" OUT" if out else "")
+            draw_text(canvas, label, x1 + 6, max(y1 - 10, 30), 0.9, color, outline=True)
+
         # Draw person body polygons
-        for player_idx, body_polygon in self.person_boxes:
+        for player_idx, body_polygon in self.body_polygons:
             if body_polygon is not None:
                 color = PLAYER_COLORS[player_idx]
                 temp_surf = pygame.Surface(canvas.get_size(), pygame.SRCALPHA)
@@ -428,15 +505,8 @@ class DodgeballGame:
                 outline=True,
             )
         
-        # Draw scoreboard in top-right, P1..Pn reading left to right
-        score_scale = 0.95
-        score_thickness = max(1, round(score_scale * 1.6))
-        right = self.w - 24
-        for i in reversed(range(self.player_count)):
-            text = f"P{i + 1}: {self.hits[i]}"
-            draw_text(canvas, text, right, 48, scale=score_scale, color=PLAYER_COLORS[i], align="right", outline=True)
-            (text_w, _), _ = cv2.getTextSize(text, FONT, score_scale, score_thickness)
-            right -= text_w + 28
+        # Draw lives in the top-right: one row per player, P1 on top
+        self._draw_lives(canvas)
         
         # Draw instructions strip at bottom
         instructions = "[D] Debug | [R] Reset | [F] Fullscreen | [Q/Esc] Quit"
