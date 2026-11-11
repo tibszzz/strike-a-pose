@@ -13,6 +13,7 @@ from .gestures import (
     GestureNavConfig,
     GestureRecognizerSession,
     GestureSnapshot,
+    HandGesture,
     load_gesture_nav_config,
 )
 from .types import MenuCommand, Nav, QuitApp, StartGame
@@ -22,6 +23,7 @@ __all__ = [
     "GestureNavConfig",
     "GestureRecognizerSession",
     "GestureSnapshot",
+    "HandGesture",
     "LABEL_TO_COMMAND",
     "MenuCommand",
     "Nav",

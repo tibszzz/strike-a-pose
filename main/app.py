@@ -12,6 +12,8 @@ Keys: D debug overlay, R reset, F fullscreen, Q quit app.
 Esc leaves a playable game for the menu; on the menu Esc quits.
 Arrow keys / Enter and (when the game sets wants_gestures) MediaPipe hand
 gestures feed MenuCommand to the current game when it handles them.
+`wants_gestures` is re-checked every frame, so a game can turn recognition on
+for just one screen; `gesture_hands` (default 2) sets how many hands to track.
 """
 
 from __future__ import annotations
@@ -104,7 +106,10 @@ def _poll_nav(game: Game):
 
 def _sync_gestures(session: GestureRecognizerSession, mapper: GestureCommandMapper, game: Game) -> None:
     want = _wants_gestures(game)
-    if want and not session.active:
+    hands = int(getattr(game, "gesture_hands", 2))
+    if want and (not session.active or session.num_hands != hands):
+        session.stop()
+        session.num_hands = hands
         session.start()
         mapper.reset()
     elif not want and session.active:
@@ -191,6 +196,7 @@ def run(
                         elif hasattr(game, "handle_key"):
                             game.handle_key(event.key)
 
+            _sync_gestures(gestures, mapper, game)  # games may toggle wants_gestures per screen
             if gestures.active:
                 snap = gestures.recognize(frame.image, _timestamp_ms(frame))
                 if _wants_gestures(game):

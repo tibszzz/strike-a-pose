@@ -26,13 +26,31 @@ DEFAULT_MODEL = ASSETS / "models" / "gesture_recognizer.task"
 
 
 @dataclass(frozen=True)
+class HandGesture:
+    """One recognised hand: its top gesture and where it is in the image."""
+
+    label: str  # MediaPipe category, e.g. "Thumb_Up"
+    score: float
+    box: tuple[float, float, float, float]  # xmin, ymin, xmax, ymax px
+
+    @property
+    def center(self) -> tuple[float, float]:
+        return ((self.box[0] + self.box[2]) / 2, (self.box[1] + self.box[3]) / 2)
+
+
+@dataclass(frozen=True)
 class GestureSnapshot:
-    """Latest recognizer output for UI and (later) position-based selection."""
+    """Latest recognizer output for UI and position-based selection.
+
+    `label`/`score`/`hand_box`/`landmarks` describe the single strongest hand
+    (what the menu uses); `hands` lists every hand with a named gesture.
+    """
 
     label: str | None
     score: float = 0.0
     hand_box: tuple[float, float, float, float] | None = None  # xmin, ymin, xmax, ymax px
     landmarks: tuple[tuple[float, float], ...] = ()  # image-pixel (x, y)
+    hands: tuple[HandGesture, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -122,8 +140,9 @@ def _empty_snapshot() -> GestureSnapshot:
 class GestureRecognizerSession:
     """Shell-owned MediaPipe Gesture Recognizer with explicit start/stop."""
 
-    def __init__(self, config: GestureNavConfig | None = None) -> None:
+    def __init__(self, config: GestureNavConfig | None = None, num_hands: int = 2) -> None:
         self.config = config or load_gesture_nav_config()
+        self.num_hands = num_hands  # max hands tracked; change takes effect on start()
         self._recognizer = None
         self._active = False
         self._last_ts_ms = -1
@@ -153,7 +172,7 @@ class GestureRecognizerSession:
         options = GestureRecognizerOptions(
             base_options=BaseOptions(model_asset_path=str(path)),
             running_mode=VisionTaskRunningMode.VIDEO,
-            num_hands=2,
+            num_hands=self.num_hands,
         )
         self._recognizer = GestureRecognizer.create_from_options(options)
         self._active = True
@@ -184,23 +203,32 @@ class GestureRecognizerSession:
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
         result = self._recognizer.recognize_for_video(mp_image, timestamp_ms)
 
+        h, w = image_bgr.shape[:2]
+        landmarks = result.hand_landmarks or ()
         best_label: str | None = None
         best_score = 0.0
         best_index = -1
+        hands: list[HandGesture] = []
         for i, hand_gestures in enumerate(result.gestures or ()):
             if not hand_gestures:
                 continue
             top = hand_gestures[0]
             name = getattr(top, "category_name", None) or getattr(top, "display_name", None)
             score = float(top.score)
-            if name and name != "None" and score > best_score:
+            if not name or name == "None":
+                continue
+            if i < len(landmarks):
+                box, _ = _landmarks_to_box_and_pts(landmarks[i], w, h)
+                hands.append(HandGesture(label=name, score=score, box=box))
+            if score > best_score:
                 best_score = score
                 best_label = name
                 best_index = i
 
-        if best_index < 0 or not result.hand_landmarks or best_index >= len(result.hand_landmarks):
-            return GestureSnapshot(label=best_label, score=best_score)
+        if best_index < 0 or best_index >= len(landmarks):
+            return GestureSnapshot(label=best_label, score=best_score, hands=tuple(hands))
 
-        h, w = image_bgr.shape[:2]
-        box, pts = _landmarks_to_box_and_pts(result.hand_landmarks[best_index], w, h)
-        return GestureSnapshot(label=best_label, score=best_score, hand_box=box, landmarks=pts)
+        box, pts = _landmarks_to_box_and_pts(landmarks[best_index], w, h)
+        return GestureSnapshot(
+            label=best_label, score=best_score, hand_box=box, landmarks=pts, hands=tuple(hands)
+        )
