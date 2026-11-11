@@ -77,6 +77,8 @@ class Strike:
     space_final = "SPACE: final scores"
     space_next = "SPACE: next round"
     space_new_game = "SPACE: new game      Q: quit"
+    results_thumbs = "Hold thumbs up to continue"
+    results_thumbs_final = "Hold thumbs up for final scores"
     final_scores = "FINAL SCORES"
     col_player = "PLAYER"
     col_round = "ROUND"

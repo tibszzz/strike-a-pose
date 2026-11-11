@@ -79,6 +79,7 @@ class ResultsScreen:
     target: Pose
     snapshot: object  # the camera frame; the game never looks inside it
     players: tuple[PlayerResult, ...]
+    idle: bool  # True once thumbs-up can advance (immediate on entry)
 
 
 @dataclass(frozen=True)

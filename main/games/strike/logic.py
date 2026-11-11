@@ -55,6 +55,61 @@ def rank(totals: Sequence[int]) -> tuple[Standing, ...]:
     return tuple(sorted(standings, key=lambda standing: standing.place))
 
 
+def _copy_snapshot(frame: object) -> object:
+    copy = getattr(frame, "copy", None)
+    return copy() if callable(copy) else frame
+
+
+# Distinct placeholder scores so padded seats reveal in a stable, varied order.
+_DEBUG_PAD_SCORES = (15, 40, 65, 90)
+
+
+def _shift_joints(
+    joints: dict[str, tuple[float, float]], dx: float
+) -> dict[str, tuple[float, float]]:
+    return {name: (x + dx, y) for name, (x, y) in joints.items()}
+
+
+def _shift_box(
+    box: tuple[float, float, float, float], dx: float
+) -> tuple[float, float, float, float]:
+    return (box[0] + dx, box[1], box[2] + dx, box[3])
+
+
+def pad_results_to_max(
+    players: Sequence[PlayerResult],
+    *,
+    max_players: int,
+    totals: list[int],
+) -> tuple[PlayerResult, ...]:
+    """Fill empty seats with cloned skeletons so debug reveals exercise max_players."""
+    if len(players) >= max_players:
+        return tuple(players)
+
+    template = players[0]
+    template_cx = (template.box[0] + template.box[2]) / 2
+    width = template.box[2] - template.box[0]
+    gap = width * 1.2
+    rightmost = max(player.box[2] for player in players)
+    padded = list(players)
+
+    for index in range(len(players), max_players):
+        center = rightmost + gap * (index - len(players) + 0.5)
+        dx = center - template_cx
+        score = _DEBUG_PAD_SCORES[index % len(_DEBUG_PAD_SCORES)]
+        totals[index] += score
+        padded.append(
+            PlayerResult(
+                player=index + 1,
+                joints=_shift_joints(template.joints, dx),
+                box=_shift_box(template.box, dx),
+                round_score=score,
+                total=totals[index],
+            )
+        )
+    return tuple(padded)
+
+
 class Game:
     def __init__(
         self,
@@ -126,7 +181,10 @@ class Game:
 
         if confirm and can_start:
             self._player_count = count
-            self._totals = [0] * count
+            seats = (
+                self._config.max_players if self._config.debug else count
+            )
+            self._totals = [0] * seats
             self._targets = self._rng.sample(self._poses, self._config.rounds)
             self._round_index = 0
             return self._start_countdown(now)
@@ -176,19 +234,19 @@ class Game:
                 "the snapshot is due: call wants_people() first, then pass the "
                 "frame and the people found in it"
             )
-        return self._take_snapshot(frame, people)
+        return self._take_snapshot(now, frame, people)
 
-    def _take_snapshot(self, frame: object, people: Sequence[Person]) -> Screen:
+    def _take_snapshot(self, now: float, frame: object, people: Sequence[Person]) -> Screen:
         self._emit(SnapshotTaken(round_number=self._round_number))
 
-        players = select_players(people, self._player_count)
-        if players is None:
+        selected = select_players(people, self._player_count)
+        if selected is None:
             self._phase = _Phase.RETRY
             self._found = len(people)
             return self._retry_screen()
 
         results = []
-        for index, person in enumerate(players):
+        for index, person in enumerate(selected):
             visible = person.visible_joints(self._config.joint_confidence)
             score = round_score(
                 score_pose(self._target.joints, visible, self._config.strictness_degrees)
@@ -204,18 +262,27 @@ class Game:
                 )
             )
 
+        scored: tuple[PlayerResult, ...] = tuple(results)
+        if self._config.debug:
+            scored = pad_results_to_max(
+                scored,
+                max_players=self._config.max_players,
+                totals=self._totals,
+            )
+
         self._phase = _Phase.RESULTS
         self._results = ResultsScreen(
             round_number=self._round_number,
             total_rounds=self._config.rounds,
             target=self._target,
-            snapshot=frame,
-            players=tuple(results),
+            snapshot=_copy_snapshot(frame),
+            players=scored,
+            idle=True,
         )
         self._emit(
             RoundScored(
                 round_number=self._round_number,
-                scores=tuple(result.round_score for result in results),
+                scores=tuple(result.round_score for result in scored),
                 totals=tuple(self._totals),
             )
         )

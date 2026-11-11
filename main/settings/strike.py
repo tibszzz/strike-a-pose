@@ -21,6 +21,9 @@ class StrikeConfig:
     min_players: int = 2
     max_players: int = 4
 
+    # Solo lobby + pad results to max_players so reveal timing can be tested alone.
+    debug: bool = False
+
     # A segment scores 100 when it points the same way as the target and
     # falls in a straight line to 0 at this many degrees off. Lower is
     # stricter.

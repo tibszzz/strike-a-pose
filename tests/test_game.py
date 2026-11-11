@@ -21,7 +21,6 @@ from main.games.strike.screens import (
 
 FRAME = object()  # stands in for a camera frame; the game only passes it along
 COUNTDOWN = 5.0
-ROUND_GAP = 10.0  # seconds between the starts of two rounds in these tests
 SPOTS = (200.0, 500.0, 800.0, 1100.0, 1400.0)  # where people stand, left to right
 
 
@@ -56,15 +55,32 @@ def play_round(game, started_at, strike):
     return game.step(snapshot_time, frame=FRAME, people=strike(countdown.target))
 
 
+def advance_results(game, snapshot_at, player_count=None, confirm=True):
+    """Confirm past idle results (immediate after snapshot).
+
+    Returns `(screen, next_started_at)` where `next_started_at` is when the
+    following countdown began (or idle time if not confirming).
+    """
+    screen = game.step(snapshot_at)
+    assert isinstance(screen, ResultsScreen)
+    assert screen.idle
+    if not confirm:
+        return screen, snapshot_at
+    confirm_at = snapshot_at + 0.01
+    screen = game.step(confirm_at, confirm=True)
+    return screen, confirm_at
+
+
 def play_full_game(game, strike, players=2):
     """Play all five rounds. Returns each round's results and the final screen."""
     start_game(game, players)
     results = []
     screen = None
-    for round_index in range(5):
-        started_at = round_index * ROUND_GAP
+    started_at = 0.0
+    for _ in range(5):
         results.append(play_round(game, started_at, strike))
-        screen = game.step(started_at + ROUND_GAP, confirm=True)
+        snapshot_at = started_at + COUNTDOWN
+        screen, started_at = advance_results(game, snapshot_at, players)
     return results, screen
 
 
@@ -124,7 +140,7 @@ def test_confirm_with_2_to_4_people_starts_round_1(count):
 
 
 def test_debug_lobby_allows_a_solo_player():
-    game, _ = new_game(min_players=1)
+    game, _ = new_game(min_players=1, debug=True)
 
     lobby = game.step(0.0, people=standing_people(1))
     assert lobby.can_start
@@ -135,7 +151,10 @@ def test_debug_lobby_allows_a_solo_player():
 
     results = play_round(game, 0.0, everyone_perfect(1))
     assert isinstance(results, ResultsScreen)
-    assert [player.round_score for player in results.players] == [100]
+    assert len(results.players) == game._config.max_players
+    assert results.players[0].round_score == 100
+    assert [player.player for player in results.players] == [1, 2, 3, 4]
+    assert results.idle
 
 
 # --- countdown and snapshot --------------------------------------------------
@@ -275,8 +294,11 @@ def test_snapshot_fires_once_at_5_seconds():
     assert of_type(events, SnapshotTaken) == [SnapshotTaken(round_number=1)]
 
     assert not game.wants_people(6.0)
-    assert game.step(6.0) is results
-    assert game.step(7.0) is results
+    later = game.step(6.0)
+    assert isinstance(later, ResultsScreen)
+    assert later.snapshot is results.snapshot
+    assert later.idle
+    assert game.step(7.0).snapshot is results.snapshot
     assert len(of_type(events, SnapshotTaken)) == 1
     assert len(of_type(events, RoundScored)) == 1
 
@@ -285,6 +307,28 @@ def test_results_keep_the_snapshot_frame():
     game, _ = new_game()
     start_game(game)
     assert play_round(game, 0.0, everyone_perfect(2)).snapshot is FRAME
+
+
+def test_results_show_all_scores_immediately_and_wait_for_confirm():
+    game, _ = one_round_game()
+    start_game(game)
+    results = play_round(
+        game,
+        0.0,
+        lambda target: [
+            person_striking(target.joints, center_x=200.0),
+            person_striking(mirrored(target.joints), center_x=800.0),
+        ],
+    )
+    assert results.idle
+    assert len(results.players) == 2
+
+    still = game.step(COUNTDOWN + 1.0)
+    assert isinstance(still, ResultsScreen)
+    assert still.snapshot is results.snapshot
+
+    final = game.step(COUNTDOWN + 1.01, confirm=True)
+    assert isinstance(final, FinalScreen)
 
 
 def test_snapshot_without_people_is_a_caller_error():

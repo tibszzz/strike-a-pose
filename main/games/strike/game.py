@@ -450,43 +450,90 @@ def _compose_retry(screen: RetryScreen) -> np.ndarray:
     return canvas
 
 
+def _parked_target_rect() -> Rect:
+    """Countdown HUD parked top-right (after intro animation)."""
+    return _countdown_target_rect(COUNTDOWN_HOLD_SECONDS + COUNTDOWN_EASE_SECONDS)
+
+
 def _compose_results(screen: ResultsScreen) -> np.ndarray:
     canvas = new_canvas()
+    transform = draw_frame(canvas, screen.snapshot, FULL_CANVAS)
     _header(
         canvas,
         copy.round_results.format(
             round_number=screen.round_number, total_rounds=screen.total_rounds
         ),
+        show_esc=False,
     )
+    draw_stick_figure(canvas, screen.target.joints, _parked_target_rect(), WHITE)
 
-    photo: Rect = (40, 90, 800, 590)
-    fill(canvas, photo, PANEL)
-    transform = draw_frame(canvas, screen.snapshot, photo)
     for player in screen.players:
         color = player_color(player.player)
         draw_skeleton(canvas, player.joints, transform, color)
         draw_box_label(canvas, player_name(player.player), player.box, transform, color)
+        if "nose" in player.joints:
+            head_x, head_y = transform.apply(player.joints["nose"])
+        else:
+            left, top = transform.apply((player.box[0], player.box[1]))
+            right, _ = transform.apply((player.box[2], player.box[1]))
+            head_x = (left + right) // 2
+            head_y = top
+        draw_text(
+            canvas,
+            str(player.round_score),
+            head_x,
+            max(head_y - 56, 40),
+            1.6,
+            color,
+            "center",
+            outline=True,
+        )
 
-    side_left, side_width = 880, 360
-    side_right = side_left + side_width
-    _target_panel(
-        canvas, screen.target, (side_left, 90, side_width, 240), caption_height=40, caption_scale=0.8
-    )
+    if screen.idle:
+        dim(canvas, (0, CANVAS_HEIGHT - 84, CANVAS_WIDTH, 84), amount=0.4)
+        _draw_results_hold_chrome(
+            canvas,
+            progress=0.0,
+            final_round=screen.round_number == screen.total_rounds,
+        )
 
-    draw_text(canvas, copy.col_player, side_left + 10, 378, 0.6, MUTED)
-    draw_text(canvas, copy.col_round, side_left + 215, 378, 0.6, MUTED, "right")
-    draw_text(canvas, copy.col_total, side_right - 10, 378, 0.6, MUTED, "right")
-    for row, player in enumerate(screen.players):
-        y = 432 + row * 58
-        color = player_color(player.player)
-        draw_text(canvas, player_name(player.player), side_left + 10, y, 1.3, color)
-        draw_text(canvas, str(player.round_score), side_left + 215, y, 1.3, WHITE, "right")
-        draw_text(canvas, str(player.total), side_right - 10, y, 1.3, WHITE, "right")
-
-    last_round = screen.round_number == screen.total_rounds
-    prompt = copy.space_final if last_round else copy.space_next
-    draw_text(canvas, prompt, side_left + side_width // 2, 668, 0.8, ACCENT, "center")
     return canvas
+
+
+RESULTS_HOLD_BAR: Rect = (
+    CANVAS_WIDTH // 2 - 140,
+    CANVAS_HEIGHT - 28,
+    280,
+    10,
+)
+
+
+def _draw_results_hold_chrome(
+    canvas: np.ndarray, *, progress: float, final_round: bool
+) -> None:
+    prompt = copy.results_thumbs_final if final_round else copy.results_thumbs
+    draw_text(
+        canvas,
+        prompt,
+        CANVAS_WIDTH // 2,
+        CANVAS_HEIGHT - 48,
+        0.9,
+        ACCENT,
+        "center",
+        outline=True,
+    )
+    bar_x, bar_y, bar_w, bar_h = RESULTS_HOLD_BAR
+    fill(canvas, (bar_x, bar_y, bar_w, bar_h), MUTED)
+    if progress > 0:
+        fill_w = max(1, int(bar_w * min(1.0, progress)))
+        fill(canvas, (bar_x, bar_y, fill_w, bar_h), ACCENT)
+
+
+def overlay_results_hold(
+    canvas: np.ndarray, progress: float, *, final_round: bool
+) -> None:
+    """Update idle hold bar after compose (pygame shell)."""
+    _draw_results_hold_chrome(canvas, progress=progress, final_round=final_round)
 
 
 def _winners_line(screen: FinalScreen) -> str:
