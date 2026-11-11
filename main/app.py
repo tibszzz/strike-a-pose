@@ -10,7 +10,8 @@ Background rules:
 
 Keys: D debug overlay, R reset, F fullscreen, Q quit app.
 Esc leaves a playable game for the menu; on the menu Esc quits.
-Arrow keys / Enter feed MenuCommand to the current game when it handles them.
+Arrow keys / Enter and (when the game sets wants_gestures) MediaPipe hand
+gestures feed MenuCommand to the current game when it handles them.
 """
 
 from __future__ import annotations
@@ -24,7 +25,14 @@ import pygame
 
 from .audio import init_mixer
 from .games.registry import GameEntry
-from .nav import MenuCommand, QuitApp, StartGame
+from .nav import (
+    GestureCommandMapper,
+    GestureRecognizerSession,
+    MenuCommand,
+    QuitApp,
+    StartGame,
+    load_gesture_nav_config,
+)
 from .pose import SKELETON, PoseFrame
 from .pose.tracker import PoseTracker
 
@@ -84,10 +92,28 @@ def _is_menu(game: Game) -> bool:
     return bool(getattr(game, "is_menu", False))
 
 
+def _wants_gestures(game: Game) -> bool:
+    return bool(getattr(game, "wants_gestures", False))
+
+
 def _poll_nav(game: Game):
     if hasattr(game, "poll_nav"):
         return game.poll_nav()
     return None
+
+
+def _sync_gestures(session: GestureRecognizerSession, mapper: GestureCommandMapper, game: Game) -> None:
+    want = _wants_gestures(game)
+    if want and not session.active:
+        session.start()
+        mapper.reset()
+    elif not want and session.active:
+        session.stop()
+        mapper.reset()
+
+
+def _timestamp_ms(frame: PoseFrame) -> int:
+    return int(frame.timestamp * 1000)
 
 
 def run(
@@ -104,6 +130,13 @@ def run(
     tracker = PoseTracker(camera_index=camera_index, imgsz=imgsz, device=device)
     print(f"pose model running on: {tracker.device}")
 
+    gesture_config = load_gesture_nav_config()
+    gestures = GestureRecognizerSession(gesture_config)
+    mapper = GestureCommandMapper(
+        min_score=gesture_config.min_score,
+        refractory_ms=gesture_config.refractory_ms,
+    )
+
     first = tracker.read()
     cam_h, cam_w = first.image.shape[:2]
     size = (cam_w, cam_h)
@@ -118,6 +151,7 @@ def run(
 
     game: Game = start_game(initial_game)
     pygame.display.set_caption(game.title)
+    _sync_gestures(gestures, mapper, game)
     debug_font = pygame.font.SysFont("menlo,monaco,courier", 20)
 
     debug, fullscreen = False, False
@@ -138,6 +172,7 @@ def run(
                         else:
                             game = start_game(None)
                             pygame.display.set_caption(game.title)
+                            _sync_gestures(gestures, mapper, game)
                     elif event.key == pygame.K_d:
                         debug = not debug
                     elif event.key == pygame.K_r:
@@ -156,6 +191,15 @@ def run(
                         elif hasattr(game, "handle_key"):
                             game.handle_key(event.key)
 
+            if gestures.active:
+                snap = gestures.recognize(frame.image, _timestamp_ms(frame))
+                if _wants_gestures(game):
+                    game.gesture_snapshot = snap
+                if hasattr(game, "handle_command"):
+                    command = mapper.feed(snap, _timestamp_ms(frame))
+                    if command is not None:
+                        game.handle_command(command)
+
             game.update(frame)
             nav = _poll_nav(game)
             if isinstance(nav, QuitApp):
@@ -163,6 +207,7 @@ def run(
             elif isinstance(nav, StartGame):
                 game = start_game(nav.game_id)
                 pygame.display.set_caption(game.title)
+                _sync_gestures(gestures, mapper, game)
                 game.update(frame)
 
             if hasattr(game, "render_camera"):
@@ -194,5 +239,6 @@ def run(
             fps.tick()
             frame = tracker.read()
     finally:
+        gestures.close()
         tracker.close()
         pygame.quit()

@@ -25,7 +25,17 @@ Launch the shared window (camera + pose stay warm while you switch titles):
 python -m main
 ```
 
-Use Up/Down and Enter on the menu. In a game, `Esc` returns to the menu; `Q` quits the app. Optional: `python -m main <game>` jumps straight into that title (Esc still returns to the menu).
+On the menu, control with hand gestures (primary) or the keyboard (secondary):
+
+| Gesture | Action |
+|---|---|
+| Thumbs up | Move selection up |
+| Thumbs down | Move selection down |
+| Victory (peace) | Select / start game |
+
+Keys still work: Up/Down, Enter. In a game, `Esc` returns to the menu; on the menu `Esc` quits. `Q` always quits the app. Optional: `python -m main <game>` jumps straight into that title (Esc still returns to the menu).
+
+Gesture recognition uses MediaPipe and the vendored model at `assets/models/gesture_recognizer.task`. It runs only while the menu (or any game with `wants_gestures`) is active. Tunables via env: `MIN_SCORE` (default 0.5), `REFRACTORY_MS` (default 350), `GESTURE_MODEL_PATH` (override model path).
 
 ### Wild West Duel (2 players)
 
@@ -134,13 +144,13 @@ Layout:
 
 - `main/pose/`: live YOLO tracker, P1/P2 assignment, full `people` list, gesture helpers; pose-file types in `library.py`
 - `main/app.py`: shared pygame shell; swaps `Game` instances without remounting the pose tracker
-- `main/nav.py`: menu commands and `StartGame` / `QuitApp` navigation
-- `main/games/menu.py`: in-window game picker (`MenuGame`)
+- `main/nav/`: menu commands, `StartGame` / `QuitApp`, MediaPipe gesture session + command mapper
+- `main/games/menu.py`: in-window game picker (`MenuGame`); live camera + gesture hints
 - `main/games/registry.py`: playable game factories for CLI + menu
 - `main/games/duel/`: Wild West Duel (from `shooter-v1`)
 - `main/games/dodgeball/`: Dodgeball and Cannonball (from `kaizer1v`)
 - `main/games/strike/`: party pose game; `play.py` is the pygame adapter, `logic.py` rules, `game.py` compose/draw
 - `main/config.py`: `.env` loading, message lists, and strike `Config`
-- `assets/models/`: pose model weights
+- `assets/models/`: YOLO pose weights and MediaPipe `gesture_recognizer.task`
 - `assets/poses/`: strike pose library
 - `assets/fonts/`: Pixelify Sans (SIL Open Font License, see `OFL.txt`)
