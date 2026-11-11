@@ -336,13 +336,15 @@ class DodgeballGame:
         self.hit_message_timer = 0
         self.hit_timer = 0
         self.person_boxes = []
-    
+        # Pick the launch spot now so players can see it during the countdown.
+        self._start_ball()
+
     def _start_ball(self) -> None:
-        """Start the ball at a random position with random velocity."""
+        """Place the ball at a random position with a random launch velocity."""
         self.ball = Ball(
             x=random.randint(50, self.w - 50),
             y=random.randint(50, self.h - 50),
-            radius=50,
+            radius=20,
             max_speed=40.0,
             elasticity=0.95,
         )
@@ -385,7 +387,6 @@ class DodgeballGame:
         if self.countdown > 0:
             self.countdown -= 1
             if self.countdown == 0:
-                self._start_ball()
                 self.hits = [0] * self.player_count  # Reset counters when ball starts
             return  # Don't update game during countdown
         
@@ -512,6 +513,25 @@ class DodgeballGame:
         draw_text(canvas, message, self.w // 2, self.h - 44, 1.0, color, "center", outline=True)
         draw_text(canvas, "or press 1 / 2 / 3 to choose", self.w // 2, self.h - 14, 0.6, MUTED, "center")
 
+    def _draw_launch_marker(self, canvas: pygame.Surface) -> None:
+        """Pulsing ring plus an arrow showing the direction the ball will fly."""
+        bx, by = int(self.ball.x), int(self.ball.y)
+        r = int(self.ball.radius)
+        pulse = (math.sin(self.countdown * 0.25) + 1) / 2  # 0..1
+        overlay = pygame.Surface(canvas.get_size(), pygame.SRCALPHA)
+        pygame.draw.circle(overlay, (*YELLOW, int(90 + 120 * pulse)), (bx, by), r + 12 + int(14 * pulse), 4)
+
+        speed = math.hypot(self.ball.vx, self.ball.vy) or 1.0
+        ux, uy = self.ball.vx / speed, self.ball.vy / speed
+        start = (bx + ux * (r + 10), by + uy * (r + 10))
+        tip = (bx + ux * (r + 90), by + uy * (r + 90))
+        pygame.draw.line(overlay, (*YELLOW, 220), start, tip, 6)
+        head = 22
+        left = (tip[0] - ux * head - uy * head * 0.6, tip[1] - uy * head + ux * head * 0.6)
+        right = (tip[0] - ux * head + uy * head * 0.6, tip[1] - uy * head - ux * head * 0.6)
+        pygame.draw.polygon(overlay, (*YELLOW, 220), [tip, left, right])
+        canvas.blit(overlay, (0, 0))
+
     def draw(self, canvas: pygame.Surface, frame: PoseFrame) -> None:
         """Draw game elements."""
         if self.in_lobby:
@@ -526,9 +546,11 @@ class DodgeballGame:
                 pygame.draw.polygon(temp_surf, (*color, 80), body_polygon, 2)
                 canvas.blit(temp_surf, (0, 0))
         
-        # Draw ball
+        # Draw ball (during the countdown, also flag where it launches from)
+        if self.countdown > 0:
+            self._draw_launch_marker(canvas)
         self.ball.draw(canvas)
-        
+
         # Draw hit effect
         if self.hit_timer > 0:
             alpha = int(255 * (self.hit_timer / 45))
