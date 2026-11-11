@@ -1,0 +1,18 @@
+{
+  "name": "warrior",
+  "joints": {
+    "nose": [0.500, 0.002],
+    "left_shoulder": [0.628, 0.181],
+    "right_shoulder": [0.372, 0.181],
+    "left_elbow": [0.821, 0.181],
+    "right_elbow": [0.179, 0.181],
+    "left_wrist": [1.000, 0.181],
+    "right_wrist": [0.000, 0.181],
+    "left_hip": [0.577, 0.566],
+    "right_hip": [0.423, 0.566],
+    "left_knee": [0.821, 0.707],
+    "right_knee": [0.242, 0.782],
+    "left_ankle": [0.821, 0.989],
+    "right_ankle": [0.060, 0.998]
+  }
+}
