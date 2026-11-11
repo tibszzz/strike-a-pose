@@ -53,9 +53,9 @@ class MenuGame:
         self._thumb = ThumbHoldTracker(hold_s=cfg.thumb_hold_s, min_score=cfg.min_score)
         self._hard_lock: int | None = None
         self._hover: int | None = None
-        self._title_font = styles.load_font(theme.title, theme.menu_title_px(self.h))
-        self._hint_font = styles.load_font(theme.body, theme.hint_px(self.h))
-        self._tile_label_font = styles.load_font(theme.title, theme.tile_label_px(self.h))
+        self._title_font = styles.load_font(theme.font, theme.menu_title_px(self.h))
+        self._hint_font = styles.load_font(theme.font, theme.hint_px(self.h))
+        self._tile_label_font = styles.load_font(theme.font, theme.tile_label_px(self.h))
 
     def reset(self) -> None:
         self._pending = None

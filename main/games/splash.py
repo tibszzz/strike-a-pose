@@ -33,8 +33,8 @@ class SplashGame:
         self.gesture_snapshot: GestureSnapshot | None = None
         cfg = load_gesture_nav_config()
         self._thumb = ThumbHoldTracker(hold_s=cfg.thumb_hold_s, min_score=cfg.min_score)
-        self._title_font = styles.load_font(theme.title, theme.title_px(self.h))
-        self._hint_font = styles.load_font(theme.body, theme.body_px(self.h))
+        self._title_font = styles.load_font(theme.font, theme.title_px(self.h))
+        self._hint_font = styles.load_font(theme.font, theme.body_px(self.h))
 
     def reset(self) -> None:
         self._pending = None

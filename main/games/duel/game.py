@@ -240,7 +240,7 @@ class DuelGame:
     def _font(self, size: int, bold: bool) -> pygame.font.Font:
         key = (size, bold)
         if key not in self._fonts:
-            font = styles.load_font(theme.display, size)
+            font = styles.load_font(theme.font, size)
             font.bold = bold
             self._fonts[key] = font
         return self._fonts[key]

@@ -2,6 +2,9 @@
 
 Colors are always RGB. OpenCV call sites convert with `bgr()` at the draw edge.
 Shrink game deltas over time to unify look without rewriting callers.
+
+Text: change `FONT` (or `Theme.font`) to rebrand every surface — pygame and OpenCV.
+OpenCV-style `scale` maps to pixel size via `scale_to_px`.
 """
 
 from __future__ import annotations
@@ -9,6 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from pathlib import Path
 
+import numpy as np
 import pygame
 
 from main.settings.paths import ASSETS
@@ -16,9 +20,14 @@ from main.settings.paths import ASSETS
 Rgb = tuple[int, int, int]
 Rgba = tuple[int, int, int, int]
 
-TITLE_FONT = ASSETS / "fonts" / "Monofett-Regular.ttf"
-BODY_FONT = ASSETS / "fonts" / "VT323-Regular.ttf"
-DISPLAY_FONT = ASSETS / "fonts" / "PixelifySans.ttf"
+# One face for all game text. Point this at another .ttf to rebrand globally.
+FONT = ASSETS / "fonts" / "VT323-Regular.ttf"
+
+# Hershey-era callers pass scale (~0.6–2.0); 30px ≈ former duplex at scale 1.0.
+_SCALE_TO_PX = 30
+_OUTLINE_PAD = 2
+
+_font_cache: dict[tuple[str, int], pygame.font.Font] = {}
 
 
 def bgr(color: Rgb) -> Rgb:
@@ -27,11 +36,110 @@ def bgr(color: Rgb) -> Rgb:
     return (b, g, r)
 
 
+def scale_to_px(scale: float) -> int:
+    return max(8, round(scale * _SCALE_TO_PX))
+
+
 def load_font(path: Path, size: int) -> pygame.font.Font:
+    if not pygame.font.get_init():
+        pygame.font.init()
+    key = (str(path), size)
+    cached = _font_cache.get(key)
+    if cached is not None:
+        return cached
     try:
-        return pygame.font.Font(str(path), size)
+        font = pygame.font.Font(str(path), size)
     except (FileNotFoundError, OSError):
-        return pygame.font.SysFont("menlo,monaco,courier", size)
+        font = pygame.font.SysFont("menlo,monaco,courier", size)
+    _font_cache[key] = font
+    return font
+
+
+def text_size(
+    text: str, scale: float, face: Path | None = None
+) -> tuple[tuple[int, int], int]:
+    """((width, height_above_baseline), descent) — same shape as cv2.getTextSize."""
+    font = load_font(face or FONT, scale_to_px(scale))
+    width, _ = font.size(text)
+    ascent = font.get_ascent()
+    descent = abs(font.get_descent())
+    return (width, ascent), descent
+
+
+def _render_glyph(
+    font: pygame.font.Font, text: str, color: Rgb, outline: bool
+) -> pygame.Surface:
+    glyph = font.render(text, True, color)
+    if not outline:
+        return glyph
+    shade = font.render(text, True, (0, 0, 0))
+    pad = _OUTLINE_PAD
+    out = pygame.Surface(
+        (glyph.get_width() + pad * 2, glyph.get_height() + pad * 2), pygame.SRCALPHA
+    )
+    for dx in range(-pad, pad + 1):
+        for dy in range(-pad, pad + 1):
+            if dx or dy:
+                out.blit(shade, (pad + dx, pad + dy))
+    out.blit(glyph, (pad, pad))
+    return out
+
+
+def _blit_rgba_to_bgr(dst: np.ndarray, surf: pygame.Surface, x: int, y: int) -> None:
+    """Alpha-composite an RGBA pygame surface onto a BGR OpenCV image."""
+    sw, sh = surf.get_size()
+    dh, dw = dst.shape[:2]
+    x1, y1 = max(0, x), max(0, y)
+    x2, y2 = min(dw, x + sw), min(dh, y + sh)
+    if x1 >= x2 or y1 >= y2:
+        return
+    sx1, sy1 = x1 - x, y1 - y
+    sx2, sy2 = sx1 + (x2 - x1), sy1 + (y2 - y1)
+    rgba = np.frombuffer(pygame.image.tobytes(surf, "RGBA"), dtype=np.uint8).reshape(
+        (sh, sw, 4)
+    )
+    src = rgba[sy1:sy2, sx1:sx2]
+    alpha = src[..., 3:4].astype(np.float32) / 255.0
+    if not np.any(alpha):
+        return
+    src_bgr = src[..., 2::-1].astype(np.float32)
+    roi = dst[y1:y2, x1:x2].astype(np.float32)
+    dst[y1:y2, x1:x2] = (src_bgr * alpha + roi * (1.0 - alpha)).astype(np.uint8)
+
+
+def draw_text(
+    canvas: np.ndarray | pygame.Surface,
+    text: str,
+    x: int,
+    y: int,
+    scale: float = 1.0,
+    color: Rgb = (255, 255, 255),
+    align: str = "left",
+    outline: bool = False,
+    *,
+    face: Path | None = None,
+) -> pygame.Rect:
+    """Draw text with baseline at `y`. `color` is RGB. OpenCV canvases are BGR."""
+    if not text:
+        return pygame.Rect(x, y, 0, 0)
+    font = load_font(face or FONT, scale_to_px(scale))
+    surf = _render_glyph(font, text, color, outline)
+    text_w, _ = font.size(text)
+    ascent = font.get_ascent()
+    pad = _OUTLINE_PAD if outline else 0
+    if align == "center":
+        blit_x = x - text_w // 2 - pad
+    elif align == "right":
+        blit_x = x - text_w - pad
+    else:
+        blit_x = x - pad
+    blit_y = y - ascent - pad
+
+    if isinstance(canvas, pygame.Surface):
+        canvas.blit(surf, (blit_x, blit_y))
+    else:
+        _blit_rgba_to_bgr(canvas, surf, blit_x, blit_y)
+    return pygame.Rect(blit_x + pad, blit_y + pad, text_w, ascent)
 
 
 @dataclass(frozen=True)
@@ -47,9 +155,7 @@ class Theme:
     success: Rgb
     warning: Rgb
     player: tuple[Rgb, ...]
-    title: Path
-    body: Path
-    display: Path
+    font: Path
     # Shell / shared chrome extras
     hand_box: Rgb = (80, 220, 255)
     hover: Rgb = (220, 220, 220)
@@ -100,7 +206,7 @@ class Theme:
         return int(0.034 * h)
 
 
-# Brand seed: shell look (Monofett / VT323 / yellow accent on dark).
+# Brand seed: shell look (VT323 / yellow accent on dark).
 BRAND = Theme(
     bg=(0, 0, 0),
     panel=(30, 30, 30),
@@ -118,16 +224,14 @@ BRAND = Theme(
         (110, 230, 110),
         (255, 215, 70),
     ),
-    title=TITLE_FONT,
-    body=BODY_FONT,
-    display=DISPLAY_FONT,
+    font=FONT,
 )
 
 SHELL = BRAND.with_overrides(
     overlay=(0, 0, 0, 140),
 )
 
-# Duel: white page, black ink, Pixelify display (today's look as a delta).
+# Duel: white page, black ink (today's look as a delta).
 DUEL = BRAND.with_overrides(
     bg=(255, 255, 255),
     panel=(255, 255, 255),

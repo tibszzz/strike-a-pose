@@ -44,8 +44,6 @@ RULES = [
     rule.format(lives=LIVES, offscreen_seconds=OFFSCREEN_SECONDS) for rule in copy.rules
 ]
 
-FONT = cv2.FONT_HERSHEY_DUPLEX
-
 def _draw_heart(
     canvas: pygame.Surface, cx: int, cy: int, size: int, color: tuple[int, int, int], filled: bool
 ) -> None:
@@ -79,62 +77,9 @@ def draw_text(
     align: str = "left",
     outline: bool = False,
 ) -> pygame.Rect:
-    """
-    styling and text rendering functions
-    """
-    if not text:
-        return pygame.Rect(x, y, 0, 0)
-    thickness = max(1, round(scale * 1.6))
-    (text_w, text_h), baseline = cv2.getTextSize(text, FONT, scale, thickness)
-    pad = thickness + 4
-    buf_w = text_w + pad * 2
-    buf_h = text_h + baseline + pad * 2
-
-    img = np.zeros((buf_h, buf_w, 4), dtype=np.uint8)
-    origin_x = pad
-    origin_y = pad + text_h
-
-    if outline:
-        # Stamp the text in black around its own position. A single thicker
-        # stroke would not line up: cv2 spaces letters by stroke thickness, so a
-        # thick outline drifts right of the text and gets clipped at the end.
-        for dx in range(-2, 3):
-            for dy in range(-2, 3):
-                if dx or dy:
-                    cv2.putText(
-                        img,
-                        text,
-                        (origin_x + dx, origin_y + dy),
-                        FONT,
-                        scale,
-                        (0, 0, 0, 255),
-                        thickness,
-                        cv2.LINE_AA,
-                    )
-    r, g, b = color[:3]
-    cv2.putText(
-        img,
-        text,
-        (origin_x, origin_y),
-        FONT,
-        scale,
-        (r, g, b, 255),
-        thickness,
-        cv2.LINE_AA,
+    return styles.draw_text(
+        canvas, text, x, y, scale, color, align, outline, face=theme.font
     )
-
-    surf = pygame.image.frombuffer(img.tobytes(), (buf_w, buf_h), "RGBA")
-
-    if align == "center":
-        blit_x = x - text_w // 2 - pad
-    elif align == "right":
-        blit_x = x - text_w - pad
-    else:
-        blit_x = x - pad
-    blit_y = y - text_h - pad
-
-    canvas.blit(surf, (blit_x, blit_y))
-    return pygame.Rect(blit_x + pad, blit_y + pad, text_w, text_h)
 
 
 def _draw_thumb(
@@ -582,7 +527,7 @@ class DodgeballGame:
         max_w = min(self.w - 64, 980)
         scale = 0.75
         while True:  # shrink until the widest rule fits the card
-            widest = max(cv2.getTextSize(l, FONT, scale, max(1, round(scale * 1.6)))[0][0] for l in lines)
+            widest = max(styles.text_size(l, scale, theme.font)[0][0] for l in lines)
             if widest <= max_w - 64 or scale <= 0.4:
                 break
             scale -= 0.05
@@ -732,8 +677,7 @@ class DodgeballGame:
         # Draw instructions strip at bottom
         instructions = "[D] Debug | [R] Reset | [F] Fullscreen | [Q/Esc] Quit"
         instr_scale = 0.65
-        instr_thickness = max(1, round(instr_scale * 1.6))
-        (instr_w, instr_h), _ = cv2.getTextSize(instructions, FONT, instr_scale, instr_thickness)
+        (instr_w, instr_h), _ = styles.text_size(instructions, instr_scale, theme.font)
         instr_bg = pygame.Surface((instr_w + 32, instr_h + 16), pygame.SRCALPHA)
         pygame.draw.rect(instr_bg, (*BLACK, 180), (0, 0, instr_bg.get_width(), instr_bg.get_height()), border_radius=6)
         canvas.blit(instr_bg, (16, self.h - instr_h - 28))

@@ -11,6 +11,7 @@ import cv2
 import numpy as np
 import pygame
 
+from main import styles
 from main.games.registry import GameEntry
 from main.pose import PoseFrame
 
@@ -73,7 +74,7 @@ def preload_games(
     successful instances stay in the cache.
     """
     cache = GameCache()
-    font = pygame.font.SysFont("menlo,monaco,courier", 36)
+    font = styles.load_font(styles.FONT, 36)
     warm_canvas = pygame.Surface(size)
     _show_loading(screen, font)
 

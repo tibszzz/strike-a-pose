@@ -31,7 +31,6 @@ theme = styles.STRIKE
 copy = content.Strike
 
 WINDOW_NAME = copy.window_title
-FONT = cv2.FONT_HERSHEY_DUPLEX
 
 # OpenCV wants BGR; Theme stores RGB.
 BACKGROUND = styles.bgr(theme.bg)
@@ -99,16 +98,20 @@ def draw_text(
 ) -> None:
     """Draw text with its baseline at `y`. `align` places `x` at the text's
     left edge, centre or right edge. `outline` keeps text readable over video.
+
+    `color` is BGR (OpenCV); shared renderer wants RGB.
     """
-    thickness = max(1, round(scale * 1.6))
-    (width, _), _ = cv2.getTextSize(text, FONT, scale, thickness)
-    if align == "center":
-        x -= width // 2
-    elif align == "right":
-        x -= width
-    if outline:
-        cv2.putText(canvas, text, (x, y), FONT, scale, (0, 0, 0), thickness + 4, cv2.LINE_AA)
-    cv2.putText(canvas, text, (x, y), FONT, scale, color, thickness, cv2.LINE_AA)
+    styles.draw_text(
+        canvas,
+        text,
+        x,
+        y,
+        scale,
+        color=(color[2], color[1], color[0]),
+        align=align,
+        outline=outline,
+        face=theme.font,
+    )
 
 
 def fill(canvas: np.ndarray, rect: Rect, color: tuple[int, int, int]) -> None:
@@ -303,9 +306,8 @@ def _countdown_target_rect(elapsed: float) -> Rect:
 
 
 def _baseline_for_vertical_center(text: str, center_y: int, scale: float) -> int:
-    """OpenCV baseline that places the glyph's visual center at `center_y`."""
-    thickness = max(1, round(scale * 1.6))
-    (_, height), descent = cv2.getTextSize(text, FONT, scale, thickness)
+    """Baseline that places the glyph's visual center at `center_y`."""
+    (_, height), descent = styles.text_size(text, scale, theme.font)
     return round(center_y + (height - descent) / 2)
 
 
