@@ -36,18 +36,18 @@ python -m main strike --debug
 
 | Gesture | Splash | Menu |
 |---|---|---|
-| Thumbs up | Hold ~1.5s to open the menu | Hold ~1.5s to confirm the selected game |
+| Thumbs up | Hold ~1s to open the menu | Hold ~1s to confirm the selected game |
 | Pointing up | — | Select the tile under the index fingertip (follows as you move) |
 | Tip over tile | — | Soft-hover highlight (not enough to select) |
 
-Hold Thumbs_Up for 1.5s on the splash to open the menu. Menu shows large square
+Hold Thumbs_Up for 1s on the splash to open the menu. Menu shows large square
 tiles: Pointing_Up over a tile selects it (selection follows the fingertip
-while you keep pointing), then hold Thumbs_Up for 1.5s to start. With
+while you keep pointing), then hold Thumbs_Up for 1s to start. With
 `--debug`, arrow keys (including Left/Right) move the menu selection and Enter
 confirms instantly (on splash, Enter / Up also advances). In a game, `Esc`
 returns to the menu; on splash or menu, `Esc` quits. `Q` always quits.
 
-Gesture recognition uses MediaPipe (`assets/models/gesture_recognizer.task`). It runs only while the splash/menu (or a game with `wants_gestures`) is active. When YOLO sees wrists raised above the hip, the shell crops and upscales those regions before MediaPipe so hands stay recognizable farther from the camera. If people are visible but no wrists are above the hip, hand detection is skipped entirely (no full-frame fallback). Env tunables: `MIN_SCORE` (default 0.5), `REFRACTORY_MS` (default 350), `GESTURE_MODEL_PATH`, `ROI` (1/0), `ROI_SIZE` (320), `ROI_SCALE` (2.5), `ROI_MIN_PX` (80), `ROI_MAX` (2), `MIN_WRIST_CONF` (0.35), `RAISE_GATE` (1/0), `RAISE_LIFT_FRAC` (0.08), `RAISE_MATCH_FRAC` (0.35), `THUMB_HOLD_S` (1.5).
+Gesture recognition uses MediaPipe (`assets/models/gesture_recognizer.task`). It runs only while the splash/menu (or a game with `wants_gestures`) is active. When YOLO sees wrists raised above the hip, the shell crops and upscales those regions before MediaPipe so hands stay recognizable farther from the camera. If people are visible but no wrists are above the hip, hand detection is skipped entirely (no full-frame fallback). Env tunables: `MIN_SCORE` (default 0.5), `REFRACTORY_MS` (default 350), `GESTURE_MODEL_PATH`, `ROI` (1/0), `ROI_SIZE` (320), `ROI_SCALE` (2.5), `ROI_MIN_PX` (80), `ROI_MAX` (2), `MIN_WRIST_CONF` (0.35), `RAISE_GATE` (1/0), `RAISE_LIFT_FRAC` (0.08), `RAISE_MATCH_FRAC` (0.35), `THUMB_HOLD_S` (1.0).
 
 ### Shared flags
 

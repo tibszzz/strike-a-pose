@@ -142,9 +142,9 @@ def test_menu_pointing_up_locks_and_held_thumbs_up_starts():
         landmarks=_landmarks_at(*tip),
     )
     menu.update(_frame(timestamp=1.0))  # hold starts
-    menu.update(_frame(timestamp=2.0))  # 1.0s — not enough
+    menu.update(_frame(timestamp=1.9))  # 0.9s — not enough
     assert menu.poll_nav() is None
-    menu.update(_frame(timestamp=2.5))  # 1.5s — confirm
+    menu.update(_frame(timestamp=2.0))  # 1.0s — confirm
     assert menu.poll_nav() == StartGame("dodgeball")
 
 
@@ -172,19 +172,19 @@ def test_menu_thumbs_up_hold_resets_if_released_early():
         label="Thumb_Up", score=1.0, landmarks=_landmarks_at(*tip)
     )
     menu.update(_frame(timestamp=1.0))
-    menu.update(_frame(timestamp=2.0))  # 1.0s into hold — not enough
+    menu.update(_frame(timestamp=1.5))  # 0.5s into hold — not enough
     assert menu.poll_nav() is None
 
     menu.gesture_snapshot = GestureSnapshot(label=None, score=0.0, landmarks=_landmarks_at(*tip))
-    menu.update(_frame(timestamp=2.1))
+    menu.update(_frame(timestamp=1.6))
 
     menu.gesture_snapshot = GestureSnapshot(
         label="Thumb_Up", score=1.0, landmarks=_landmarks_at(*tip)
     )
-    menu.update(_frame(timestamp=2.2))
-    menu.update(_frame(timestamp=3.2))  # another 1.0s — still not enough
+    menu.update(_frame(timestamp=1.7))
+    menu.update(_frame(timestamp=2.6))  # 0.9s — still not enough
     assert menu.poll_nav() is None
-    menu.update(_frame(timestamp=3.7))  # 1.5s of continuous hold
+    menu.update(_frame(timestamp=2.7))  # 1.0s of continuous hold
     assert menu.poll_nav() == StartGame("duel")
 
 
@@ -199,19 +199,19 @@ def test_menu_thumbs_up_hold_ignores_other_hand_until_release():
 
     menu.gesture_snapshot = GestureSnapshot(label="Thumb_Up", score=1.0, landmarks=near)
     menu.update(_frame(timestamp=1.0))
-    menu.update(_frame(timestamp=2.0))  # 1.0s in
-    assert menu._thumb.progress == pytest.approx(1.0 / 1.5, rel=1e-3)
+    menu.update(_frame(timestamp=1.5))  # 0.5s in
+    assert menu._thumb.progress == pytest.approx(0.5, rel=1e-3)
 
     # Other hand also Thumb_Up — must not switch or advance the hold clock.
     menu.gesture_snapshot = GestureSnapshot(label="Thumb_Up", score=1.0, landmarks=far)
-    menu.update(_frame(timestamp=2.4))
-    assert menu._thumb.progress == pytest.approx(1.0 / 1.5, rel=1e-3)
+    menu.update(_frame(timestamp=1.9))
+    assert menu._thumb.progress == pytest.approx(0.5, rel=1e-3)
     assert menu.poll_nav() is None
 
     # Original hand still holding — progress resumes from where it left off.
     menu.gesture_snapshot = GestureSnapshot(label="Thumb_Up", score=1.0, landmarks=near)
-    menu.update(_frame(timestamp=2.4))
-    menu.update(_frame(timestamp=2.9))  # +0.5s → 1.5s total
+    menu.update(_frame(timestamp=1.9))
+    menu.update(_frame(timestamp=2.4))  # +0.5s → 1.0s total
     assert menu.poll_nav() == StartGame("duel")
 
 
@@ -233,9 +233,9 @@ def test_splash_held_thumbs_up_opens_menu():
         label="Thumb_Up", score=1.0, landmarks=((100.0, 200.0),)
     )
     splash.update(_frame(timestamp=1.0))
-    splash.update(_frame(timestamp=2.0))  # 1.0s — not enough
+    splash.update(_frame(timestamp=1.9))  # 0.9s — not enough
     assert splash.poll_nav() is None
-    splash.update(_frame(timestamp=2.5))  # 1.5s — open menu
+    splash.update(_frame(timestamp=2.0))  # 1.0s — open menu
     assert splash.poll_nav() == StartGame(None)
     assert splash.poll_nav() is None
 
@@ -247,19 +247,19 @@ def test_splash_thumbs_up_hold_resets_if_released_early():
         label="Thumb_Up", score=1.0, landmarks=((100.0, 200.0),)
     )
     splash.update(_frame(timestamp=1.0))
-    splash.update(_frame(timestamp=2.0))
+    splash.update(_frame(timestamp=1.5))
     assert splash.poll_nav() is None
 
     splash.gesture_snapshot = GestureSnapshot(label=None, score=0.0)
-    splash.update(_frame(timestamp=2.1))
+    splash.update(_frame(timestamp=1.6))
 
     splash.gesture_snapshot = GestureSnapshot(
         label="Thumb_Up", score=1.0, landmarks=((100.0, 200.0),)
     )
-    splash.update(_frame(timestamp=2.2))
-    splash.update(_frame(timestamp=3.2))
+    splash.update(_frame(timestamp=1.7))
+    splash.update(_frame(timestamp=2.6))
     assert splash.poll_nav() is None
-    splash.update(_frame(timestamp=3.7))
+    splash.update(_frame(timestamp=2.7))
     assert splash.poll_nav() == StartGame(None)
 
 

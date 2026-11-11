@@ -15,7 +15,7 @@ from .gestures import GestureSnapshot
 
 @dataclass
 class ThumbHoldTracker:
-    hold_s: float = 1.5
+    hold_s: float = 1.0
     min_score: float = 0.5
     match_min_px: float = 80.0
     match_frac: float = 0.15  # of min(frame w, h)
