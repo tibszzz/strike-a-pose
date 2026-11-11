@@ -13,6 +13,7 @@ from .gestures import (
     GestureNavConfig,
     GestureRecognizerSession,
     GestureSnapshot,
+    HandGesture,
     load_gesture_nav_config,
 )
 from .thumb_hold import ThumbHoldTracker, effective_label, hand_anchor
@@ -23,6 +24,7 @@ __all__ = [
     "GestureNavConfig",
     "GestureRecognizerSession",
     "GestureSnapshot",
+    "HandGesture",
     "LABEL_TO_COMMAND",
     "MenuCommand",
     "Nav",

@@ -11,7 +11,6 @@ import math
 
 from main.pose.library import SEGMENTS, Joints, Point, segment_vector
 
-
 def angle_between(a: Point, b: Point) -> float:
     """Angle between two directions, in degrees from 0 to 180."""
     dot = a[0] * b[0] + a[1] * b[1]

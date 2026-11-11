@@ -1,4 +1,4 @@
-"""Dodgeball Game: Avoid the bouncing ball! Ball hits body = lose points."""
+"""Dodgeball Game: Avoid the bouncing ball! Each player has 5 lives; a ball hit costs one."""
 
 from __future__ import annotations
 import math
@@ -8,6 +8,8 @@ import numpy as np
 import pygame
 from main.pose import Person, PoseFrame
 from main.pose.library import left_to_right
+from .ball import Ball
+from .roster import OUT, PLAYING, THUMB_DOWN, THUMB_UP, Roster
 
 # Colors
 WHITE = (255, 255, 255)
@@ -27,9 +29,47 @@ PLAYER_COLORS = [BLUE, RED, GREEN]
 MIN_PLAYERS = 1
 MAX_PLAYERS = 3
 FPS = 30
+LIVES = 5  # chances per player; at 0 the player is out
+OFFSCREEN_SECONDS = 3  # out of frame this long during play = lose a life
+OFFSCREEN_FRAMES = OFFSCREEN_SECONDS * FPS
+GESTURE_HOLD_FRAMES = FPS // 3  # hold a thumb this long (~0.3s) for it to count
+
+# Shown on the intro (lobby) screen; mirrors "How to play" in README.md
+RULES = [
+    "Stand in front of the camera",
+    "Dodge the ball bouncing around the live feed",
+    f"Everyone starts with {LIVES} lives (hearts, top-right)",
+    "Ball touches your body: lose a life and the round pauses",
+    "Press R to resume. No lives left and you're out",
+    f"Leave the screen for {OFFSCREEN_SECONDS} seconds: lose a life",
+    "Last player standing wins. Solo: survive as long as you can",
+    "NOTE: Red ball = fast, orange = medium, yellow = slow",
+]
 
 # Font style from games/pose/game.py (Strike a Pose)
 FONT = cv2.FONT_HERSHEY_DUPLEX
+
+def _draw_heart(
+    canvas: pygame.Surface, cx: int, cy: int, size: int, color: tuple[int, int, int], filled: bool
+) -> None:
+    """Heart icon centred on (cx, cy), `size` px wide. Lost lives are drawn grey and faded."""
+    pad = 3  # room for the black edge
+    r = size // 4
+    surf = pygame.Surface((size + pad * 2, size + pad * 2), pygame.SRCALPHA)
+    ox, oy = surf.get_width() // 2, r + pad + 1  # heart origin inside the surface
+
+    def shape(fill, grow: int) -> None:
+        for lx in (ox - r, ox + r):
+            pygame.draw.circle(surf, fill, (lx, oy), r + grow)
+        pygame.draw.polygon(
+            surf, fill, [(ox - 2 * r - grow, oy + r // 4), (ox, oy + 3 * r + grow), (ox + 2 * r + grow, oy + r // 4)]
+        )
+
+    shape((*BLACK, 255), 2)  # black edge keeps the icon readable over video
+    shape((*color, 255) if filled else (*MUTED, 255), 0)
+    if not filled:
+        surf.set_alpha(110)
+    canvas.blit(surf, (cx - surf.get_width() // 2, cy - surf.get_height() // 2))
 
 
 def draw_text(
@@ -42,10 +82,8 @@ def draw_text(
     align: str = "left",
     outline: bool = False,
 ) -> pygame.Rect:
-    """Draw text matching games/pose/game.py font style (cv2.FONT_HERSHEY_DUPLEX).
-
-    `y` is the baseline position. `align` places `x` at left, center, or right.
-    `outline` keeps text readable over video with a black border.
+    """
+    styling and text rendering functions
     """
     if not text:
         return pygame.Rect(x, y, 0, 0)
@@ -60,16 +98,22 @@ def draw_text(
     origin_y = pad + text_h
 
     if outline:
-        cv2.putText(
-            img,
-            text,
-            (origin_x, origin_y),
-            FONT,
-            scale,
-            (0, 0, 0, 255),
-            thickness + 4,
-            cv2.LINE_AA,
-        )
+        # Stamp the text in black around its own position. A single thicker
+        # stroke would not line up: cv2 spaces letters by stroke thickness, so a
+        # thick outline drifts right of the text and gets clipped at the end.
+        for dx in range(-2, 3):
+            for dy in range(-2, 3):
+                if dx or dy:
+                    cv2.putText(
+                        img,
+                        text,
+                        (origin_x + dx, origin_y + dy),
+                        FONT,
+                        scale,
+                        (0, 0, 0, 255),
+                        thickness,
+                        cv2.LINE_AA,
+                    )
     r, g, b = color[:3]
     cv2.putText(
         img,
@@ -96,168 +140,30 @@ def draw_text(
     return pygame.Rect(blit_x + pad, blit_y + pad, text_w, text_h)
 
 
+def _draw_thumb(
+    canvas: pygame.Surface, cx: int, cy: int, size: int, color: tuple[int, int, int], up: bool = True
+) -> None:
+    """Thumbs-up (or, flipped, thumbs-down) icon centred on (cx, cy), `size` px tall."""
+    s = size
+    surf = pygame.Surface((s, s), pygame.SRCALPHA)
 
-class Ball:
-    """Ball that bounces around the screen randomly."""
-    
-    def __init__(
-        self,
-        x: float,
-        y: float,
-        radius: float = 25,
-        max_speed: float = 40.0,
-        elasticity: float = 0.95,
-    ):
-        self.x = x
-        self.y = y
-        self.radius = radius
-        self.max_speed = max_speed
-        self.elasticity = elasticity
-        self.vx = 0.0
-        self.vy = 0.0
-        self.reset_velocity()
-        self.color = ORANGE
-    
-    def reset_velocity(self) -> None:
-        """Give the ball a random initial velocity."""
-        angle = random.uniform(0, 2 * math.pi)
-        speed = random.uniform(10, self.max_speed)
-        self.vx = math.cos(angle) * speed
-        self.vy = math.sin(angle) * speed
-    
-    def move(self) -> None:
-        """Update ball position."""
-        self.x += self.vx
-        self.y += self.vy
-        
-        # Clamp speed
-        speed = math.sqrt(self.vx**2 + self.vy**2)
-        if speed > self.max_speed:
-            scale = self.max_speed / speed
-            self.vx *= scale
-            self.vy *= scale
-    
-    def bounce(self, width: float, height: float) -> None:
-        """Bounce off screen boundaries with randomness."""
-        if self.x - self.radius < 0:
-            self.x = self.radius
-            self.vx = -self.vx * self.elasticity
-            self.vy += random.uniform(-3, 3)
-            if random.random() < 0.1:
-                self.vy = random.uniform(-10, 10)
-        elif self.x + self.radius > width:
-            self.x = width - self.radius
-            self.vx = -self.vx * self.elasticity
-            self.vy += random.uniform(-3, 3)
-            if random.random() < 0.1:
-                self.vy = random.uniform(-10, 10)
-        
-        if self.y - self.radius < 0:
-            self.y = self.radius
-            self.vy = -self.vy * self.elasticity
-            self.vx += random.uniform(-3, 3)
-            if random.random() < 0.1:
-                self.vx = random.uniform(-10, 10)
-        elif self.y + self.radius > height:
-            self.y = height - self.radius
-            self.vy = -self.vy * self.elasticity
-            self.vx += random.uniform(-3, 3)
-            if random.random() < 0.1:
-                self.vx = random.uniform(-10, 10)
-        
-        # Random direction change (1% chance)
-        if random.random() < 0.01:
-            angle_change = random.uniform(-math.pi/4, math.pi/4)
-            current_angle = math.atan2(self.vy, self.vx)
-            new_angle = current_angle + angle_change
-            speed = math.sqrt(self.vx**2 + self.vy**2)
-            self.vx = math.cos(new_angle) * speed
-            self.vy = math.sin(new_angle) * speed
-    
-    def check_collision(self, person) -> tuple[bool, list | None]:
-        """Check if ball collides with person's body shape (keypoints polygon).
-        
-        Returns:
-            Tuple of (collision: bool, body_polygon_points: list | None)
-        """
-        if person is None:
-            return False, None
-        
-        # Get all keypoints from the person
-        keypoints = person.xy
-        
-        # Create a polygon from the keypoints for more accurate collision
-        # Use all 17 COCO keypoints to form the body shape
-        body_polygon = []
-        for i in range(len(keypoints)):
-            x, y = float(keypoints[i, 0]), float(keypoints[i, 1])
-            body_polygon.append((x, y))
-        
-        # Check if ball center is inside the polygon
-        if self._point_in_polygon((self.x, self.y), body_polygon):
-            return True, body_polygon
-        
-        # Also check if ball is close to any edge of the polygon
-        # This gives a little buffer space
-        for i in range(len(body_polygon)):
-            p1 = body_polygon[i]
-            p2 = body_polygon[(i + 1) % len(body_polygon)]
-            if self._point_to_line_distance((self.x, self.y), p1, p2) < self.radius:
-                return True, body_polygon
-        
-        return False, body_polygon
-    
-    def _point_in_polygon(self, point: tuple[float, float], polygon: list[tuple[float, float]]) -> bool:
-        """Check if a point is inside a polygon using ray casting algorithm."""
-        x, y = point
-        n = len(polygon)
-        inside = False
-        p1x, p1y = polygon[0]
-        for i in range(n + 1):
-            p2x, p2y = polygon[i % n]
-            if y > min(p1y, p2y):
-                if y <= max(p1y, p2y):
-                    if x <= max(p1x, p2x):
-                        if p1y != p2y:
-                            xinters = (y - p1y) * (p2x - p1x) / (p2y - p1y) + p1x
-                        if p1x == p2x or x <= xinters:
-                            inside = not inside
-            p1x, p1y = p2x, p2y
-        return inside
-    
-    def _point_to_line_distance(self, point: tuple[float, float], line_p1: tuple[float, float], line_p2: tuple[float, float]) -> float:
-        """Calculate distance from point to line segment."""
-        x, y = point
-        x1, y1 = line_p1
-        x2, y2 = line_p2
-        
-        # Calculate the line equation: ax + by + c = 0
-        a = y2 - y1
-        b = x1 - x2
-        c = x2 * y1 - x1 * y2
-        
-        # Distance from point to infinite line
-        distance = abs(a * x + b * y + c) / math.sqrt(a * a + b * b)
-        
-        # Check if the closest point on the line is within the segment
-        # Project point onto line
-        dot = ((x - x1) * (x2 - x1) + (y - y1) * (y2 - y1)) / ((x2 - x1) ** 2 + (y2 - y1) ** 2)
-        
-        if dot < 0:
-            # Closest to p1
-            return math.sqrt((x - x1) ** 2 + (y - y1) ** 2)
-        elif dot > 1:
-            # Closest to p2
-            return math.sqrt((x - x2) ** 2 + (y - y2) ** 2)
-        else:
-            # Closest to line segment
-            return distance
-    
-    def draw(self, canvas: pygame.Surface) -> None:
-        """Draw the ball."""
-        pygame.draw.circle(canvas, self.color, (int(self.x), int(self.y)), int(self.radius) + 4, 2)
-        pygame.draw.circle(canvas, self.color, (int(self.x), int(self.y)), int(self.radius))
-        pygame.draw.circle(canvas, WHITE, (int(self.x) - 5, int(self.y) - 5), 4)
+    def shape(fill, g: int) -> None:
+        # thumb, fist, cuff (drawn pointing up)
+        pygame.draw.rect(surf, fill, (int(s * .34) - g, int(s * .06) - g, int(s * .2) + 2 * g, int(s * .5) + 2 * g),
+                         border_radius=int(s * .1) + g)
+        pygame.draw.rect(surf, fill, (int(s * .3) - g, int(s * .42) - g, int(s * .56) + 2 * g, int(s * .5) + 2 * g),
+                         border_radius=int(s * .1) + g)
+        pygame.draw.rect(surf, fill, (int(s * .1) - g, int(s * .46) - g, int(s * .16) + 2 * g, int(s * .44) + 2 * g),
+                         border_radius=int(s * .04) + g)
+
+    shape((*BLACK, 255), 2)  # black edge keeps the icon readable over video
+    shape((*color, 255), 0)
+    for k in range(1, 4):  # finger creases
+        y = int(s * (.42 + .125 * k))
+        pygame.draw.line(surf, (*BLACK, 160), (int(s * .5), y), (int(s * .84), y), max(1, s // 24))
+    if not up:
+        surf = pygame.transform.flip(surf, False, True)
+    canvas.blit(surf, (cx - s // 2, cy - s // 2))
 
 
 NUMBER_KEYS = {
@@ -282,18 +188,25 @@ class DodgeballGame:
             elasticity=0.95,
         )
         
-        # Lobby: wait for people to step in and confirm how many are playing
+        # Lobby: rules screen, then a confirm screen where each person gives a
+        # thumbs up (playing) or thumbs down (sitting out)
         self.in_lobby = True
+        self.confirming = False  # False = rules screen, True = confirm screen
+        self.roster = Roster(self.w, max_players=MAX_PLAYERS, hold_frames=GESTURE_HOLD_FRAMES, forget_frames=FPS)
+        self.gesture_snapshot = None  # set by the app shell while wants_gestures is True
         self.lobby_people: list[Person] = []
         self.player_count = 0
         self.last_x: list[float] = []  # last known centre x per player slot
 
-        # Hit counters per player (P1..Pn)
-        self.hits: list[int] = []
+        # Lives left per player (P1..Pn)
+        self.lives: list[int] = []
+        self.game_over = False
+        # Frames each player has been missing from the frame during play
+        self.missing_frames: list[int] = []
         
         # Game state
         self.paused = False  # Pause after hit
-        self.hit_Registered: list[bool] = []  # Track if hit was already counted for each player
+        self.hit_registered: list[bool] = []  # Track if hit was already counted for each player
         self.countdown = 0  # Countdown timer for restart
         
         # Hit tracking
@@ -304,20 +217,36 @@ class DodgeballGame:
         self.hit_timer = 0
         self.hit_position = (0, 0)
         
-        # Person bounding boxes for visualization
-        self.person_boxes = []
+        # Player bounding boxes (slot, (x1, y1, x2, y2)), refreshed every frame
+        self.person_boxes: list[tuple[int, tuple[float, float, float, float]]] = []
+        # Body outlines used for collision, shown while the ball is moving
+        self.body_polygons: list[tuple[int, list | None]] = []
+
+    # MediaPipe gesture recognition (run by the app shell) only on the confirm screen
+    gesture_hands = MAX_PLAYERS * 2
+
+    @property
+    def wants_gestures(self) -> bool:
+        return self.in_lobby and self.confirming
 
     @property
     def can_start(self) -> bool:
-        return MIN_PLAYERS <= len(self.lobby_people) <= MAX_PLAYERS
+        """Confirm screen: at least one thumbs-up player."""
+        return len(self.roster.players) >= MIN_PLAYERS
 
-    def start(self, count: int) -> None:
-        """Leave the lobby and play with `count` players."""
+    def start(self, count: int, seed_x: list[float] | None = None) -> None:
+        """Leave the lobby and play with `count` players.
+
+        `seed_x` gives the players' centre x (left to right); by default it is
+        taken from everyone in frame.
+        """
         self.in_lobby = False
+        self.confirming = False
         self.player_count = count
-        self.hits = [0] * count
+        self.lives = [LIVES] * count
+        self.game_over = False
         # Seed slots from the lobby layout so P1..Pn keep their left-to-right order.
-        lobby_x = [p.center_x for p in self.lobby_people]
+        lobby_x = seed_x if seed_x is not None else [p.center_x for p in self.lobby_people]
         self.last_x = [
             lobby_x[i] if i < len(lobby_x) else self.w * (i + 1) / (count + 1)
             for i in range(count)
@@ -326,16 +255,23 @@ class DodgeballGame:
         self.hit_message = "Get ready!"
 
     def reset(self) -> None:
-        """Reset the game - start countdown to restart."""
+        """Reset the game - start countdown to restart. On the confirm screen, clear choices."""
         if self.in_lobby:
+            if self.confirming:
+                self.roster.clear()
             return
+        if self.game_over:
+            # New match: everyone gets their lives back
+            self.lives = [LIVES] * self.player_count
+            self.game_over = False
         self.paused = False
         self.countdown = 5 * FPS
-        self.hit_Registered = [False] * self.player_count
+        self.hit_registered = [False] * self.player_count
+        self.missing_frames = [0] * self.player_count
         self.hit_message = "Game restarting..."
         self.hit_message_timer = 0
         self.hit_timer = 0
-        self.person_boxes = []
+        self.body_polygons = []
         # Pick the launch spot now so players can see it during the countdown.
         self._start_ball()
 
@@ -352,12 +288,13 @@ class DodgeballGame:
     def _assign_players(self, people: list[Person]) -> list[Person | None]:
         """Map detections to player slots P1..Pn.
 
-        Like Strike a Pose, the tallest people are the players and extras are
-        bystanders. With everyone in frame, slots go left to right; when some
-        are missing, each person takes the free slot nearest where it was last seen.
+        With more people in frame than players (someone who gave a thumbs down,
+        or a bystander), the people nearest the players' last positions count and
+        the rest are ignored. With everyone in frame, slots go left to right; when
+        some are missing, each person takes the free slot nearest where it was last seen.
         """
         n = self.player_count
-        tallest = sorted(people, key=lambda p: p.box[3] - p.box[1], reverse=True)[:n]
+        tallest = self._nearest_to_players(people) if len(people) > n else list(people)
         slots: list[Person | None] = [None] * n
         if len(tallest) == n:
             for i, person in enumerate(left_to_right(tallest)):
@@ -373,11 +310,36 @@ class DodgeballGame:
                 self.last_x[i] = person.center_x
         return slots
 
+    def _nearest_to_players(self, people: list[Person]) -> list[Person]:
+        """Up to player_count people, each paired with the closest player's last x."""
+        pairs = sorted(
+            (abs(self.last_x[s] - p.center_x), s, i)
+            for s in range(self.player_count)
+            for i, p in enumerate(people)
+        )
+        used_s: set[int] = set()
+        used_i: set[int] = set()
+        for _, s, i in pairs:
+            if s not in used_s and i not in used_i:
+                used_s.add(s)
+                used_i.add(i)
+        return [people[i] for i in sorted(used_i)]
+
     def update(self, frame: PoseFrame) -> None:
         """Update game state."""
         if self.in_lobby:
             self.lobby_people = left_to_right(frame.people)
+            if self.confirming:
+                snap = self.gesture_snapshot
+                self.roster.update(frame.people, snap.hands if snap is not None else ())
             return
+
+        # Track players every frame (also while paused / counting down) so
+        # their boxes and labels stay on screen.
+        slots = self._assign_players(frame.people)
+        self.person_boxes = [
+            (i, tuple(person.box)) for i, person in enumerate(slots) if person is not None
+        ]
 
         # If paused, only update message timer
         if self.paused:
@@ -386,12 +348,10 @@ class DodgeballGame:
         # Handle countdown
         if self.countdown > 0:
             self.countdown -= 1
-            if self.countdown == 0:
-                self.hits = [0] * self.player_count  # Reset counters when ball starts
             return  # Don't update game during countdown
         
-        # Store person boxes for drawing
-        self.person_boxes = []
+        # Store body outlines for drawing
+        self.body_polygons = []
         
         # Move ball
         self.ball.move()
@@ -405,29 +365,22 @@ class DodgeballGame:
         
         # Reset hit registration at start of each frame
         # (only register one hit per player per collision event)
-        for i in range(len(self.hit_Registered)):
+        for i in range(len(self.hit_registered)):
             if not self.paused:
-                self.hit_Registered[i] = False
+                self.hit_registered[i] = False
         
         # Check for collisions
-        for player_idx, person in enumerate(self._assign_players(frame.people)):
-            if person is not None:
+        for player_idx, person in enumerate(slots):
+            if person is not None and self.lives[player_idx] > 0:
                 collision, body_polygon = self.ball.check_collision(person)
-                self.person_boxes.append((player_idx, body_polygon))
+                self.body_polygons.append((player_idx, body_polygon))
                 
-                if collision and not self.hit_Registered[player_idx]:
-                    # Hit! Increment hit counter ONCE
-                    self.hits[player_idx] += 1
-                    self.hit_Registered[player_idx] = True
+                if collision and not self.hit_registered[player_idx]:
+                    # Hit! Lose ONE life (shows the message and pauses)
+                    self._lose_life(player_idx, "HIT!")
+                    self.hit_registered[player_idx] = True
                     self.hit_timer = 45
                     self.hit_position = (int(self.ball.x), int(self.ball.y))
-                    
-                    # Show hit message
-                    self.hit_message = f"P{player_idx + 1} HIT! Press R to resume"
-                    self.hit_message_timer = 0  # Keep showing until reset
-                    
-                    # Pause the game
-                    self.paused = True
                     
                     # Bounce ball away from person
                     # Calculate center from body polygon
@@ -458,6 +411,10 @@ class DodgeballGame:
                         self.ball.y = polygon_center_y + (dy / dist) * push_dist
                     
                     break  # Only check first person
+
+        # Players who stay out of frame too long lose a life
+        if not self.paused:
+            self._check_offscreen(slots)
         
         # Update ball color based on speed
         speed = math.sqrt(self.ball.vx**2 + self.ball.vy**2)
@@ -468,14 +425,55 @@ class DodgeballGame:
         else:
             self.ball.color = YELLOW
 
+    def _lose_life(self, player_idx: int, reason: str) -> None:
+        """Take one life from P(player_idx+1), show why, and pause until R."""
+        self.lives[player_idx] = max(0, self.lives[player_idx] - 1)
+        self.hit_message = self._hit_message(player_idx, reason)
+        self.hit_message_timer = 0  # Keep showing until reset
+        self.paused = True
+
+    def _check_offscreen(self, slots: list[Person | None]) -> None:
+        """Count how long each active player has been missing; penalise at the limit."""
+        for i, person in enumerate(slots):
+            if person is not None or self.lives[i] == 0:
+                self.missing_frames[i] = 0
+                continue
+            self.missing_frames[i] += 1
+            if self.missing_frames[i] >= OFFSCREEN_FRAMES:
+                self.missing_frames[i] = 0
+                self._lose_life(i, "LEFT THE SCREEN!")
+                return  # one penalty per pause, like a hit
+
+    def _hit_message(self, player_idx: int, reason: str = "HIT!") -> str:
+        """Message after P(player_idx+1) loses a life; also flags the end of the match."""
+        name = f"P{player_idx + 1}"
+        alive = [i for i, lives in enumerate(self.lives) if lives > 0]
+        if self.player_count == 1 and not alive:
+            self.game_over = True
+            return "GAME OVER! Press R to play again"
+        if self.player_count > 1 and len(alive) <= 1:
+            self.game_over = True
+            winner = f"P{alive[0] + 1} WINS!" if alive else "Nobody wins!"
+            return f"{winner} Press R to play again"
+        if self.lives[player_idx] == 0:
+            return f"{name} is OUT! Press R to resume"
+        return f"{name} {reason} Press R to resume"
+
     def handle_key(self, key: int) -> None:
         """Handle keyboard input. (R is routed to reset() by the app shell.)"""
         if not self.in_lobby:
             return
-        if key == pygame.K_SPACE and self.can_start:
-            self.start(len(self.lobby_people))
-        elif key in NUMBER_KEYS:
+        if key in NUMBER_KEYS:  # skip gestures: play with N people from the frame
             self.start(NUMBER_KEYS[key])
+        elif key == pygame.K_SPACE:
+            if not self.confirming:
+                self.confirming = True  # rules -> who's playing?
+                self.roster = Roster(self.w, max_players=MAX_PLAYERS, hold_frames=GESTURE_HOLD_FRAMES, forget_frames=FPS)
+            elif self.can_start:
+                players = self.roster.players
+                self.start(len(players), seed_x=[c.center_x for c in players])
+        elif key == pygame.K_BACKSPACE and self.confirming:
+            self.confirming = False  # back to the rules
     
     def render_camera(self, image_bgr):
         """Pass through camera image."""
@@ -483,10 +481,16 @@ class DodgeballGame:
 
     def debug_lines(self) -> list[str]:
         if self.in_lobby:
-            return [f"Lobby: {len(self.lobby_people)} people in frame"]
+            lines = [f"Lobby: {len(self.lobby_people)} people in frame"]
+            if self.confirming:
+                lines.append(" | ".join(
+                    f"#{c.id} {c.status} {c.gesture or '-'} {c.hold_frames}" for c in self.roster.visible
+                ))
+            return lines
         return [
-            " | ".join(f"P{i + 1}: {h}" for i, h in enumerate(self.hits)),
+            " | ".join(f"P{i + 1}: {n}/{LIVES} lives" for i, n in enumerate(self.lives)),
             f"Ball speed: {math.sqrt(self.ball.vx**2 + self.ball.vy**2):.1f} px/f",
+            "NOTE: Red ball = fast, orange = medium, yellow = slow",
         ]
 
     def _draw_lobby(self, canvas: pygame.Surface) -> None:
@@ -502,16 +506,109 @@ class DodgeballGame:
         canvas.blit(band, (0, 0))
         canvas.blit(band, (0, self.h - 84))
         draw_text(canvas, "DODGEBALL", self.w // 2, 58, 1.6, WHITE, "center")
+        self._draw_rules(canvas, top=84 + 24, bottom=self.h - 84 - 24)
 
-        count = len(self.lobby_people)
-        if self.can_start:
-            label = "player" if count == 1 else "players"
-            message, color = f"{count} {label} in frame  -  press SPACE to start", ACCENT
+        draw_text(canvas, "Press SPACE to choose who's playing", self.w // 2, self.h - 44, 1.0, ACCENT, "center", outline=True)
+        draw_text(canvas, "or press 1 / 2 / 3 to skip and start with that many", self.w // 2, self.h - 14, 0.6, MUTED, "center")
+
+    def _draw_confirm(self, canvas: pygame.Surface) -> None:
+        """Who's playing? Each person shows thumbs up (play) or thumbs down (sit out)."""
+        roster = self.roster
+        slot = {c.id: i for i, c in enumerate(roster.players)}
+        for c in roster.visible:
+            x1, y1, x2, y2 = (int(v) for v in c.box)
+            if c.status == PLAYING:
+                color, label = PLAYER_COLORS[slot[c.id]], f"P{slot[c.id] + 1}"
+            elif c.status == OUT:
+                color, label = MUTED, "OUT"
+            else:
+                color, label = WHITE, "?"
+            pygame.draw.rect(canvas, color, (x1, y1, x2 - x1, y2 - y1), 3 if c.status == PLAYING else 2)
+            label_y = max(y1 - 10, 120)
+            draw_text(canvas, label, x1 + 6, label_y, 0.9, color, outline=True)
+
+            # Big icon over the head: the confirmed choice, else the thumb being held
+            cx, icon_y = (x1 + x2) // 2, max(y1 + 40, 140)
+            if c.status == PLAYING:
+                _draw_thumb(canvas, cx, icon_y, 64, color, up=True)
+            elif c.status == OUT:
+                _draw_thumb(canvas, cx, icon_y, 64, MUTED, up=False)
+            if c.gesture and not (c.gesture == THUMB_UP and c.status == PLAYING) and not (
+                c.gesture == THUMB_DOWN and c.status == OUT
+            ):
+                # Holding a new gesture: show it filling up until it counts
+                progress = min(1.0, c.hold_frames / GESTURE_HOLD_FRAMES)
+                ring = pygame.Rect(0, 0, 84, 84)
+                ring.center = (cx, icon_y)
+                pygame.draw.arc(canvas, ACCENT, ring, math.pi / 2, math.pi / 2 + 2 * math.pi * progress, 5)
+
+        band = pygame.Surface((self.w, 84), pygame.SRCALPHA)
+        band.fill((*BLACK, 160))
+        canvas.blit(band, (0, 0))
+        canvas.blit(band, (0, self.h - 84))
+        draw_text(canvas, "WHO'S PLAYING?", self.w // 2, 46, 1.3, WHITE, "center")
+        _draw_thumb(canvas, self.w // 2 - 250, 66, 26, GREEN, up=True)
+        draw_text(canvas, "to play", self.w // 2 - 230, 75, 0.6, MUTED)
+        _draw_thumb(canvas, self.w // 2 + 160, 66, 26, RED, up=False)
+        draw_text(canvas, "to sit out", self.w // 2 + 180, 75, 0.6, MUTED)
+
+        players, pending = roster.players, roster.pending
+        n = len(players)
+        if not roster.visible:
+            message, color = "Step in front of the camera", WHITE
+        elif n == 0:
+            message, color = "Everyone playing: give a thumbs up!", WHITE
+        elif pending:
+            message = f"{n} in - waiting for {len(pending)} more  -  SPACE to start anyway"
+            color = ACCENT
         else:
-            message = f"Need {MIN_PLAYERS} to {MAX_PLAYERS} players in frame  -  found {count}"
-            color = WHITE
+            label = "player" if n == 1 else "players"
+            message, color = f"{n} {label} ready  -  press SPACE to start", ACCENT
+        if roster.full:
+            message, color = f"Max {MAX_PLAYERS} players - someone give a thumbs down first", ORANGE
         draw_text(canvas, message, self.w // 2, self.h - 44, 1.0, color, "center", outline=True)
-        draw_text(canvas, "or press 1 / 2 / 3 to choose", self.w // 2, self.h - 14, 0.6, MUTED, "center")
+        draw_text(canvas, "R clear  |  Backspace rules  |  1 / 2 / 3 skip gestures",
+                  self.w // 2, self.h - 14, 0.6, MUTED, "center")
+
+    def _draw_rules(self, canvas: pygame.Surface, top: int, bottom: int) -> None:
+        """Translucent card with the rules, centred between the lobby bands.
+
+        Kept see-through so the camera feed and player boxes show behind it.
+        """
+        lines = [f"{n}. {rule}" for n, rule in enumerate(RULES, 1)]
+        max_w = min(self.w - 64, 980)
+        scale = 0.75
+        while True:  # shrink until the widest rule fits the card
+            widest = max(cv2.getTextSize(l, FONT, scale, max(1, round(scale * 1.6)))[0][0] for l in lines)
+            if widest <= max_w - 64 or scale <= 0.4:
+                break
+            scale -= 0.05
+        line_h = int(46 * scale / 0.75)
+        card_h = min(bottom - top, 70 + line_h * len(lines) + 16)
+        card_w = widest + 64
+        card_x = (self.w - card_w) // 2
+        card_y = top + (bottom - top - card_h) // 2
+
+        card = pygame.Surface((card_w, card_h), pygame.SRCALPHA)
+        pygame.draw.rect(card, (*BLACK, 140), card.get_rect(), border_radius=12)
+        canvas.blit(card, (card_x, card_y))
+
+        draw_text(canvas, "HOW TO PLAY", self.w // 2, card_y + 44, 1.0, ACCENT, "center", outline=True)
+        for k, line in enumerate(lines):
+            y = card_y + 70 + line_h * (k + 1) - 12
+            draw_text(canvas, line, card_x + 32, y, scale, WHITE, outline=True)
+
+    def _draw_offscreen_warnings(self, canvas: pygame.Surface) -> None:
+        """'Come back!' countdown for players who have stepped out of frame."""
+        warn_after = FPS // 2  # ignore brief detection flickers
+        y = self.h - 90
+        for i, missing in enumerate(self.missing_frames):
+            if missing < warn_after or self.lives[i] == 0:
+                continue
+            left = (OFFSCREEN_FRAMES - missing) / FPS
+            text = f"P{i + 1} come back! {left:.1f}s"
+            draw_text(canvas, text, self.w // 2, y, 1.1, PLAYER_COLORS[i], "center", outline=True)
+            y -= 44
 
     def _draw_launch_marker(self, canvas: pygame.Surface) -> None:
         """Pulsing ring plus an arrow showing the direction the ball will fly."""
@@ -532,14 +629,42 @@ class DodgeballGame:
         pygame.draw.polygon(overlay, (*YELLOW, 220), [tip, left, right])
         canvas.blit(overlay, (0, 0))
 
+    def _draw_lives(self, canvas: pygame.Surface) -> None:
+        """One row per player: label plus LIVES hearts (filled = left, outlined = lost)."""
+        size = 26  # heart width in px
+        gap = 8
+        row_h = 42
+        hearts_w = LIVES * size + (LIVES - 1) * gap
+        right = self.w - 24
+        for i in range(self.player_count):
+            color = PLAYER_COLORS[i]
+            cy = 36 + i * row_h
+            label_color = color if self.lives[i] > 0 else MUTED
+            draw_text(canvas, f"P{i + 1}", right - hearts_w - 14, cy + 10, 0.9, label_color, "right", outline=True)
+            for k in range(LIVES):
+                cx = right - hearts_w + k * (size + gap) + size // 2
+                _draw_heart(canvas, cx, cy, size, color, filled=k < self.lives[i])
+
     def draw(self, canvas: pygame.Surface, frame: PoseFrame) -> None:
         """Draw game elements."""
         if self.in_lobby:
-            self._draw_lobby(canvas)
+            if self.confirming:
+                self._draw_confirm(canvas)
+            else:
+                self._draw_lobby(canvas)
             return
 
+        # Draw player bounding boxes with their labels (greyed out once a player is out)
+        for player_idx, box in self.person_boxes:
+            out = self.lives[player_idx] == 0
+            color = MUTED if out else PLAYER_COLORS[player_idx]
+            x1, y1, x2, y2 = (int(v) for v in box)
+            pygame.draw.rect(canvas, color, (x1, y1, x2 - x1, y2 - y1), 2)
+            label = f"P{player_idx + 1}" + (" OUT" if out else "")
+            draw_text(canvas, label, x1 + 6, max(y1 - 10, 30), 0.9, color, outline=True)
+
         # Draw person body polygons
-        for player_idx, body_polygon in self.person_boxes:
+        for player_idx, body_polygon in self.body_polygons:
             if body_polygon is not None:
                 color = PLAYER_COLORS[player_idx]
                 temp_surf = pygame.Surface(canvas.get_size(), pygame.SRCALPHA)
@@ -594,15 +719,12 @@ class DodgeballGame:
                 outline=True,
             )
         
-        # Draw scoreboard in top-right, P1..Pn reading left to right
-        score_scale = 0.95
-        score_thickness = max(1, round(score_scale * 1.6))
-        right = self.w - 24
-        for i in reversed(range(self.player_count)):
-            text = f"P{i + 1}: {self.hits[i]}"
-            draw_text(canvas, text, right, 48, scale=score_scale, color=PLAYER_COLORS[i], align="right", outline=True)
-            (text_w, _), _ = cv2.getTextSize(text, FONT, score_scale, score_thickness)
-            right -= text_w + 28
+        # Draw lives in the top-right: one row per player, P1 on top
+        self._draw_lives(canvas)
+
+        # Warn players who are out of frame (only while the ball is moving)
+        if not self.paused and self.countdown == 0:
+            self._draw_offscreen_warnings(canvas)
         
         # Draw instructions strip at bottom
         instructions = "[D] Debug | [R] Reset | [F] Fullscreen | [Q/Esc] Quit"

@@ -16,7 +16,9 @@ Starts fullscreen by default; pass fullscreen=False / --windowed for a window.
 Esc leaves a playable game for the menu; on the splash or menu Esc quits.
 With `--debug`, arrow keys / Enter also feed MenuCommand (dev keyboard nav).
 When the game sets wants_gestures, MediaPipe runs and attaches a snapshot.
-Splash and menu read the snapshot themselves (hold Thumb_Up / spatial select).
+`wants_gestures` is re-checked every frame; `gesture_hands` (default 2) sets
+how many hands to track. Splash and menu read the snapshot themselves
+(hold Thumb_Up / spatial select).
 """
 
 from __future__ import annotations
@@ -120,7 +122,10 @@ def _poll_nav(game: Game):
 
 def _sync_gestures(session: GestureRecognizerSession, mapper: GestureCommandMapper, game: Game) -> None:
     want = _wants_gestures(game)
-    if want and not session.active:
+    hands = int(getattr(game, "gesture_hands", 2))
+    if want and (not session.active or session.num_hands != hands):
+        session.stop()
+        session.num_hands = hands
         session.start()
         mapper.reset()
     elif not want and session.active:
@@ -242,6 +247,7 @@ def run(
                         elif hasattr(game, "handle_key"):
                             game.handle_key(event.key)
 
+            _sync_gestures(gestures, mapper, game)  # games may toggle wants_gestures per screen
             if gestures.active:
                 snap = gestures.recognize(
                     frame.image, _timestamp_ms(frame), people=frame.people

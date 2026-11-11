@@ -30,7 +30,6 @@ from main.pose.library import (
     save_pose,
 )
 from main.pose.tracker import Camera, CameraError, PoseDetector
-
 from .game import (
     ACCENT,
     CANVAS_HEIGHT,

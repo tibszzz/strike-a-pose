@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Literal
 import pygame
 
 if TYPE_CHECKING:
-    from main.pose import PoseFrame
+    from strike_a_pose.games.pose import PoseFrame
 
 # Colors
 WHITE = (255, 255, 255)
