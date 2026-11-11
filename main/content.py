@@ -23,6 +23,7 @@ class Duel:
     player_names = ("Player 1", "Player 2")
     waiting_for = "WAITING FOR"
     preview_waiting = "WAITING"
+    replay_label = "REPLAY"
     get_ready = "GET READY, PARTNERS"
     lower_gun = "lower your gun"
     lower_guns_again = "lower your guns to play again"
