@@ -3,6 +3,9 @@
 Games draw onto a canvas in camera-pixel coordinates (so keypoints map 1:1); the
 canvas is then scaled to the window with letterboxing.
 
+On bare launch (no CLI game), titles are preloaded after the first camera frame
+so menu → StartGame reuses warm instances. Direct CLI launch skips preload.
+
 Background rules:
 - If the game defines `render_camera`, that image is always used (dodgeball).
 - Else the canvas is filled with `background`; overlay mode (D) swaps in the live
@@ -26,6 +29,7 @@ import numpy as np
 import pygame
 
 from .audio import init_mixer
+from .games.preload import GameCache, preload_games
 from .games.registry import GameEntry
 from .nav import (
     GestureCommandMapper,
@@ -172,9 +176,25 @@ def run(
     )
     canvas = pygame.Surface(size)
 
+    # Bare launch: block on Loading… and warm every title before splash.
+    # CLI direct launch skips preload (factory path only).
+    cache = GameCache()
+    if initial_game is None:
+        warmed = preload_games(registry, size=size, frame=first, screen=screen)
+        if warmed is None:
+            gestures.close()
+            tracker.close()
+            pygame.quit()
+            return
+        cache = warmed
+
     def start_game(game_id: str | None) -> Game:
         if game_id is None:
             return make_menu(size)
+        cached = cache.get(game_id)
+        if cached is not None:
+            cached.reset()
+            return cached
         return registry[game_id].factory(size)
 
     if initial_game is None and make_splash is not None:
