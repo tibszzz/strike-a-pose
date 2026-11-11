@@ -32,6 +32,12 @@ FPS = 30
 # Font style from games/pose/game.py (Strike a Pose)
 FONT = cv2.FONT_HERSHEY_DUPLEX
 
+# number keys for quick start (1..3)
+NUMBER_KEYS = {
+    pygame.K_1: 1, pygame.K_KP1: 1,
+    pygame.K_2: 2, pygame.K_KP2: 2,
+    pygame.K_3: 3, pygame.K_KP3: 3,
+}
 
 def draw_text(
     canvas: pygame.Surface,
@@ -43,10 +49,8 @@ def draw_text(
     align: str = "left",
     outline: bool = False,
 ) -> pygame.Rect:
-    """Draw text matching games/pose/game.py font style (cv2.FONT_HERSHEY_DUPLEX).
-
-    `y` is the baseline position. `align` places `x` at left, center, or right.
-    `outline` keeps text readable over video with a black border.
+    """
+    styling and text rendering functions
     """
     if not text:
         return pygame.Rect(x, y, 0, 0)
@@ -95,13 +99,6 @@ def draw_text(
 
     canvas.blit(surf, (blit_x, blit_y))
     return pygame.Rect(blit_x + pad, blit_y + pad, text_w, text_h)
-
-
-NUMBER_KEYS = {
-    pygame.K_1: 1, pygame.K_KP1: 1,
-    pygame.K_2: 2, pygame.K_KP2: 2,
-    pygame.K_3: 3, pygame.K_KP3: 3,
-}
 
 
 class DodgeballGame:
