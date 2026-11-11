@@ -18,8 +18,15 @@ from typing import Sequence
 
 import numpy as np
 
+<<<<<<<< HEAD:main/games/strike/capture.py
 from main.config import Config
 from main.pose.library import (
+========
+from ...camera import Camera, CameraError
+from ...config import Config
+from .detector import Person, PoseDetector
+from .pose import (
+>>>>>>>> a5c2b4e2b1e19ba05695e0d9c0f3ae70c39c3cc5:strike_a_pose/games/pose/capture.py
     BODY_JOINTS,
     POSE_FILE_JOINTS,
     Person,
@@ -29,9 +36,13 @@ from main.pose.library import (
     pose_from_dict,
     save_pose,
 )
+<<<<<<<< HEAD:main/games/strike/capture.py
 from main.pose.tracker import Camera, CameraError, PoseDetector
 
 from .game import (
+========
+from ...render_cv import (
+>>>>>>>> a5c2b4e2b1e19ba05695e0d9c0f3ae70c39c3cc5:strike_a_pose/games/pose/capture.py
     ACCENT,
     CANVAS_HEIGHT,
     CANVAS_WIDTH,

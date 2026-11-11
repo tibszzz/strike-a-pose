@@ -23,10 +23,24 @@ opencv-python==5.0.0.93
 packaging==26.3
 pillow==13.0.0
 pluggy==1.7.0
+<<<<<<< HEAD
 polars==2.1.0
+=======
+<<<<<<< HEAD
+polars==2.1.0
+=======
+>>>>>>> kaizer1v-yolo-test
+>>>>>>> a5c2b4e2b1e19ba05695e0d9c0f3ae70c39c3cc5
 polars-runtime-32==2.1.0
 psutil==7.2.2
+<<<<<<< HEAD
 pygame-ce==2.5.8
+=======
+<<<<<<< HEAD
+=======
+pygame-ce==2.5.8
+>>>>>>> kaizer1v-yolo-test
+>>>>>>> a5c2b4e2b1e19ba05695e0d9c0f3ae70c39c3cc5
 Pygments==2.21.0
 pyparsing==3.3.3
 pytest==9.2.0
