@@ -15,7 +15,9 @@ class MenuCommand(Enum):
 
 @dataclass(frozen=True)
 class StartGame:
-    game_id: str
+    """`game_id` is a registry key, or `None` to open the in-window menu."""
+
+    game_id: str | None
 
 
 @dataclass(frozen=True)

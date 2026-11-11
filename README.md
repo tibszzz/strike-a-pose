@@ -18,7 +18,8 @@ On macOS, grant camera access in System Settings → Privacy & Security → Came
 python -m main
 ```
 
-Opens the shared window. Camera and pose stay warm while you switch titles.
+Opens the shared window on a splash screen. Thumbs up (or Enter) advances to
+the game menu. Camera and pose stay warm while you switch titles.
 
 Optional: jump straight into a game (`Esc` still returns to the menu):
 
@@ -27,20 +28,22 @@ python -m main duel
 python -m main dodgeball
 python -m main cannonball
 python -m main strike
-python -m main strike --debug   # solo lobby while developing
+python -m main --debug          # keyboard menu nav + strike solo lobby
+python -m main strike --debug
 ```
 
-### Menu controls
+### Splash / menu controls
 
-| Gesture | Action |
-|---|---|
-| Thumbs up | Selection up |
-| Thumbs down | Selection down |
-| Victory (peace) | Select / start |
+| Gesture | Splash | Menu |
+|---|---|---|
+| Thumbs up | Start → menu | Selection up |
+| Thumbs down | — | Selection down |
+| Victory (peace) | — | Select / start |
 
-Keyboard: Up/Down, Enter. In a game, `Esc` returns to the menu; on the menu, `Esc` quits. `Q` always quits.
+With `--debug`, Up/Down/Enter also drive splash/menu. In a game, `Esc` returns to
+the menu; on splash or menu, `Esc` quits. `Q` always quits.
 
-Gesture recognition uses MediaPipe (`assets/models/gesture_recognizer.task`). It runs only while the menu (or a game with `wants_gestures`) is active. Env tunables: `MIN_SCORE` (default 0.5), `REFRACTORY_MS` (default 350), `GESTURE_MODEL_PATH`.
+Gesture recognition uses MediaPipe (`assets/models/gesture_recognizer.task`). It runs only while the splash/menu (or a game with `wants_gestures`) is active. Env tunables: `MIN_SCORE` (default 0.5), `REFRACTORY_MS` (default 350), `GESTURE_MODEL_PATH`.
 
 ### Shared flags
 
@@ -56,7 +59,7 @@ Defaults also load from `.env` (see `.env.example`). Flags win over `.env`.
 
 | Key | Action |
 |---|---|
-| `D` | Debug overlay |
+| `D` | Pose/FPS overlay |
 | `F` | Toggle fullscreen |
 | `Esc` | Back to menu |
 | `Q` | Quit the app |

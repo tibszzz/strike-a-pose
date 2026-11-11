@@ -3,10 +3,12 @@
   python -m main duel [--camera 0] [--imgsz 640] [--device mps]
   python -m main dodgeball ...
   python -m main cannonball ...
+  python -m main [--debug]
   python -m main strike [--debug]
 
-Bare launch opens the in-window menu (pose tracker stays warm across switches).
-Defaults for the shell come from `.env` (CAMERA, IMGSZ, DEVICE); flags override them.
+Bare launch opens the splash, then the in-window menu (pose tracker stays warm
+across switches). Defaults for the shell come from `.env` (CAMERA, IMGSZ,
+DEVICE); flags override them.
 """
 
 from __future__ import annotations
@@ -30,7 +32,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "game",
         nargs="?",
         choices=("duel", "dodgeball", "cannonball", "strike"),
-        help="optional game to start; omit for the menu",
+        help="optional game to start; omit for the splash then menu",
     )
     parser.add_argument("--camera", type=int, default=camera, help=f"camera index (default {camera})")
     parser.add_argument(
@@ -40,22 +42,24 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--debug",
         action="store_true",
-        help="strike only: allow a solo lobby with one person in frame",
+        help="enable keyboard menu nav (arrows/Enter); strike solo lobby",
     )
     args = parser.parse_args(argv)
 
     strike_config = Config(min_players=1) if args.debug else Config()
     from .app import run
-    from .games.registry import build_registry, make_menu
+    from .games.registry import build_registry, make_menu, make_splash
 
     registry = build_registry(strike_config=strike_config)
     run(
         registry=registry,
         make_menu=make_menu(registry),
+        make_splash=make_splash(),
         initial_game=args.game,
         camera_index=args.camera,
         imgsz=args.imgsz,
         device=args.device,
+        debug=args.debug,
     )
     return 0
 

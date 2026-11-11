@@ -72,14 +72,8 @@ class MenuGame:
             ACCENT,
         )
         canvas.blit(primary, (self.w // 2 - primary.get_width() // 2, hint_y))
-        secondary = self._hint_font.render(
-            "Keys: Up/Down  Enter  ·  Esc quit",
-            True,
-            MUTED,
-        )
-        canvas.blit(secondary, (self.w // 2 - secondary.get_width() // 2, hint_y + primary.get_height() + 4))
 
-        status_y = hint_y + primary.get_height() + secondary.get_height() + 12
+        status_y = hint_y + primary.get_height() + 12
         if snap is not None and snap.label:
             status = self._hint_font.render(f"{snap.label}  {snap.score:.2f}", True, WHITE)
         else:

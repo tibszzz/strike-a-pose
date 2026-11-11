@@ -9,6 +9,7 @@ import pygame
 
 from main.games.menu import MenuGame
 from main.games.registry import GameEntry, build_registry
+from main.games.splash import SplashGame
 from main.nav import MenuCommand, QuitApp, StartGame
 from main.pose import PoseFrame, assign_players
 from main.pose.library import JOINT_NAMES, from_coco_person
@@ -73,3 +74,24 @@ def test_menu_wants_gestures_and_passthrough_camera():
     assert menu.wants_gestures is True
     image = np.zeros((480, 640, 3), np.uint8)
     assert menu.render_camera(image) is image
+
+
+def test_splash_thumbs_up_opens_menu():
+    pygame.init()
+    splash = SplashGame((640, 480))
+    assert splash.wants_gestures is True
+    assert splash.is_splash is True
+    splash.handle_command(MenuCommand.MOVE_UP)
+    assert splash.poll_nav() == StartGame(None)
+    assert splash.poll_nav() is None
+
+
+def test_splash_enter_opens_menu_and_back_quits():
+    pygame.init()
+    splash = SplashGame((640, 480))
+    splash.handle_command(MenuCommand.SELECT)
+    assert splash.poll_nav() == StartGame(None)
+    splash.handle_command(MenuCommand.BACK)
+    assert splash.poll_nav() == QuitApp()
+    image = np.zeros((480, 640, 3), np.uint8)
+    assert splash.render_camera(image) is image
