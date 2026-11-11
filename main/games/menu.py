@@ -18,7 +18,7 @@ HAND_BOX = (80, 220, 255)
 
 
 class MenuGame:
-    title = "Strike a Pose"
+    title = "CIID Play Party"
     is_menu = True
     wants_gestures = True
     background = (0, 0, 0)
@@ -62,7 +62,7 @@ class MenuGame:
                 width=3,
             )
 
-        title = self._title_font.render("Strike a Pose", True, WHITE)
+        title = self._title_font.render("CIID Play Party", True, WHITE)
         canvas.blit(title, (self.w // 2 - title.get_width() // 2, self.h // 10))
 
         hint_y = self.h // 10 + title.get_height() + 8

@@ -293,7 +293,7 @@ class DodgeballGame:
         
         # Game state
         self.paused = False  # Pause after hit
-        self.hit_Registered: list[bool] = []  # Track if hit was already counted for each player
+        self.hit_registered: list[bool] = []  # Track if hit was already counted for each player
         self.countdown = 0  # Countdown timer for restart
         
         # Hit tracking
@@ -331,7 +331,7 @@ class DodgeballGame:
             return
         self.paused = False
         self.countdown = 5 * FPS
-        self.hit_Registered = [False] * self.player_count
+        self.hit_registered = [False] * self.player_count
         self.hit_message = "Game restarting..."
         self.hit_message_timer = 0
         self.hit_timer = 0
@@ -405,9 +405,9 @@ class DodgeballGame:
         
         # Reset hit registration at start of each frame
         # (only register one hit per player per collision event)
-        for i in range(len(self.hit_Registered)):
+        for i in range(len(self.hit_registered)):
             if not self.paused:
-                self.hit_Registered[i] = False
+                self.hit_registered[i] = False
         
         # Check for collisions
         for player_idx, person in enumerate(self._assign_players(frame.people)):
@@ -415,10 +415,10 @@ class DodgeballGame:
                 collision, body_polygon = self.ball.check_collision(person)
                 self.person_boxes.append((player_idx, body_polygon))
                 
-                if collision and not self.hit_Registered[player_idx]:
+                if collision and not self.hit_registered[player_idx]:
                     # Hit! Increment hit counter ONCE
                     self.hits[player_idx] += 1
-                    self.hit_Registered[player_idx] = True
+                    self.hit_registered[player_idx] = True
                     self.hit_timer = 45
                     self.hit_position = (int(self.ball.x), int(self.ball.y))
                     
