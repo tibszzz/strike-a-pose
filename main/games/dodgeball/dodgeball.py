@@ -41,6 +41,7 @@ RULES = [
     "Press R to resume. No lives left and you're out",
     f"Leave the screen for {OFFSCREEN_SECONDS} seconds: lose a life",
     "Last player standing wins. Solo: survive as long as you can",
+    "NOTE: Red ball = fast, orange = medium, yellow = slow",
 ]
 
 # Font style from games/pose/game.py (Strike a Pose)
@@ -411,6 +412,7 @@ class DodgeballGame:
         return [
             " | ".join(f"P{i + 1}: {n}/{LIVES} lives" for i, n in enumerate(self.lives)),
             f"Ball speed: {math.sqrt(self.ball.vx**2 + self.ball.vy**2):.1f} px/f",
+            "NOTE: Red ball = fast, orange = medium, yellow = slow",
         ]
 
     def _draw_lobby(self, canvas: pygame.Surface) -> None:
