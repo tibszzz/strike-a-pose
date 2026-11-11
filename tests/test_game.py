@@ -27,6 +27,7 @@ SPOTS = (200.0, 500.0, 800.0, 1100.0, 1400.0)  # where people stand, left to rig
 
 def new_game(poses=None, **settings):
     """A game plus the list its events are recorded into."""
+    settings.setdefault("countdown_seconds", COUNTDOWN)
     config = Config(**settings)
     game = Game(config, poses or load_library(config.poses_dir), random.Random(7))
     events = []

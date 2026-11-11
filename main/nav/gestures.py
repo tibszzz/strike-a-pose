@@ -19,9 +19,9 @@ from typing import Sequence
 import cv2
 import numpy as np
 
-from main.config import ASSETS, from_env
 from main.pose import is_wrist_raised
 from main.pose.types import KP, Person
+from main.settings import ASSETS, GestureNavConfig, load_gesture_nav_config
 
 from .types import MenuCommand
 
@@ -63,36 +63,6 @@ class GestureSnapshot:
     hand_box: tuple[float, float, float, float] | None = None  # xmin, ymin, xmax, ymax px
     landmarks: tuple[tuple[float, float], ...] = ()  # image-pixel (x, y)
     hands: tuple[HandGesture, ...] = ()
-
-
-@dataclass(frozen=True)
-class GestureNavConfig:
-    model_path: Path = DEFAULT_MODEL
-    min_score: float = 0.5
-    refractory_ms: int = 350
-    # 1 = wrist ROI crop+upscale before MediaPipe; 0 = full frame only.
-    roi: int = 1
-    roi_size: int = 320  # square side of the upscaled crop fed to MediaPipe
-    roi_scale: float = 2.5  # crop side ≈ forearm_length * scale
-    roi_min_px: int = 80  # minimum crop side in source pixels
-    roi_max: int = 2  # max wrist ROIs tried per frame
-    min_wrist_conf: float = 0.35
-    # 1 = ignore hand detection unless a YOLO wrist near the hand is above the hip.
-    raise_gate: int = 1
-    raise_lift_frac: float = 0.08  # wrist must clear hip by this × torso length
-    raise_match_frac: float = 0.35  # max hand↔raised-wrist distance as × person-box height
-    thumb_hold_s: float = 1.0  # seconds Thumb_Up must be held on splash / menu confirm
-
-
-def load_gesture_nav_config() -> GestureNavConfig:
-    """Env overrides via field names; optional `GESTURE_MODEL_PATH`."""
-    import os
-
-    base = from_env(GestureNavConfig)
-    gesture_model = os.environ.get("GESTURE_MODEL_PATH", "").strip()
-    if not gesture_model:
-        return base
-    return replace(base, model_path=Path(gesture_model))
 
 
 @dataclass(frozen=True)

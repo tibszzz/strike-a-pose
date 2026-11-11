@@ -1,12 +1,17 @@
 import math
 import random
+
 import pygame
-WHITE = (255, 255, 255)
-ORANGE = (255, 165, 0)
+
+from main import styles
+
+WHITE = styles.DODGEBALL.ink
+ORANGE = styles.DODGEBALL.ball_medium
+
 
 class Ball:
   """Ball that bounces around the screen randomly."""
-  
+
   def __init__(
       self,
       x: float,
@@ -14,6 +19,7 @@ class Ball:
       radius: float = 25,
       max_speed: float = 40.0,
       elasticity: float = 0.95,
+      color: tuple[int, int, int] | None = None,
   ):
       self.x = x
       self.y = y
@@ -23,7 +29,7 @@ class Ball:
       self.vx = 0.0
       self.vy = 0.0
       self.reset_velocity()
-      self.color = ORANGE
+      self.color = color if color is not None else ORANGE
   
   def reset_velocity(self) -> None:
       """Give the ball a random initial velocity."""

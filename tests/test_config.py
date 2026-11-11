@@ -2,9 +2,7 @@ import random
 
 import pytest
 
-from main.config import Messages, env, from_env
-from main.games.duel.logic import DuelConfig
-from main.pose import GestureConfig
+from main.settings import DuelConfig, GestureConfig, Messages, env, from_env
 
 
 def test_from_env_overrides_only_set_fields(monkeypatch):
@@ -47,14 +45,12 @@ def test_example_env_parses_to_defaults(monkeypatch, tmp_path):
     assert from_env(GestureConfig) == GestureConfig()
 
 
-def test_messages_skip_comments_and_avoid_repeats(tmp_path):
-    p = tmp_path / "m.txt"
-    p.write_text("# comment\nA\n\nB\n")
-    m = Messages(p, "fallback", random.Random(0))
+def test_messages_skip_empty_and_avoid_repeats():
+    m = Messages(["", "A", "B", "  "], "fallback", random.Random(0))
     assert m.items == ["A", "B"]
     picks = [m.pick() for _ in range(10)]
     assert all(a != b for a, b in zip(picks, picks[1:]))
 
 
-def test_messages_fallback_when_missing(tmp_path):
-    assert Messages(tmp_path / "nope.txt", "hi").pick() == "hi"
+def test_messages_fallback_when_empty():
+    assert Messages([], "hi").pick() == "hi"

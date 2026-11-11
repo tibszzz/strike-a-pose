@@ -3,27 +3,28 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
 from enum import Enum
 
 import numpy as np
 
+from main.settings import GestureConfig
+
 from .types import KP, Person
+
+__all__ = [
+    "GestureConfig",
+    "PoseState",
+    "classify",
+    "is_arm_extended",
+    "is_drawn",
+    "is_wrist_raised",
+]
 
 
 class PoseState(Enum):
     MISSING = "missing"
     DRAWN = "drawn"
     NEUTRAL = "neutral"
-
-
-@dataclass(frozen=True)
-class GestureConfig:
-    min_conf: float = 0.5
-    # Elbow angle in degrees (180 = perfectly straight) needed to count as extended.
-    min_elbow_angle: float = 140.0
-    # Max angle of the shoulder->wrist line away from horizontal, in degrees.
-    max_arm_tilt: float = 30.0
 
 
 _ARMS = {

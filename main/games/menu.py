@@ -14,6 +14,7 @@ from typing import Sequence
 
 import pygame
 
+from main import content, styles
 from main.games.registry import GameEntry
 from main.nav import (
     GestureSnapshot,
@@ -27,23 +28,18 @@ from main.nav import (
 )
 from main.pose import PoseFrame
 
-WHITE = (255, 255, 255)
-MUTED = (180, 180, 180)
-ACCENT = (255, 220, 80)
-HOVER = (220, 220, 220)
-HAND_BOX = (80, 220, 255)
-TILE_FILL = (0, 0, 0, 120)
-HOLD_FILL = (255, 220, 80, 70)
+theme = styles.SHELL
+copy = content.Shell
 
 # MediaPipe hand landmark index for index fingertip.
 INDEX_FINGERTIP = 8
 
 
 class MenuGame:
-    title = "CIID Play Party"
+    title = copy.brand
     is_menu = True
     wants_gestures = True
-    background = (0, 0, 0)
+    background = theme.bg
 
     def __init__(self, size: tuple[int, int], entries: Sequence[GameEntry]) -> None:
         if not entries:
@@ -57,12 +53,9 @@ class MenuGame:
         self._thumb = ThumbHoldTracker(hold_s=cfg.thumb_hold_s, min_score=cfg.min_score)
         self._hard_lock: int | None = None
         self._hover: int | None = None
-        self._font = pygame.font.SysFont("menlo,monaco,courier", max(18, self.h // 28))
-        self._title_font = pygame.font.SysFont("menlo,monaco,courier", max(28, self.h // 16), bold=True)
-        self._hint_font = pygame.font.SysFont("menlo,monaco,courier", max(14, self.h // 36))
-        self._tile_label_font = pygame.font.SysFont(
-            "menlo,monaco,courier", max(16, self.h // 32), bold=True
-        )
+        self._title_font = styles.load_font(theme.title, theme.menu_title_px(self.h))
+        self._hint_font = styles.load_font(theme.body, theme.hint_px(self.h))
+        self._tile_label_font = styles.load_font(theme.title, theme.tile_label_px(self.h))
 
     def reset(self) -> None:
         self._pending = None
@@ -125,42 +118,38 @@ class MenuGame:
         snap = self.gesture_snapshot
 
         overlay = pygame.Surface((self.w, self.h), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 140))
+        overlay.fill(theme.overlay)
         canvas.blit(overlay, (0, 0))
 
         if snap is not None and snap.hand_box is not None:
             x1, y1, x2, y2 = snap.hand_box
             pygame.draw.rect(
                 canvas,
-                HAND_BOX,
+                theme.hand_box,
                 pygame.Rect(int(x1), int(y1), int(x2 - x1), int(y2 - y1)),
                 width=3,
             )
 
-        title = self._title_font.render("CIID Play Party", True, WHITE)
+        title = self._title_font.render(copy.menu_title, True, theme.ink)
         canvas.blit(title, (self.w // 2 - title.get_width() // 2, self.h // 10))
 
         hint_y = self.h // 10 + title.get_height() + 8
-        primary = self._hint_font.render(
-            "Pointing up selects · Hold thumbs up to start",
-            True,
-            ACCENT,
-        )
+        primary = self._hint_font.render(copy.menu_hint, True, theme.accent)
         canvas.blit(primary, (self.w // 2 - primary.get_width() // 2, hint_y))
 
         status_y = hint_y + primary.get_height() + 12
         hold = self._thumb.hold_status()
         if hold is not None:
-            status = self._hint_font.render(hold, True, ACCENT)
+            status = self._hint_font.render(hold, True, theme.accent)
         elif snap is not None and snap.label:
-            status = self._hint_font.render(f"{snap.label}  {snap.score:.2f}", True, WHITE)
+            status = self._hint_font.render(f"{snap.label}  {snap.score:.2f}", True, theme.ink)
         else:
-            status = self._hint_font.render("show a hand gesture…", True, MUTED)
+            status = self._hint_font.render(copy.menu_gesture_idle, True, theme.muted)
         canvas.blit(status, (self.w // 2 - status.get_width() // 2, status_y))
 
         for i, (entry, rect) in enumerate(zip(self.entries, self.tile_rects())):
             fill = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
-            fill.fill(TILE_FILL)
+            fill.fill(theme.tile_fill)
             canvas.blit(fill, rect.topleft)
 
             locked = i == self._hard_lock
@@ -168,7 +157,7 @@ class MenuGame:
             if locked and self._thumb.progress > 0:
                 hold_surf = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
                 hold_h = max(1, int(rect.height * self._thumb.progress))
-                hold_surf.fill(HOLD_FILL)
+                hold_surf.fill(theme.hold_fill_tile)
                 canvas.blit(
                     hold_surf,
                     (rect.left, rect.bottom - hold_h),
@@ -176,17 +165,17 @@ class MenuGame:
                 )
 
             if locked:
-                border_color = ACCENT
+                border_color = theme.accent
                 border_w = 5
-                name_color = ACCENT
+                name_color = theme.accent
             elif hovered:
-                border_color = HOVER
+                border_color = theme.hover
                 border_w = 3
-                name_color = WHITE
+                name_color = theme.ink
             else:
-                border_color = MUTED
+                border_color = theme.muted
                 border_w = 2
-                name_color = WHITE
+                name_color = theme.ink
 
             pygame.draw.rect(canvas, border_color, rect, width=border_w)
 

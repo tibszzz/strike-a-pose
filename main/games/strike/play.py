@@ -7,9 +7,10 @@ from typing import Sequence
 import cv2
 import pygame
 
-from main.config import Config
+from main import content, styles
 from main.pose import PoseFrame
 from main.pose.library import Pose, from_coco_person, load_library
+from main.settings import StrikeConfig
 
 from .game import compose
 from .logic import Game as StrikeLogic
@@ -17,17 +18,17 @@ from .screens import LobbyScreen, Screen
 
 
 class StrikeGame:
-    title = "Strike a Pose"
-    background = (0, 0, 0)
+    title = content.Strike.window_title
+    background = styles.STRIKE.bg
 
     def __init__(
         self,
         size: tuple[int, int],
-        config: Config | None = None,
+        config: StrikeConfig | None = None,
         poses: Sequence[Pose] | None = None,
     ) -> None:
         self.w, self.h = size
-        self._config = config if config is not None else Config()
+        self._config = config if config is not None else StrikeConfig()
         library = list(poses) if poses is not None else load_library(self._config.poses_dir)
         self._logic = StrikeLogic(self._config, library)
         self._screen: Screen = LobbyScreen(

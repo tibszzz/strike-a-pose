@@ -13,7 +13,9 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
+from main import content, styles
 from main.pose.library import BONES, HEAD_JOINT, Box, Joints, Point, Pose, midpoint
+from main.settings import CANVAS_HEIGHT, CANVAS_WIDTH
 
 from .screens import (
     Action,
@@ -25,22 +27,19 @@ from .screens import (
     Screen,
 )
 
-WINDOW_NAME = "Strike a Pose"
-CANVAS_WIDTH, CANVAS_HEIGHT = 1280, 720
+theme = styles.STRIKE
+copy = content.Strike
+
+WINDOW_NAME = copy.window_title
 FONT = cv2.FONT_HERSHEY_DUPLEX
 
-# Colours are (blue, green, red), as OpenCV expects.
-BACKGROUND = (30, 26, 24)
-PANEL = (52, 46, 42)
-WHITE = (255, 255, 255)
-MUTED = (175, 175, 175)
-ACCENT = (70, 215, 255)
-PLAYER_COLORS = (
-    (95, 95, 255),  # P1 red
-    (255, 175, 70),  # P2 blue
-    (110, 230, 110),  # P3 green
-    (70, 215, 255),  # P4 yellow
-)
+# OpenCV wants BGR; Theme stores RGB.
+BACKGROUND = styles.bgr(theme.bg)
+PANEL = styles.bgr(theme.panel)
+WHITE = styles.bgr(theme.ink)
+MUTED = styles.bgr(theme.muted)
+ACCENT = styles.bgr(theme.accent)
+PLAYER_COLORS = tuple(styles.bgr(c) for c in theme.player)
 
 # Left, top, width, height, in canvas pixels.
 Rect = tuple[int, int, int, int]
@@ -74,7 +73,7 @@ def fit(width: float, height: float, rect: Rect) -> Transform:
 
 
 def player_name(player: int) -> str:
-    return f"P{player}"
+    return copy.player_label.format(player=player)
 
 
 def player_color(player: int) -> tuple[int, int, int]:
@@ -246,7 +245,7 @@ SIDE_CENTER = SIDE_LEFT + SIDE_WIDTH // 2
 
 def _header(canvas: np.ndarray, text: str) -> None:
     draw_text(canvas, text, 40, 62, 1.3)
-    draw_text(canvas, "Esc: menu", CANVAS_WIDTH - 40, 58, 0.7, MUTED, "right")
+    draw_text(canvas, copy.esc_menu, CANVAS_WIDTH - 40, 58, 0.7, MUTED, "right")
 
 
 def _target_panel(
@@ -284,18 +283,19 @@ def _compose_lobby(screen: LobbyScreen, frame: np.ndarray) -> np.ndarray:
         draw_box_label(canvas, player_name(marker.player), marker.box, transform, color)
 
     dim(canvas, (0, 0, CANVAS_WIDTH, 84))
-    draw_text(canvas, "STRIKE A POSE", CANVAS_WIDTH // 2, 58, 1.6, WHITE, "center")
-    draw_text(canvas, "Q: quit", CANVAS_WIDTH - 40, 54, 0.7, MUTED, "right")
+    draw_text(canvas, copy.banner, CANVAS_WIDTH // 2, 58, 1.6, WHITE, "center")
+    draw_text(canvas, copy.quit_key, CANVAS_WIDTH - 40, 54, 0.7, MUTED, "right")
 
     count = len(screen.markers)
     dim(canvas, (0, CANVAS_HEIGHT - 84, CANVAS_WIDTH, 84))
     if screen.can_start:
         label = "player" if count == 1 else "players"
-        message, color = f"{count} {label} in frame  -  press SPACE to start", ACCENT
+        message = copy.lobby_ready.format(count=count, label=label)
+        color = ACCENT
     else:
         message = (
-            f"Need {screen.min_players} to {screen.max_players} players in frame"
-            f"  -  found {count}"
+            copy.lobby_need.format(min_players=screen.min_players, max_players=screen.max_players)
+            + f"  -  found {count}"
         )
         color = WHITE
     draw_text(canvas, message, CANVAS_WIDTH // 2, CANVAS_HEIGHT - 32, 1.1, color, "center")
@@ -304,7 +304,10 @@ def _compose_lobby(screen: LobbyScreen, frame: np.ndarray) -> np.ndarray:
 
 def _compose_countdown(screen: CountdownScreen, frame: np.ndarray) -> np.ndarray:
     canvas = new_canvas()
-    _header(canvas, f"Round {screen.round_number} of {screen.total_rounds}")
+    _header(
+        canvas,
+        copy.round_of.format(round_number=screen.round_number, total_rounds=screen.total_rounds),
+    )
     _large_target_panel(canvas, screen.target)
 
     draw_text(canvas, str(screen.seconds_left), SIDE_CENTER, 340, 9.0, ACCENT, "center")
@@ -317,28 +320,34 @@ def _compose_countdown(screen: CountdownScreen, frame: np.ndarray) -> np.ndarray
 
 def _compose_retry(screen: RetryScreen) -> np.ndarray:
     canvas = new_canvas()
-    _header(canvas, f"Round {screen.round_number} of {screen.total_rounds}")
+    _header(
+        canvas,
+        copy.round_of.format(round_number=screen.round_number, total_rounds=screen.total_rounds),
+    )
     _large_target_panel(canvas, screen.target)
 
     draw_text(
         canvas,
-        f"Found {screen.found} of {screen.expected} players",
+        copy.found_players.format(found=screen.found, expected=screen.expected),
         SIDE_CENTER,
         300,
         1.1,
         ACCENT,
         "center",
     )
-    for line_number, line in enumerate(
-        ("Everyone back in frame,", "then press SPACE", "to try this pose again.")
-    ):
+    for line_number, line in enumerate(copy.missing_retry):
         draw_text(canvas, line, SIDE_CENTER, 370 + line_number * 44, 0.9, WHITE, "center")
     return canvas
 
 
 def _compose_results(screen: ResultsScreen) -> np.ndarray:
     canvas = new_canvas()
-    _header(canvas, f"Round {screen.round_number} of {screen.total_rounds}  -  results")
+    _header(
+        canvas,
+        copy.round_results.format(
+            round_number=screen.round_number, total_rounds=screen.total_rounds
+        ),
+    )
 
     photo: Rect = (40, 90, 800, 590)
     fill(canvas, photo, PANEL)
@@ -354,9 +363,9 @@ def _compose_results(screen: ResultsScreen) -> np.ndarray:
         canvas, screen.target, (side_left, 90, side_width, 240), caption_height=40, caption_scale=0.8
     )
 
-    draw_text(canvas, "PLAYER", side_left + 10, 378, 0.6, MUTED)
-    draw_text(canvas, "ROUND", side_left + 215, 378, 0.6, MUTED, "right")
-    draw_text(canvas, "TOTAL", side_right - 10, 378, 0.6, MUTED, "right")
+    draw_text(canvas, copy.col_player, side_left + 10, 378, 0.6, MUTED)
+    draw_text(canvas, copy.col_round, side_left + 215, 378, 0.6, MUTED, "right")
+    draw_text(canvas, copy.col_total, side_right - 10, 378, 0.6, MUTED, "right")
     for row, player in enumerate(screen.players):
         y = 432 + row * 58
         color = player_color(player.player)
@@ -365,7 +374,7 @@ def _compose_results(screen: ResultsScreen) -> np.ndarray:
         draw_text(canvas, str(player.total), side_right - 10, y, 1.3, WHITE, "right")
 
     last_round = screen.round_number == screen.total_rounds
-    prompt = "SPACE: final scores" if last_round else "SPACE: next round"
+    prompt = copy.space_final if last_round else copy.space_next
     draw_text(canvas, prompt, side_left + side_width // 2, 668, 0.8, ACCENT, "center")
     return canvas
 
@@ -373,14 +382,14 @@ def _compose_results(screen: ResultsScreen) -> np.ndarray:
 def _winners_line(screen: FinalScreen) -> str:
     winners = [player_name(s.player) for s in screen.standings if s.place == 1]
     if len(winners) == 1:
-        return f"{winners[0]} wins!"
+        return copy.winner_one.format(name=winners[0])
     return f"{', '.join(winners[:-1])} and {winners[-1]} share the win!"
 
 
 def _compose_final(screen: FinalScreen) -> np.ndarray:
     canvas = new_canvas()
     center = CANVAS_WIDTH // 2
-    draw_text(canvas, "FINAL SCORES", center, 110, 2.0, WHITE, "center")
+    draw_text(canvas, copy.final_scores, center, 110, 2.0, WHITE, "center")
     draw_text(canvas, _winners_line(screen), center, 190, 1.4, ACCENT, "center")
 
     for row, standing in enumerate(screen.standings):
@@ -392,7 +401,7 @@ def _compose_final(screen: FinalScreen) -> np.ndarray:
         )
         draw_text(canvas, str(standing.total), center + 230, y, 1.5, WHITE, "right")
 
-    draw_text(canvas, "SPACE: new game      Q: quit", center, 680, 0.9, MUTED, "center")
+    draw_text(canvas, copy.space_new_game, center, 680, 0.9, MUTED, "center")
     return canvas
 
 

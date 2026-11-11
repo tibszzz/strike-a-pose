@@ -1,52 +1,49 @@
 """Dodgeball Game: Avoid the bouncing ball! Each player has 5 lives; a ball hit costs one."""
 
 from __future__ import annotations
+
 import math
 import random
+
 import cv2
 import numpy as np
 import pygame
+
+from main import content, styles
 from main.pose import Person, PoseFrame
 from main.pose.library import left_to_right
+from main.settings import DodgeballConfig
+
 from .ball import Ball
 from .roster import OUT, PLAYING, THUMB_DOWN, THUMB_UP, Roster
 
-# Colors
-WHITE = (255, 255, 255)
-BLACK = (0, 0, 0)
-MUTED = (175, 175, 175)
-ACCENT = (70, 215, 255)
-BLUE = (80, 170, 255)
-RED = (255, 80, 80)
-GREEN = (100, 255, 100)
-YELLOW = (255, 255, 100)
-ORANGE = (255, 165, 0)
+theme = styles.DODGEBALL
+copy = content.Dodgeball
+_cfg = DodgeballConfig()
 
-# Player colors, P1..P3 left to right
-PLAYER_COLORS = [BLUE, RED, GREEN]
+WHITE = theme.ink
+BLACK = theme.bg
+MUTED = theme.muted
+ACCENT = theme.accent
+BLUE = theme.player[0]
+RED = theme.danger
+GREEN = theme.success
+YELLOW = theme.ball_slow
+ORANGE = theme.ball_medium
+PLAYER_COLORS = list(theme.player)
 
-# Same lobby idea as Strike a Pose: count the people in frame, then confirm.
-MIN_PLAYERS = 1
-MAX_PLAYERS = 3
-FPS = 30
-LIVES = 5  # chances per player; at 0 the player is out
-OFFSCREEN_SECONDS = 3  # out of frame this long during play = lose a life
-OFFSCREEN_FRAMES = OFFSCREEN_SECONDS * FPS
-GESTURE_HOLD_FRAMES = FPS // 3  # hold a thumb this long (~0.3s) for it to count
+MIN_PLAYERS = _cfg.min_players
+MAX_PLAYERS = _cfg.max_players
+FPS = _cfg.fps
+LIVES = _cfg.lives
+OFFSCREEN_SECONDS = int(_cfg.offscreen_seconds)
+OFFSCREEN_FRAMES = _cfg.offscreen_frames
+GESTURE_HOLD_FRAMES = _cfg.gesture_hold_frames
 
-# Shown on the intro (lobby) screen; mirrors "How to play" in README.md
 RULES = [
-    "Stand in front of the camera",
-    "Dodge the ball bouncing around the live feed",
-    f"Everyone starts with {LIVES} lives (hearts, top-right)",
-    "Ball touches your body: lose a life and the round pauses",
-    "Press R to resume. No lives left and you're out",
-    f"Leave the screen for {OFFSCREEN_SECONDS} seconds: lose a life",
-    "Last player standing wins. Solo: survive as long as you can",
-    "NOTE: Red ball = fast, orange = medium, yellow = slow",
+    rule.format(lives=LIVES, offscreen_seconds=OFFSCREEN_SECONDS) for rule in copy.rules
 ]
 
-# Font style from games/pose/game.py (Strike a Pose)
 FONT = cv2.FONT_HERSHEY_DUPLEX
 
 def _draw_heart(
@@ -174,11 +171,12 @@ NUMBER_KEYS = {
 
 
 class DodgeballGame:
-    title = "Dodgeball"
+    title = copy.window_title
 
-    def __init__(self, size):
+    def __init__(self, size, config: DodgeballConfig | None = None):
         self.w, self.h = size
-        
+        self.config = config if config is not None else DodgeballConfig()
+
         # Ball
         self.ball = Ball(
             x=self.w // 2,
@@ -186,13 +184,19 @@ class DodgeballGame:
             radius=50,
             max_speed=40.0,
             elasticity=0.95,
+            color=theme.ball_medium,
         )
-        
+
         # Lobby: rules screen, then a confirm screen where each person gives a
         # thumbs up (playing) or thumbs down (sitting out)
         self.in_lobby = True
         self.confirming = False  # False = rules screen, True = confirm screen
-        self.roster = Roster(self.w, max_players=MAX_PLAYERS, hold_frames=GESTURE_HOLD_FRAMES, forget_frames=FPS)
+        self.roster = Roster(
+            self.w,
+            max_players=self.config.max_players,
+            hold_frames=self.config.gesture_hold_frames,
+            forget_frames=self.config.fps,
+        )
         self.gesture_snapshot = None  # set by the app shell while wants_gestures is True
         self.lobby_people: list[Person] = []
         self.player_count = 0
@@ -252,7 +256,7 @@ class DodgeballGame:
             for i in range(count)
         ]
         self.reset()
-        self.hit_message = "Get ready!"
+        self.hit_message = copy.get_ready
 
     def reset(self) -> None:
         """Reset the game - start countdown to restart. On the confirm screen, clear choices."""
@@ -268,7 +272,7 @@ class DodgeballGame:
         self.countdown = 5 * FPS
         self.hit_registered = [False] * self.player_count
         self.missing_frames = [0] * self.player_count
-        self.hit_message = "Game restarting..."
+        self.hit_message = copy.restarting
         self.hit_message_timer = 0
         self.hit_timer = 0
         self.body_polygons = []
@@ -505,11 +509,11 @@ class DodgeballGame:
         band.fill((*BLACK, 160))
         canvas.blit(band, (0, 0))
         canvas.blit(band, (0, self.h - 84))
-        draw_text(canvas, "DODGEBALL", self.w // 2, 58, 1.6, WHITE, "center")
+        draw_text(canvas, copy.banner, self.w // 2, 58, 1.6, WHITE, "center")
         self._draw_rules(canvas, top=84 + 24, bottom=self.h - 84 - 24)
 
-        draw_text(canvas, "Press SPACE to choose who's playing", self.w // 2, self.h - 44, 1.0, ACCENT, "center", outline=True)
-        draw_text(canvas, "or press 1 / 2 / 3 to skip and start with that many", self.w // 2, self.h - 14, 0.6, MUTED, "center")
+        draw_text(canvas, copy.lobby_prompt, self.w // 2, self.h - 44, 1.0, ACCENT, "center", outline=True)
+        draw_text(canvas, copy.lobby_skip, self.w // 2, self.h - 14, 0.6, MUTED, "center")
 
     def _draw_confirm(self, canvas: pygame.Surface) -> None:
         """Who's playing? Each person shows thumbs up (play) or thumbs down (sit out)."""
@@ -520,9 +524,9 @@ class DodgeballGame:
             if c.status == PLAYING:
                 color, label = PLAYER_COLORS[slot[c.id]], f"P{slot[c.id] + 1}"
             elif c.status == OUT:
-                color, label = MUTED, "OUT"
+                color, label = MUTED, copy.out_label
             else:
-                color, label = WHITE, "?"
+                color, label = WHITE, copy.unknown_label
             pygame.draw.rect(canvas, color, (x1, y1, x2 - x1, y2 - y1), 3 if c.status == PLAYING else 2)
             label_y = max(y1 - 10, 120)
             draw_text(canvas, label, x1 + 6, label_y, 0.9, color, outline=True)
@@ -546,18 +550,18 @@ class DodgeballGame:
         band.fill((*BLACK, 160))
         canvas.blit(band, (0, 0))
         canvas.blit(band, (0, self.h - 84))
-        draw_text(canvas, "WHO'S PLAYING?", self.w // 2, 46, 1.3, WHITE, "center")
+        draw_text(canvas, copy.whos_playing, self.w // 2, 46, 1.3, WHITE, "center")
         _draw_thumb(canvas, self.w // 2 - 250, 66, 26, GREEN, up=True)
-        draw_text(canvas, "to play", self.w // 2 - 230, 75, 0.6, MUTED)
+        draw_text(canvas, copy.to_play, self.w // 2 - 230, 75, 0.6, MUTED)
         _draw_thumb(canvas, self.w // 2 + 160, 66, 26, RED, up=False)
-        draw_text(canvas, "to sit out", self.w // 2 + 180, 75, 0.6, MUTED)
+        draw_text(canvas, copy.to_sit_out, self.w // 2 + 180, 75, 0.6, MUTED)
 
         players, pending = roster.players, roster.pending
         n = len(players)
         if not roster.visible:
-            message, color = "Step in front of the camera", WHITE
+            message, color = copy.step_in, WHITE
         elif n == 0:
-            message, color = "Everyone playing: give a thumbs up!", WHITE
+            message, color = copy.everyone_thumbs, WHITE
         elif pending:
             message = f"{n} in - waiting for {len(pending)} more  -  SPACE to start anyway"
             color = ACCENT
@@ -565,10 +569,9 @@ class DodgeballGame:
             label = "player" if n == 1 else "players"
             message, color = f"{n} {label} ready  -  press SPACE to start", ACCENT
         if roster.full:
-            message, color = f"Max {MAX_PLAYERS} players - someone give a thumbs down first", ORANGE
+            message, color = copy.max_players.format(max_players=MAX_PLAYERS), ORANGE
         draw_text(canvas, message, self.w // 2, self.h - 44, 1.0, color, "center", outline=True)
-        draw_text(canvas, "R clear  |  Backspace rules  |  1 / 2 / 3 skip gestures",
-                  self.w // 2, self.h - 14, 0.6, MUTED, "center")
+        draw_text(canvas, copy.confirm_hint, self.w // 2, self.h - 14, 0.6, MUTED, "center")
 
     def _draw_rules(self, canvas: pygame.Surface, top: int, bottom: int) -> None:
         """Translucent card with the rules, centred between the lobby bands.
@@ -593,7 +596,7 @@ class DodgeballGame:
         pygame.draw.rect(card, (*BLACK, 140), card.get_rect(), border_radius=12)
         canvas.blit(card, (card_x, card_y))
 
-        draw_text(canvas, "HOW TO PLAY", self.w // 2, card_y + 44, 1.0, ACCENT, "center", outline=True)
+        draw_text(canvas, copy.how_to_play, self.w // 2, card_y + 44, 1.0, ACCENT, "center", outline=True)
         for k, line in enumerate(lines):
             y = card_y + 70 + line_h * (k + 1) - 12
             draw_text(canvas, line, card_x + 32, y, scale, WHITE, outline=True)

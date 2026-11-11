@@ -26,6 +26,6 @@ Shared shell keys (`D` debug, `F` fullscreen, `Esc` menu, `Q` quit) plus:
 ## Customising
 
 - **Settings:** copy `.env.example` to `.env` and change lives, timings, pose thresholds, camera, animation speed. Anything left out keeps its default; command-line flags beat `.env`.
-- **Messages:** edit `assets/messages/shot.txt` (shown to the player who got shot), `win.txt` (win screen), and `early.txt` (drifts up on an early draw). One message per line, picked at random.
+- **Messages:** edit the pools on `content.Duel` in `main/content.py` (`shot_messages`, `win_messages`, `early_messages`).
 - **Win pictures:** any PNG in `assets/sprites/cowboys/` can appear on the win screen.
 - **Sounds:** drop `ready.wav`, `steady.wav`, `bang.wav`, `early.wav`, `hit.wav`, or `match_over.wav` into `assets/sounds/` to replace the built-in synthesized sounds. See `assets/sounds/README.md`.

@@ -18,7 +18,8 @@ from typing import Sequence
 
 import numpy as np
 
-from main.config import Config
+from main import content
+from main.settings import StrikeConfig as Config
 from main.pose.library import (
     BODY_JOINTS,
     POSE_FILE_JOINTS,
@@ -108,11 +109,19 @@ def compose_live(
 
 def compose_saved(pose: Pose) -> np.ndarray:
     canvas = new_canvas()
-    draw_text(canvas, f"Saved: {pose.name}", CANVAS_WIDTH // 2, 62, 1.4, WHITE, "center")
+    draw_text(
+        canvas,
+        content.Strike.saved_pose.format(name=pose.name),
+        CANVAS_WIDTH // 2,
+        62,
+        1.4,
+        WHITE,
+        "center",
+    )
     panel = (270, 90, 740, 540)
     fill(canvas, panel, PANEL)
     draw_stick_figure(canvas, pose.joints, panel)
-    draw_text(canvas, "SPACE or Q: close", CANVAS_WIDTH // 2, 680, 0.9, ACCENT, "center")
+    draw_text(canvas, content.Strike.capture_close, CANVAS_WIDTH // 2, 680, 0.9, ACCENT, "center")
     return canvas
 
 

@@ -20,7 +20,8 @@ from typing import Sequence
 import cv2
 import numpy as np
 
-from main.config import Config
+from main import content
+from main.settings import StrikeConfig as Config
 from main.pose.library import (
     HEAD_JOINT,
     Pose,
@@ -318,7 +319,7 @@ def canvas_to_unit(transform: Transform, x: int, y: int) -> tuple[float, float]:
 
 def compose_editor(editor: PoseEditor, transform: Transform) -> np.ndarray:
     canvas = new_canvas()
-    title = f"Edit pose: {editor.name}"
+    title = content.Strike.edit_title.format(name=editor.name)
     if editor.existed_at_open:
         title += " (existing)"
     else:

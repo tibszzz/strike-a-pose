@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pygame
 
+from main import content, styles
 from main.nav import (
     GestureSnapshot,
     MenuCommand,
@@ -15,21 +16,15 @@ from main.nav import (
 )
 from main.pose import PoseFrame
 
-WHITE = (255, 255, 255)
-MUTED = (180, 180, 180)
-ACCENT = (255, 220, 80)
-HAND_BOX = (80, 220, 255)
-HOLD_TRACK = (255, 255, 255, 40)
-HOLD_FILL = (255, 220, 80, 200)
-
-PLACEHOLDER_TITLE = "Strike a Pose"
+theme = styles.BRAND  # full-bleed splash overlay (alpha 160)
+copy = content.Shell
 
 
 class SplashGame:
-    title = PLACEHOLDER_TITLE
+    title = copy.brand
     is_splash = True
     wants_gestures = True
-    background = (0, 0, 0)
+    background = theme.bg
 
     def __init__(self, size: tuple[int, int]) -> None:
         self.w, self.h = size
@@ -38,8 +33,8 @@ class SplashGame:
         self.gesture_snapshot: GestureSnapshot | None = None
         cfg = load_gesture_nav_config()
         self._thumb = ThumbHoldTracker(hold_s=cfg.thumb_hold_s, min_score=cfg.min_score)
-        self._title_font = pygame.font.SysFont("menlo,monaco,courier", max(36, self.h // 12), bold=True)
-        self._hint_font = pygame.font.SysFont("menlo,monaco,courier", max(16, self.h // 28))
+        self._title_font = styles.load_font(theme.title, theme.title_px(self.h))
+        self._hint_font = styles.load_font(theme.body, theme.body_px(self.h))
 
     def reset(self) -> None:
         self._pending = None
@@ -61,23 +56,23 @@ class SplashGame:
         snap = self.gesture_snapshot
 
         overlay = pygame.Surface((self.w, self.h), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 160))
+        overlay.fill(theme.overlay)
         canvas.blit(overlay, (0, 0))
 
         if snap is not None and snap.hand_box is not None:
             x1, y1, x2, y2 = snap.hand_box
             pygame.draw.rect(
                 canvas,
-                HAND_BOX,
+                theme.hand_box,
                 pygame.Rect(int(x1), int(y1), int(x2 - x1), int(y2 - y1)),
                 width=3,
             )
 
-        title = self._title_font.render(PLACEHOLDER_TITLE, True, WHITE)
+        title = self._title_font.render(copy.brand, True, theme.ink)
         title_y = self.h // 2 - title.get_height()
         canvas.blit(title, (self.w // 2 - title.get_width() // 2, title_y))
 
-        prompt = self._hint_font.render("Hold thumbs up to start", True, ACCENT)
+        prompt = self._hint_font.render(copy.splash_prompt, True, theme.accent)
         prompt_y = title_y + title.get_height() + 16
         canvas.blit(prompt, (self.w // 2 - prompt.get_width() // 2, prompt_y))
 
@@ -86,23 +81,13 @@ class SplashGame:
         bar_x = self.w // 2 - bar_w // 2
         bar_y = prompt_y + prompt.get_height() + 18
         track = pygame.Surface((bar_w, bar_h), pygame.SRCALPHA)
-        track.fill(HOLD_TRACK)
+        track.fill(theme.hold_track)
         canvas.blit(track, (bar_x, bar_y))
         if self._thumb.progress > 0:
             fill_w = max(1, int(bar_w * self._thumb.progress))
             fill = pygame.Surface((fill_w, bar_h), pygame.SRCALPHA)
-            fill.fill(HOLD_FILL)
+            fill.fill(theme.hold_fill)
             canvas.blit(fill, (bar_x, bar_y))
-
-        status_y = bar_y + bar_h + 16
-        hold = self._thumb.hold_status()
-        if hold is not None:
-            status = self._hint_font.render(hold, True, ACCENT)
-        elif snap is not None and snap.label:
-            status = self._hint_font.render(f"{snap.label}  {snap.score:.2f}", True, WHITE)
-        else:
-            status = self._hint_font.render("show a thumbs up…", True, MUTED)
-        canvas.blit(status, (self.w // 2 - status.get_width() // 2, status_y))
 
     def handle_command(self, command: MenuCommand) -> None:
         # Keyboard (--debug): Enter / arrows still advance instantly.

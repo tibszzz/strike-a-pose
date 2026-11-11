@@ -39,7 +39,7 @@ python -m strike_a_pose --debug
 - People in the background are ignored: the snapshot scores the tallest figures in frame, as many as started the game.
 - If the snapshot finds fewer people than started the game, the round is replayed with the same pose.
 
-Settings (rounds, countdown length, scoring strictness, camera, model) are in `strike_a_pose/config.py`.
+Settings (rounds, countdown length, scoring strictness, camera, model) are in `main/settings/strike.py`.
 
 ### Adding poses
 
@@ -144,7 +144,10 @@ Layout:
 - `main/pose/` — live YOLO tracker and gesture helpers
 - `main/nav/` — menu commands and MediaPipe gesture session
 - `main/games/` — menu, registry, and each title
-- `main/config.py` — `.env` loading and strike `Config`
+- `main/content.py` — user-facing copy
+- `main/styles.py` — Theme (brand tokens + per-game deltas)
+- `main/settings/` — shell + per-game tunables (`from_env`)
+- `main/config.py` — thin re-export of settings helpers
 - `assets/` — models, poses, fonts, sounds, sprites
 - `main/pose/`: live YOLO tracker, P1/P2 assignment, full `people` list, gesture helpers; pose-file types in `library.py`
 - `main/app.py`: shared pygame shell; swaps `Game` instances without remounting the pose tracker
@@ -154,7 +157,6 @@ Layout:
 - `main/games/duel/`: Wild West Duel (from `shooter-v1`)
 - `main/games/dodgeball/`: Dodgeball and Cannonball (from `kaizer1v`)
 - `main/games/strike/`: party pose game; `play.py` is the pygame adapter, `logic.py` rules, `game.py` compose/draw
-- `main/config.py`: `.env` loading, message lists, and strike `Config`
 - `assets/models/`: pose model weights
 - `assets/poses/`: strike pose library
-- `assets/fonts/`: Pixelify Sans (SIL Open Font License, see `OFL.txt`)
+- `assets/fonts/`: Monofett, VT323, Pixelify Sans (SIL OFL; see `*-OFL.txt` / `OFL.txt`)

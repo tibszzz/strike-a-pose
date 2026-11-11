@@ -13,7 +13,7 @@ import math
 import random
 from enum import Enum, auto
 from typing import Callable, Sequence
-from main.config import Config
+from main.settings import StrikeConfig
 from main.pose.library import Person, Pose, left_to_right, select_players
 from .scoring import round_score, score_pose
 from .screens import (
@@ -58,7 +58,7 @@ def rank(totals: Sequence[int]) -> tuple[Standing, ...]:
 class Game:
     def __init__(
         self,
-        config: Config,
+        config: StrikeConfig,
         poses: Sequence[Pose],
         rng: random.Random | None = None,
     ) -> None:
