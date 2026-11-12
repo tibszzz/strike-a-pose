@@ -9,3 +9,7 @@ Optional sound overrides. Drop in any of these and it replaces the synthesized s
 - `shutter.wav`: Strike snapshot click (replaces the synth camera shutter)
 - `drumroll.wav`: Strike results reveal build (length ≈ `results_reveal_s`; hit rate ≈ `results_reveal_hz`)
 - `sting.wav`: Strike score-reveal hit after the drumroll
+
+Music (no synthesized fallback; silent if missing):
+
+- `game_loop.mp3`: loops on the main menu, fades out when a game is picked
