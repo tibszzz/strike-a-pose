@@ -157,7 +157,7 @@ def note_row_rects(frame: Frame, labels: Sequence[str], *, top: float = 40, heig
 class Hint:
     icon: Path | None
     heading: str
-    sub: str = ""
+    sub: str
 
 
 def draw_hint_bar(
@@ -172,20 +172,18 @@ def draw_hint_bar(
 ) -> None:
     """Bottom strip: [icon heading / sub] | [icon heading / sub].
 
-    `scale` shrinks icons + type; `alpha` < 255 fades the icons and text (the
-    paper stays solid so the backdrop doesn't show through).
+    `scale` shrinks icons + type; `alpha` < 255 fades the whole strip.
     """
+    if alpha < 255:
+        pad = frame.px(24)
+        layer = pygame.Surface((rect.width + pad * 2, rect.height + pad * 2), pygame.SRCALPHA)
+        draw_hint_bar(layer, frame, pygame.Rect(pad, pad, rect.width, rect.height), hints, seed=seed, scale=scale)
+        layer.set_alpha(alpha)
+        surface.blit(layer, (rect.x - pad, rect.y - pad))
+        return
     paper.draw_paper(surface, rect, frame, PaperStyle(torn="tb", jag=6), seed=seed)
     if not hints:
         return
-    # Fade by mixing ink toward the paper and scaling icon alpha, rather than
-    # blitting a translucent layer (surface alpha on a per-pixel-alpha layer
-    # renders as solid black on some display formats).
-    a = max(0, min(255, alpha))
-
-    def ink(color: paper.Rgb) -> paper.Rgb:
-        return tuple(round(p + (c - p) * a / 255) for c, p in zip(color, paper.PAPER))  # type: ignore[return-value]
-
     slot_w = rect.width / len(hints)
     icon_box = frame.px(62 * scale)
     head_face = paper.hand(frame, 31 * scale)
@@ -195,7 +193,7 @@ def draw_hint_bar(
         if i:
             pygame.draw.line(
                 surface,
-                ink(paper.INK_FAINT),
+                paper.INK_FAINT,
                 (left, rect.y + frame.px(20)),
                 (left, rect.bottom - frame.px(20)),
                 max(1, frame.px(1.5)),
@@ -203,62 +201,11 @@ def draw_hint_bar(
         x = left + frame.px(34 * scale)
         if hint.icon is not None:
             box = pygame.Rect(x, rect.centery - icon_box // 2, icon_box, icon_box)
-            paper.blit_art(surface, hint.icon, box, alpha=a)
+            paper.blit_art(surface, hint.icon, box)
             x = box.right + frame.px(18 * scale)
         max_text = left + round(slot_w) - x - frame.px(14)
-        paper.text(surface, hint.heading, head_face, ink(INK), (x, rect.centery + frame.px(2)), "bottomleft", max_width=max_text)
-        paper.text(surface, hint.sub, sub_face, ink(INK_SOFT), (x, rect.centery + frame.px(2)), "topleft", max_width=max_text)
-
-
-def draw_hint_stack(
-    surface: pygame.Surface,
-    frame: Frame,
-    hints: Sequence[Hint],
-    *,
-    left: float = 50,
-    bottom: float = 846,
-    text_size: float = 44,
-    icon_size: float = 60,
-    gap: float = 12,
-    alpha: int = 255,
-    dim: Sequence[int] = (),
-    seed: int = 21,
-) -> list[pygame.Rect]:
-    """Hints as separate torn-paper strips stacked upward from (left, bottom), design px.
-
-    Icon + heading only (no sub line); every strip gets the widest strip's
-    width so they line up. `dim` lists hint indexes drawn faded (e.g. "Fist to
-    start" before enough players are ready). Returns the strip rects, top first.
-    """
-    if not hints:
-        return []
-    face = paper.hand(frame, text_size)
-    pad_x, pad_y, icon_gap = 24, 12, 18
-    text_w = max(face.size(h.heading)[0] for h in hints) / frame.scale
-    width = pad_x * 2 + icon_size + icon_gap + text_w
-    height = icon_size + pad_y * 2
-    rects: list[pygame.Rect] = []
-    y = bottom
-    for i in range(len(hints) - 1, -1, -1):
-        hint = hints[i]
-        rect = frame.rect(left, y - height, left + width, y)
-        paper.draw_paper(surface, rect, frame, PaperStyle(torn="tb", jag=5), seed=seed + i)
-        a = alpha if i not in dim else round(alpha * 0.4)
-        x = rect.x + frame.px(pad_x)
-        if hint.icon is not None:
-            box = pygame.Rect(x, rect.centery - frame.px(icon_size) // 2, frame.px(icon_size), frame.px(icon_size))
-            paper.blit_art(surface, hint.icon, box, alpha=a)
-            x = box.right + frame.px(icon_gap)
-        paper.text(surface, hint.heading, face, _fade(INK, a), (x, rect.centery + frame.px(2)), "midleft")
-        rects.insert(0, rect)
-        y -= height + gap
-    return rects
-
-
-def _fade(color: paper.Rgb, alpha: int) -> paper.Rgb:
-    """Ink mixed toward the paper color: `alpha` 255 = full ink, 0 = invisible on paper."""
-    a = max(0, min(255, alpha))
-    return tuple(round(p + (c - p) * a / 255) for c, p in zip(color, paper.PAPER))  # type: ignore[return-value]
+        paper.text(surface, hint.heading, head_face, INK, (x, rect.centery + frame.px(2)), "bottomleft", max_width=max_text)
+        paper.text(surface, hint.sub, sub_face, INK_SOFT, (x, rect.centery + frame.px(2)), "topleft", max_width=max_text)
 
 
 # --- how-to-play card -------------------------------------------------------------
@@ -302,13 +249,13 @@ def draw_cursor(
     snap: object | None,
     progress: float,
     *,
-    at: tuple[float, float] | None,
+    at: tuple[float, float] | None = None,
 ) -> None:
-    """Open palm: white hand icon at `at`. Fist (or a hold in progress): paper badge + hold ring.
+    """Open palm: white hand icon at the fingertip. Fist: paper badge + hold ring.
 
-    `at` is the page's smoothed cursor (`main.nav.cursor.HandCursor`); None draws nothing.
+    `at` overrides the position (pages with a re-centred, mouse-like cursor).
     """
-    point = at
+    point = at if at is not None else pointer(snap)
     if point is None:
         return
     label = getattr(snap, "label", None)

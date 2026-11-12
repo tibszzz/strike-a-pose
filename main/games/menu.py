@@ -1,9 +1,8 @@
 """In-process game picker. Implements the shared Game protocol.
 
-Sketchbook backdrop (players drawn as marker stick figures from the pose
-model, no live video) behind a row of notebook-page buttons across the top
-(one per game, then Quit), the brand title bottom-right and stacked gesture hints
-bottom-left. Hovering a note (smoothed palm cursor) selects it and the selection
+Live camera behind a row of notebook-page buttons across the top (one per
+game, then Quit), the brand title bottom-right and faint gesture hints
+bottom-left. Hovering a note (index fingertip) selects it and the selection
 sticks after the hand moves away; Closed_Fist held anywhere presses the
 selected note. While a Closed_Fist hold is in
 progress, selection does not switch and a different hand's Closed_Fist is
@@ -29,14 +28,13 @@ from main.nav import (
     Nav,
     QuitApp,
     StartGame,
-    ReleaseGate,
     ThumbHoldTracker,
+    effective_label,
     load_gesture_nav_config,
-    nav_cursor,
 )
 from main.nav.hand_geometry import NAV_GESTURE_HANDS
 from main.pose import PoseFrame
-from main.ui import paper, sketch, widgets
+from main.ui import paper, widgets
 from main.ui.paper import Frame
 from main.ui.widgets import INDEX_FINGERTIP, Hint
 
@@ -73,16 +71,14 @@ class MenuGame:
         self._frame: PoseFrame | None = None
         self.gesture_snapshot: GestureSnapshot | None = None
         cfg = load_gesture_nav_config()
+        self._min_score = cfg.min_score
         self._thumb = ThumbHoldTracker(
             hold_s=cfg.thumb_hold_s,
             min_score=cfg.min_score,
             label="Closed_Fist",
-            grace_s=cfg.hold_grace_s,
         )
-        self._release = ReleaseGate(
-            required=release_first, open_s=cfg.release_open_s, min_score=cfg.min_score
-        )
-        self.cursor = nav_cursor(size, config=cfg)
+        self._release_first = release_first
+        self._released = not release_first
         self._hard_lock: int | None = None
         self._hover: int | None = None
 
@@ -90,9 +86,8 @@ class MenuGame:
         self._pending = None
         self._hard_lock = None
         self._hover = None
-        self._release.reset()
+        self._released = not self._release_first
         self._thumb.reset()
-        self.cursor.reset()
 
     def tile_rects(self) -> list[pygame.Rect]:
         return widgets.note_row_rects(self.frame, self._labels)
@@ -100,12 +95,13 @@ class MenuGame:
     def update(self, frame: PoseFrame) -> None:
         self._frame = frame
         snap = self.gesture_snapshot
-        released = self._release.update(snap, frame.timestamp)
-        tip = self.cursor.update(snap, frame.timestamp, frame.people)
+        if not self._released and effective_label(snap, self._min_score) != "Closed_Fist":
+            self._released = True
+        tip = widgets.pointer(snap)
         rects = self.tile_rects()
 
         self._hover = None
-        if tip is not None and self.cursor.tracking:
+        if tip is not None:
             for i, rect in enumerate(rects):
                 if rect.collidepoint(tip):
                     self._hover = i
@@ -120,14 +116,17 @@ class MenuGame:
             snap,
             frame.timestamp,
             frame_size=(self.w, self.h),
-            armed=self._hard_lock is not None and released,
+            armed=self._hard_lock is not None and self._released,
         ):
             assert self._hard_lock is not None
             self._pending = self._nav_for(self._hard_lock)
 
+    def render_camera(self, image):
+        return image
+
     def draw(self, canvas: pygame.Surface, frame: PoseFrame) -> None:
         f = self.frame
-        sketch.draw_sketch_backdrop(canvas, frame)
+        paper.shade_video(canvas)
 
         for i, (label, rect) in enumerate(zip(self._labels, self.tile_rects())):
             locked = i == self._hard_lock
@@ -142,15 +141,17 @@ class MenuGame:
                 progress=self._thumb.progress if locked else 0.0,
             )
 
-        # Gesture hints stacked bottom-left (softer ink); brand title bottom-right.
-        widgets.draw_hint_stack(
+        # Gesture hints: small and faded, bottom-left; brand title bottom-right.
+        widgets.draw_hint_bar(
             canvas,
             f,
+            f.rect(50, 770, 610, 846),
             (
-                Hint(widgets.PALM_ICON, hints.hover_heading),
-                Hint(widgets.FIST_ICON, hints.select_heading),
+                Hint(widgets.PALM_ICON, hints.hover_heading, hints.hover_sub),
+                Hint(widgets.FIST_ICON, hints.select_heading, hints.start_sub),
             ),
-            alpha=190,
+            scale=0.68,
+            alpha=150,
         )
         widgets.draw_title_strip(
             canvas,
@@ -165,9 +166,7 @@ class MenuGame:
         )
 
         # Pointer last so it sits above the notes.
-        widgets.draw_cursor(
-            canvas, f, self.gesture_snapshot, self._thumb.progress, at=self.cursor.position
-        )
+        widgets.draw_cursor(canvas, f, self.gesture_snapshot, self._thumb.progress)
 
     def handle_command(self, command: MenuCommand) -> None:
         n = len(self._labels)

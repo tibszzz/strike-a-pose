@@ -13,8 +13,6 @@ from main.games.registry import build_registry, make_how_to
 from main.nav import GestureSnapshot, MenuCommand, StartGame
 from main.pose import PoseFrame
 
-from cursor_util import hand_for
-
 
 def _frame(timestamp: float) -> PoseFrame:
     return PoseFrame(np.zeros((480, 640, 3), np.uint8), timestamp, (None, None), [])
@@ -40,28 +38,45 @@ def _show(page: HowToPlayGame, label, x, y, t: float) -> None:
     page.update(_frame(t))
 
 
-def _aim(page: HowToPlayGame, target, t: float, label=None):
-    """Move the hand so the cursor sits on `target`; held ~0.2s. Returns (hand, t)."""
-    hand = hand_for(*target)
-    for _ in range(6):
-        t += 1 / 30
-        _show(page, label, *hand, t)
-    return hand, t
+def _aim(page: HowToPlayGame, target, t: float, start=(100.0, 400.0)) -> tuple[float, float]:
+    """Open hand appears at `start` (cursor parks at centre), then moves so the cursor hits `target`."""
+    _show(page, None, *start, t)
+    cx, cy = page.cursor
+    hand = (start[0] + target[0] - cx, start[1] + target[1] - cy)
+    _show(page, None, *hand, t + 0.05)
+    return hand
 
 
-def test_cursor_uses_the_menu_mapping_so_it_does_not_jump_between_pages():
-    from main.games.menu import MenuGame
-    from main.games.registry import GameEntry
-
+def test_cursor_starts_at_centre_and_follows_hand_movement_not_position():
     pygame.init()
-    menu = MenuGame((640, 480), (GameEntry("duel", "Duel", lambda size: None),))
     page = HowToPlayGame((640, 480), "duel")
-    assert page.cursor is None  # no hand yet: nothing drawn, nothing parked at the centre
-    snap = _snap(None, 500.0, 120.0)
-    menu.gesture_snapshot = page.gesture_snapshot = snap
-    menu.update(_frame(1.0))
-    page.update(_frame(1.0))
-    assert page.cursor == menu.cursor.position
+    assert page.cursor == (320.0, 240.0)
+    _show(page, None, 600.0, 50.0, 1.0)  # hand far away: cursor stays centred
+    assert page.cursor == (320.0, 240.0)
+    _show(page, None, 580.0, 70.0, 1.1)
+    assert page.cursor == (300.0, 260.0)
+
+
+def test_lost_hand_reanchors_where_the_cursor_was():
+    pygame.init()
+    page = HowToPlayGame((640, 480), "duel")
+    _show(page, None, 100.0, 100.0, 1.0)
+    _show(page, None, 150.0, 100.0, 1.1)
+    assert page.cursor == (370.0, 240.0)
+    page.gesture_snapshot = None
+    page.update(_frame(1.2))
+    _show(page, None, 500.0, 400.0, 1.3)  # reappears elsewhere: no jump
+    assert page.cursor == (370.0, 240.0)
+
+
+def test_pushing_past_an_edge_drags_the_offset():
+    pygame.init()
+    page = HowToPlayGame((640, 480), "duel")
+    _show(page, None, 300.0, 240.0, 1.0)
+    _show(page, None, 300.0, -400.0, 1.1)  # far past the top
+    assert page.cursor[1] == 0.0
+    _show(page, None, 300.0, -380.0, 1.2)  # comes straight back down
+    assert page.cursor[1] == 20.0
 
 
 def test_fist_away_from_buttons_does_nothing():
@@ -77,49 +92,47 @@ def test_fist_carried_from_menu_cannot_select_even_over_a_button():
     pygame.init()
     page = HowToPlayGame((640, 480), "duel")
     play = page.button_rects()[0].center
-    hand, t = _aim(page, play, 1.0, label="Closed_Fist")  # still closed from the menu pick
-    assert page.button_rects()[0].collidepoint(page.cursor)
-    assert page.debug_lines()[0].endswith("play")  # selected, but the carried fist can't press
-    _show(page, "Closed_Fist", *hand, t + 1.0)
+    _show(page, "Closed_Fist", 100.0, 400.0, 1.0)  # still closed from the menu pick
+    cx, cy = page.cursor
+    hand = (100.0 + play[0] - cx, 400.0 + play[1] - cy)
+    _show(page, "Closed_Fist", *hand, 1.1)
+    _show(page, "Closed_Fist", *hand, 2.0)
     assert page.poll_nav() is None
 
-    _show(page, None, *hand, t + 1.1)  # opens…
-    _show(page, None, *hand, t + 1.3)
-    _show(page, "Closed_Fist", *hand, t + 1.4)  # …and closes again on Let's go!
-    _show(page, "Closed_Fist", *hand, t + 2.0)
+    _show(page, None, *hand, 2.1)  # opens…
+    _show(page, "Closed_Fist", *hand, 2.2)  # …and closes again on Let's go!
+    _show(page, "Closed_Fist", *hand, 2.8)
     assert page.poll_nav() == StartGame("duel")
 
 
 def test_hover_lets_go_then_fist_starts_the_game():
     pygame.init()
     page = HowToPlayGame((640, 480), "dodgeball")
-    hand, t = _aim(page, page.button_rects()[0].center, 1.0)
+    hand = _aim(page, page.button_rects()[0].center, 1.0)
     assert page.debug_lines()[0].endswith("play")
-    _show(page, "Closed_Fist", *hand, t + 0.1)
-    _show(page, "Closed_Fist", *hand, t + 0.7)
+    _show(page, "Closed_Fist", *hand, 1.2)
+    _show(page, "Closed_Fist", *hand, 1.8)
     assert page.poll_nav() == StartGame("dodgeball")
 
 
 def test_selection_sticks_so_a_fist_away_from_the_button_presses_it():
     pygame.init()
     page = HowToPlayGame((640, 480), "duel")
-    hand, t = _aim(page, page.button_rects()[0].center, 1.0)
-    away = (hand[0], hand[1] + 150.0)  # cursor drifts well off Let's go!
-    for k in range(10):
-        _show(page, None, *away, t + 0.05 * (k + 1))
-    t += 0.5
+    hand = _aim(page, page.button_rects()[0].center, 1.0)
+    away = (hand[0], hand[1] + 200.0)  # cursor drifts well off Let's go!
+    _show(page, None, *away, 1.2)
     assert not page.button_rects()[0].collidepoint(page.cursor)
-    _show(page, "Closed_Fist", *away, t + 0.1)
-    _show(page, "Closed_Fist", *away, t + 0.7)
+    _show(page, "Closed_Fist", *away, 1.3)
+    _show(page, "Closed_Fist", *away, 1.9)
     assert page.poll_nav() == StartGame("duel")
 
 
 def test_hover_back_then_fist_returns_to_menu():
     pygame.init()
     page = HowToPlayGame((640, 480), "strike")
-    hand, t = _aim(page, page.button_rects()[1].center, 1.0)
-    _show(page, "Closed_Fist", *hand, t + 0.1)
-    _show(page, "Closed_Fist", *hand, t + 0.7)
+    hand = _aim(page, page.button_rects()[1].center, 1.0)
+    _show(page, "Closed_Fist", *hand, 1.2)
+    _show(page, "Closed_Fist", *hand, 1.8)
     assert page.poll_nav() == StartGame(None)
 
 

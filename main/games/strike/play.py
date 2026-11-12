@@ -18,6 +18,8 @@ from main.end_screen import (
     draw_points_table,
     winners_line,
 )
+from main import audio, content, styles
+from main.end_screen import EndChoice, EndScreen, draw_end_screen
 from main.nav import GestureSnapshot, MenuCommand, StartGame, ThumbHoldTracker, load_gesture_nav_config
 from main.nav.hand_geometry import NAV_GESTURE_HANDS
 from main.pose import PoseFrame
@@ -34,8 +36,6 @@ from .screens import (
     FinalScreen,
     LobbyScreen,
     ResultsScreen,
-    ScoreRevealLocked,
-    ScoreRevealTick,
     Screen,
     SnapshotTaken,
 )
@@ -48,25 +48,15 @@ def _still_paths() -> tuple:
     return tuple(sorted(root.glob("pose_*.png")))
 
 
-def _load_sounds(
+def _load_countdown_sounds(
     sounds_dir: Path = SOUNDS,
-    *,
-    reveal_s: float = 2.0,
-    reveal_hz: float = 20.0,
 ) -> dict[str, pygame.mixer.Sound | None]:
-    """Countdown ticks, snapshot shutter, results drumroll + sting."""
+    """Reuse Duel assets: ready tick per digit, bang at snapshot."""
     synth = {
         "tick": lambda: audio.tone(440, 0.25),
-        "shutter": lambda: audio.camera_shutter(),
-        "drumroll": lambda: audio.drumroll(reveal_s, hz=reveal_hz),
-        "sting": lambda: audio.reveal_sting(),
+        "bang": lambda: audio.gunshot(),
     }
-    files = {
-        "tick": "ready.wav",
-        "shutter": "shutter.wav",
-        "drumroll": "drumroll.wav",
-        "sting": "sting.wav",
-    }
+    files = {"tick": "ready.wav", "bang": "bang.wav"}
     return {
         name: audio.load_or(sounds_dir / files[name], make)
         for name, make in synth.items()
@@ -88,11 +78,7 @@ class StrikeGame:
         library = list(poses) if poses is not None else load_library(self._config.poses_dir)
         self._logic = StrikeLogic(self._config, library)
         self._logic.subscribe(self._on_logic_event)
-        self._sounds = _load_sounds(
-            reveal_s=self._config.results_reveal_s,
-            reveal_hz=self._config.results_reveal_hz,
-        )
-        self._drumroll_channel: pygame.mixer.Channel | None = None
+        self._sounds = _load_countdown_sounds()
         self._screen: Screen = LobbyScreen(
             markers=(),
             can_start=False,
@@ -114,22 +100,7 @@ class StrikeGame:
         if isinstance(event, CountdownTick) and event.seconds_left <= 3:
             audio.play(self._sounds.get("tick"))
         elif isinstance(event, SnapshotTaken):
-            audio.play(self._sounds.get("shutter"))
-        elif isinstance(event, ScoreRevealTick):
-            self._start_drumroll()
-        elif isinstance(event, ScoreRevealLocked):
-            self._stop_drumroll()
-            audio.play(self._sounds.get("sting"))
-
-    def _start_drumroll(self) -> None:
-        if self._drumroll_channel is not None:
-            return
-        self._drumroll_channel = audio.play(self._sounds.get("drumroll"))
-
-    def _stop_drumroll(self) -> None:
-        if self._drumroll_channel is not None:
-            self._drumroll_channel.stop()
-            self._drumroll_channel = None
+            audio.play(self._sounds.get("bang"))
 
     def _make_ready(self) -> ReadyUp:
         return ReadyUp(
@@ -165,7 +136,6 @@ class StrikeGame:
         return isinstance(self._screen, ResultsScreen) and self._screen.idle
 
     def reset(self) -> None:
-        self._stop_drumroll()
         library = load_library(self._config.poses_dir)
         self._logic = StrikeLogic(self._config, library)
         self._logic.subscribe(self._on_logic_event)
@@ -240,7 +210,7 @@ class StrikeGame:
             return
 
         if self._in_end_screen():
-            choice = self._end.update(self.gesture_snapshot, frame.timestamp, frame.people)
+            choice = self._end.update(self.gesture_snapshot, frame.timestamp)
             if choice is not None:
                 self._apply_end_choice(choice)
             return
@@ -302,7 +272,6 @@ class StrikeGame:
                 snap=self.gesture_snapshot,
                 title=content.Results.strike_title,
                 body=self._draw_final_body,
-                pose=frame,
             )
 
     def _draw_final_body(self, canvas: pygame.Surface, rect: pygame.Rect, frame) -> None:

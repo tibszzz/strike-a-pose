@@ -53,6 +53,17 @@ class CountdownScreen:
 
 
 @dataclass(frozen=True)
+class RetryScreen:
+    """The snapshot found too few people, so the round will be replayed."""
+
+    round_number: int
+    total_rounds: int
+    target: Pose
+    found: int
+    expected: int
+
+
+@dataclass(frozen=True)
 class PlayerResult:
     player: int
     joints: dict[str, Point]  # visible joints only, in snapshot pixels
@@ -70,7 +81,6 @@ class ResultsScreen:
     players: tuple[PlayerResult, ...]
     display_scores: tuple[int, ...]  # parallel to players; scrambled until lock
     idle: bool  # True once the score reveal locks and thumbs-up can advance
-    holding: bool = False  # True during the post-snapshot beat before scramble
 
 
 @dataclass(frozen=True)
@@ -88,7 +98,7 @@ class FinalScreen:
     total_rounds: int = 0
 
 
-Screen = Union[LobbyScreen, CountdownScreen, ResultsScreen, FinalScreen]
+Screen = Union[LobbyScreen, CountdownScreen, RetryScreen, ResultsScreen, FinalScreen]
 
 
 # --- events ------------------------------------------------------------------
