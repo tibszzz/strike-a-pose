@@ -21,18 +21,16 @@ from main.settings import ASSETS, StrikeConfig
 from .game import compose, overlay_results_hold
 from .logic import Game as StrikeLogic
 from .screens import (
+    CountdownTick,
     Event,
     FinalScreen,
     LobbyScreen,
     ResultsScreen,
-    ScoreRevealLocked,
-    ScoreRevealTick,
     Screen,
+    SnapshotTaken,
 )
 
 SOUNDS = ASSETS / "sounds"
-# Short tick so ~10 Hz flashes don't smear; bang reuses Duel's gunshot.
-_TICK_DURATION_S = 0.06
 
 
 def _still_paths() -> tuple:
@@ -40,14 +38,18 @@ def _still_paths() -> tuple:
     return tuple(sorted(root.glob("pose_*.png")))
 
 
-def _load_reveal_sounds(sounds_dir: Path = SOUNDS) -> dict[str, pygame.mixer.Sound | None]:
+def _load_countdown_sounds(
+    sounds_dir: Path = SOUNDS,
+) -> dict[str, pygame.mixer.Sound | None]:
+    """Reuse Duel assets: ready tick per digit, bang at snapshot."""
     synth = {
-        "tick": lambda: audio.tone(440, _TICK_DURATION_S),
+        "tick": lambda: audio.tone(440, 0.25),
         "bang": lambda: audio.gunshot(),
     }
     files = {"tick": "ready.wav", "bang": "bang.wav"}
     return {
-        name: audio.load_or(sounds_dir / files[name], make) for name, make in synth.items()
+        name: audio.load_or(sounds_dir / files[name], make)
+        for name, make in synth.items()
     }
 
 
@@ -66,7 +68,7 @@ class StrikeGame:
         library = list(poses) if poses is not None else load_library(self._config.poses_dir)
         self._logic = StrikeLogic(self._config, library)
         self._logic.subscribe(self._on_logic_event)
-        self._sounds = _load_reveal_sounds()
+        self._sounds = _load_countdown_sounds()
         self._screen: Screen = LobbyScreen(
             markers=(),
             can_start=False,
@@ -85,9 +87,9 @@ class StrikeGame:
         self._frame_ts = 0.0
 
     def _on_logic_event(self, event: Event) -> None:
-        if isinstance(event, ScoreRevealTick):
+        if isinstance(event, CountdownTick) and event.seconds_left <= 3:
             audio.play(self._sounds.get("tick"))
-        elif isinstance(event, ScoreRevealLocked):
+        elif isinstance(event, SnapshotTaken):
             audio.play(self._sounds.get("bang"))
 
     def _make_ready(self) -> ReadyUp:
