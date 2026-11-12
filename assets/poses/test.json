@@ -1,0 +1,18 @@
+{
+  "name": "test",
+  "joints": {
+    "nose": [0.504, 0.000],
+    "left_shoulder": [0.627, 0.163],
+    "right_shoulder": [0.387, 0.161],
+    "left_elbow": [0.703, 0.319],
+    "right_elbow": [0.297, 0.312],
+    "left_wrist": [0.567, 0.356],
+    "right_wrist": [0.441, 0.370],
+    "left_hip": [0.572, 0.518],
+    "right_hip": [0.424, 0.519],
+    "left_knee": [0.558, 0.771],
+    "right_knee": [0.438, 0.784],
+    "left_ankle": [0.562, 0.992],
+    "right_ankle": [0.436, 1.000]
+  }
+}

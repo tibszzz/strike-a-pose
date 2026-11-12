@@ -10,9 +10,9 @@
     "right_wrist": [0.328, 0.000],
     "left_hip": [0.559, 0.568],
     "right_hip": [0.441, 0.568],
-    "left_knee": [0.559, 0.784],
-    "right_knee": [0.441, 0.784],
-    "left_ankle": [0.559, 1.000],
-    "right_ankle": [0.441, 1.000]
+    "left_knee": [0.767, 0.628],
+    "right_knee": [0.230, 0.614],
+    "left_ankle": [0.758, 0.844],
+    "right_ankle": [0.225, 0.830]
   }
 }
