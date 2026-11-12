@@ -31,7 +31,7 @@ class GestureNavConfig:
     raise_gate: int = 1
     raise_lift_frac: float = 0.08  # wrist must clear elbow by this × torso length
     raise_match_frac: float = 0.35  # max hand↔raised-wrist distance as × person-box height
-    thumb_hold_s: float = 1.0  # seconds Thumb_Up must be held on splash / menu confirm
+    thumb_hold_s: float = 0.5  # seconds confirm gesture must be held on splash / menu
 
 
 def load_gesture_nav_config() -> GestureNavConfig:

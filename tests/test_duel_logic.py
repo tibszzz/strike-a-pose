@@ -31,10 +31,24 @@ class Sim:
             self.t += DT
             self.events += self.duel.update(self.t, (p1, p2))
 
+    def request_start(self):
+        self.t += DT
+        self.events += self.duel.request_start(self.t)
+
     def run_until(self, phase, p1, p2, max_frames=1000):
         for _ in range(max_frames):
             if self.duel.phase == phase:
                 return
+            if self.duel.phase == Phase.WAIT_START and phase != Phase.WAIT_START:
+                self.request_start()
+                continue
+            if (
+                self.duel.phase == Phase.MATCH_OVER
+                and phase == Phase.READY
+                and self.duel.can_restart(self.t)
+            ):
+                self.request_start()
+                continue
             self.step(p1, p2)
         raise AssertionError(f"never reached {phase}, stuck in {self.duel.phase}")
 
@@ -47,28 +61,35 @@ class Sim:
             self.step(p1, p2)
 
 
-def test_waits_for_both_idle_before_ready():
+def test_request_start_begins_ready():
     s = Sim()
-    s.step(H, H, frames=20)  # ~0.67 s, below the 1 s hold
+    s.step(H, H, frames=20)
     assert s.duel.phase == Phase.WAIT_START
-    s.step(H, D)  # P2 raises a gun: timer resets
-    s.step(H, H, frames=29)
-    assert s.duel.phase == Phase.WAIT_START
-    s.step(H, H, frames=2)
+    s.request_start()
     assert s.duel.phase == Phase.READY
     assert ("ready", None) in s.events
 
 
-def test_missing_player_blocks_start():
-    s = Sim()
-    s.step(H, M, frames=100)
+def test_idle_hold_starts_round_without_request_start():
+    """Between rounds / after abort: both idle for start_hold begins READY."""
+    s = Sim(start_hold=0.5)
+    s.step(H, H, frames=10)  # ~0.33s — not enough
     assert s.duel.phase == Phase.WAIT_START
-    assert s.duel.missing == (False, True)
+    s.step(H, H, frames=20)  # past 0.5s
+    assert s.duel.phase == Phase.READY
+    assert ("ready", None) in s.events
+
+
+def test_drawn_pose_blocks_idle_start():
+    s = Sim(start_hold=0.3)
+    s.step(D, H, frames=40)
+    assert s.duel.phase == Phase.WAIT_START
 
 
 def test_debug_solo_starts_against_idle_ghost():
     s = Sim(debug=True)
-    s.step(H, M, frames=int(1.0 / DT) + 2)
+    s.request_start()
+    s.step(H, M)  # ghost fills missing opponent after start
     assert s.duel.phase == Phase.READY
     assert s.duel.missing == (False, False)
     assert ("ready", None) in s.events
@@ -248,7 +269,7 @@ def win_round(s, winner):
     s.finish_replay()
 
 
-def test_three_lives_then_winner_screen_and_idle_restarts():
+def test_three_lives_then_winner_screen_and_request_start_restarts():
     s = Sim()
     win_round(s, 0)
     win_round(s, 1)
@@ -269,7 +290,8 @@ def test_three_lives_then_winner_screen_and_idle_restarts():
     assert not s.duel.can_restart(s.t)
     s.step(H, H, frames=int(3.0 / DT) + 1)
     assert s.duel.can_restart(s.t)
-    s.run_until(Phase.READY, H, H)
+    s.request_start()
+    assert s.duel.phase == Phase.READY
     assert s.duel.scores == [0, 0]
 
 

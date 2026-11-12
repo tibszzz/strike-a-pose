@@ -22,10 +22,13 @@ Rgb = tuple[int, int, int]
 Rgba = tuple[int, int, int, int]
 
 # One face for all game text. Point this at another .ttf to rebrand globally.
-FONT = ASSETS / "fonts" / "VT323-Regular.ttf"
+FONT = ASSETS / "fonts" / "PressStart2P-Regular.ttf"
 
-# Hershey-era callers pass scale (~0.6–2.0); 30px ≈ former duplex at scale 1.0.
+# Hershey-era callers pass scale (~0.6–2.0); scale 1.0 → 30px at REF_H
+# before FONT_SIZE_SCALE (Press Start 2P reads ~2× VT323 at the same px).
+_REF_H = 720
 _SCALE_TO_PX = 30
+_FONT_SIZE_SCALE = 0.5
 _OUTLINE_PAD = 2
 
 # Slow sine pulse for splash / menu hints (~2s full cycle).
@@ -42,8 +45,10 @@ def bgr(color: Rgb) -> Rgb:
     return (b, g, r)
 
 
-def scale_to_px(scale: float) -> int:
-    return max(8, round(scale * _SCALE_TO_PX))
+def scale_to_px(scale: float, h: int | None = None) -> int:
+    """Map a design `scale` to pixels. At `h=_REF_H`, scale 1.0 → 30px."""
+    base = _SCALE_TO_PX if h is None else _SCALE_TO_PX * h / _REF_H
+    return max(8, round(scale * base))
 
 
 def apply_hint_blink(surface: pygame.Surface, timestamp: float) -> pygame.Surface:
@@ -59,6 +64,7 @@ def apply_hint_blink(surface: pygame.Surface, timestamp: float) -> pygame.Surfac
 def load_font(path: Path, size: int) -> pygame.font.Font:
     if not pygame.font.get_init():
         pygame.font.init()
+    size = max(8, round(size * _FONT_SIZE_SCALE))
     key = (str(path), size)
     cached = _font_cache.get(key)
     if cached is not None:
@@ -72,10 +78,14 @@ def load_font(path: Path, size: int) -> pygame.font.Font:
 
 
 def text_size(
-    text: str, scale: float, face: Path | None = None
+    text: str,
+    scale: float,
+    face: Path | None = None,
+    *,
+    h: int | None = None,
 ) -> tuple[tuple[int, int], int]:
     """((width, height_above_baseline), descent) — same shape as cv2.getTextSize."""
-    font = load_font(face or FONT, scale_to_px(scale))
+    font = load_font(face or FONT, scale_to_px(scale, h))
     width, _ = font.size(text)
     ascent = font.get_ascent()
     descent = abs(font.get_descent())
@@ -134,11 +144,12 @@ def draw_text(
     outline: bool = False,
     *,
     face: Path | None = None,
+    h: int | None = None,
 ) -> pygame.Rect:
     """Draw text with baseline at `y`. `color` is RGB. OpenCV canvases are BGR."""
     if not text:
         return pygame.Rect(x, y, 0, 0)
-    font = load_font(face or FONT, scale_to_px(scale))
+    font = load_font(face or FONT, scale_to_px(scale, h))
     surf = _render_glyph(font, text, color, outline)
     text_w, _ = font.size(text)
     ascent = font.get_ascent()
@@ -187,38 +198,39 @@ class Theme:
     def with_overrides(self, **kwargs) -> Theme:
         return replace(self, **kwargs)
 
+    # Shell / menu / splash — fractions of canvas height (matched at 720p).
     def title_px(self, h: int) -> int:
-        return max(72, h // 6)
+        return max(8, h // 6)
 
     def menu_title_px(self, h: int) -> int:
-        return 120
+        return max(8, h // 6)
 
     def body_px(self, h: int) -> int:
-        return max(16, h // 28)
+        return max(8, h // 28)
 
     def hint_px(self, h: int) -> int:
-        return 36
+        return max(8, h // 20)
 
     def tile_label_px(self, h: int) -> int:
-        return 72
+        return max(8, h // 10)
 
     def duel_main_px(self, h: int) -> int:
-        return int(0.11 * h)
+        return max(8, int(0.11 * h))
 
     def duel_label_px(self, h: int) -> int:
-        return int(0.042 * h)
+        return max(8, int(0.042 * h))
 
     def duel_shot_px(self, h: int) -> int:
-        return int(0.05 * h)
+        return max(8, int(0.05 * h))
 
     def duel_title_px(self, h: int) -> int:
-        return int(0.05 * h)
+        return max(8, int(0.05 * h))
 
     def duel_msg_px(self, h: int) -> int:
-        return int(0.034 * h)
+        return max(8, int(0.034 * h))
 
 
-# Brand seed: shell look (VT323 / yellow accent on dark).
+# Brand seed: shell look (Press Start 2P / yellow accent on dark).
 BRAND = Theme(
     bg=(0, 0, 0),
     panel=(30, 30, 30),
@@ -283,6 +295,7 @@ DODGEBALL = BRAND.with_overrides(
         (80, 170, 255),
         (255, 80, 80),
         (100, 255, 100),
+        (255, 215, 70),
     ),
     ball_fast=(255, 80, 80),
     ball_medium=(255, 165, 0),

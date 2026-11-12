@@ -15,7 +15,8 @@ from dataclasses import replace
 from enum import Enum, auto
 from typing import Callable, Sequence
 from main.settings import StrikeConfig
-from main.pose.library import Person, Pose, left_to_right, select_players
+from main.pose.library import Person, Pose, left_to_right
+from main.ready_up import match_roster_by_seeds
 from .scoring import round_score, score_pose
 from .screens import (
     CountdownScreen,
@@ -130,6 +131,7 @@ class Game:
 
         self._phase = _Phase.LOBBY
         self._lobby_people: list[Person] = []
+        self._roster_seed_x: list[float] = []
         self._player_count = 0
         self._targets: list[Pose] = []
         self._round_index = 0
@@ -183,6 +185,7 @@ class Game:
 
         if confirm and can_start:
             self._player_count = count
+            self._roster_seed_x = [person.center_x for person in self._lobby_people]
             seats = (
                 self._config.max_players if self._config.debug else count
             )
@@ -241,7 +244,7 @@ class Game:
     def _take_snapshot(self, now: float, frame: object, people: Sequence[Person]) -> Screen:
         self._emit(SnapshotTaken(round_number=self._round_number))
 
-        selected = select_players(people, self._player_count)
+        selected = match_roster_by_seeds(people, self._roster_seed_x)
         if selected is None:
             self._phase = _Phase.RETRY
             self._found = len(people)
@@ -327,6 +330,7 @@ class Game:
         if confirm:
             self._phase = _Phase.LOBBY
             self._lobby_people = []
+            self._roster_seed_x = []
             return self._step_lobby(now, False, None)
         return FinalScreen(standings=rank(self._totals))
 

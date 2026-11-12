@@ -1,11 +1,11 @@
 """In-process game picker. Implements the shared Game protocol.
 
-Tile grid: tip soft-hover, Pointing_Up sets hard-lock under the fingertip
-(updates while you move), Thumb_Up held confirms. While a Thumb_Up hold is
-in progress, a different hand's Thumb_Up is ignored until the confirming
-hand drops the gesture. Shell keyboard (`--debug`) moves hard-lock and
-confirms instantly; gestures are handled here from `gesture_snapshot`, not
-via shell MenuCommand mapping.
+Tile grid: index fingertip over a tile hard-locks it (follows while you
+move), Closed_Fist held confirms. While a Closed_Fist hold is in progress,
+selection does not switch and a different hand's Closed_Fist is ignored until
+the confirming hand drops the gesture. Shell keyboard (`--debug`) moves
+hard-lock and confirms instantly; gestures are handled here from
+`gesture_snapshot`, not via shell MenuCommand mapping.
 """
 
 from __future__ import annotations
@@ -23,7 +23,6 @@ from main.nav import (
     QuitApp,
     StartGame,
     ThumbHoldTracker,
-    effective_label,
     load_gesture_nav_config,
 )
 from main.nav.hand_draw import draw_primary_hand_hold
@@ -53,7 +52,11 @@ class MenuGame:
         self._frame: PoseFrame | None = None
         self.gesture_snapshot: GestureSnapshot | None = None
         cfg = load_gesture_nav_config()
-        self._thumb = ThumbHoldTracker(hold_s=cfg.thumb_hold_s, min_score=cfg.min_score)
+        self._thumb = ThumbHoldTracker(
+            hold_s=cfg.thumb_hold_s,
+            min_score=cfg.min_score,
+            label="Closed_Fist",
+        )
         self._hard_lock: int | None = None
         self._hover: int | None = None
         self._title_font = styles.load_font(theme.font, theme.menu_title_px(self.h))
@@ -110,9 +113,7 @@ class MenuGame:
                     self._hover = i
                     break
 
-        label = effective_label(snap, self._thumb.min_score)
-
-        if label == "Pointing_Up" and self._hover is not None and not self._thumb.active:
+        if self._hover is not None and not self._thumb.active:
             if self._hard_lock != self._hover:
                 self._hard_lock = self._hover
                 self._thumb.reset()

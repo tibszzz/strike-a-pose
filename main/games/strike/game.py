@@ -117,6 +117,7 @@ def draw_text(
     left edge, centre or right edge. `outline` keeps text readable over video.
 
     `color` is BGR (OpenCV); shared renderer wants RGB.
+    Font pixels scale with canvas height (design sizes at CANVAS_HEIGHT).
     """
     styles.draw_text(
         canvas,
@@ -128,6 +129,7 @@ def draw_text(
         align=align,
         outline=outline,
         face=theme.font,
+        h=canvas.shape[0],
     )
 
 
@@ -317,7 +319,7 @@ def _countdown_target_rect(elapsed: float) -> Rect:
 
 def _baseline_for_vertical_center(text: str, center_y: int, scale: float) -> int:
     """Baseline that places the glyph's visual center at `center_y`."""
-    (_, height), descent = styles.text_size(text, scale, theme.font)
+    (_, height), descent = styles.text_size(text, scale, theme.font, h=CANVAS_HEIGHT)
     return round(center_y + (height - descent) / 2)
 
 
@@ -377,19 +379,12 @@ def _large_target_panel(canvas: np.ndarray, target: Pose) -> None:
 
 
 def _compose_lobby(screen: LobbyScreen, frame: np.ndarray) -> np.ndarray:
+    """Legacy lobby compose (shell uses shared ReadyUp). Labels only — no boxes."""
     canvas = new_canvas()
     transform = draw_frame(canvas, frame, FULL_CANVAS)
 
     for marker in screen.markers:
         color = player_color(marker.player)
-        cv2.rectangle(
-            canvas,
-            transform.apply((marker.box[0], marker.box[1])),
-            transform.apply((marker.box[2], marker.box[3])),
-            color,
-            2,
-            cv2.LINE_AA,
-        )
         draw_box_label(canvas, player_name(marker.player), marker.box, transform, color)
 
     draw_text(canvas, copy.banner, CANVAS_WIDTH // 2, 58, 1.6, WHITE, "center", outline=True)
@@ -478,7 +473,7 @@ def _results_score_stack_baselines(head_y: int) -> tuple[int, int]:
     """Score and P# baselines above the head, clamped below the header."""
     label_y = head_y - LABEL_GAP_ABOVE_HEAD
     score_y = label_y - SCORE_GAP_ABOVE_LABEL
-    (_, ascent), _ = styles.text_size("88", SCORE_SCALE, theme.font)
+    (_, ascent), _ = styles.text_size("88", SCORE_SCALE, theme.font, h=CANVAS_HEIGHT)
     score_top = score_y - ascent
     if score_top < HEADER_BOTTOM:
         shift = HEADER_BOTTOM - score_top
@@ -692,7 +687,6 @@ def _compose_final(screen: FinalScreen) -> np.ndarray:
         )
         draw_text(canvas, str(standing.total), center + 230, y, 1.5, WHITE, "right")
 
-    draw_text(canvas, copy.space_new_game, center, 680, 0.9, MUTED, "center")
     return canvas
 
 

@@ -2,7 +2,11 @@ import random
 
 import pytest
 
-from main.settings import DuelConfig, GestureConfig, Messages, env, from_env
+from main.settings import DuelConfig, GestureConfig, GestureNavConfig, Messages, env, from_env
+
+
+def test_gesture_nav_hold_default_is_half_second():
+    assert GestureNavConfig().thumb_hold_s == 0.5
 
 
 def test_from_env_overrides_only_set_fields(monkeypatch):

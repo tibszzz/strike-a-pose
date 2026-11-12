@@ -18,7 +18,7 @@ With `--debug`, arrow keys / Enter also feed MenuCommand (dev keyboard nav).
 When the game sets wants_gestures, MediaPipe runs and attaches a snapshot.
 `wants_gestures` is re-checked every frame; `gesture_hands` (default 2) sets
 how many hands to track. Splash and menu read the snapshot themselves
-(hold Thumb_Up / spatial select).
+(hold Thumb_Up / Closed_Fist / spatial select).
 """
 
 from __future__ import annotations

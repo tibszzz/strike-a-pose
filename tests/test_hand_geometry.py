@@ -39,3 +39,4 @@ def test_show_hold_ring_when_progress_or_thumb_up():
     assert show_hold_ring(0.0, "Victory") is False
     assert show_hold_ring(0.1, "Victory") is True
     assert show_hold_ring(0.0, "Thumb_Up") is True
+    assert show_hold_ring(0.0, "Closed_Fist") is True

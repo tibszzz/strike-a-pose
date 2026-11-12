@@ -30,7 +30,16 @@ def _person(box):
 
 def test_all_screens_render():
     pygame.init()
-    game = DuelGame(SIZE, config=DuelConfig(lives=1, replay_speed=1.0, replay_freeze=0.0))
+    game = DuelGame(
+        SIZE,
+        config=DuelConfig(
+            lives=1,
+            replay_speed=1.0,
+            replay_freeze=0.0,
+            round_result_time=0.5,
+            match_result_min_time=0.5,
+        ),
+    )
     game.duel.rng = FixedRng(1.6)
     canvas = pygame.Surface(SIZE)
     p1 = _person((40, 40, 180, 300))
@@ -39,16 +48,19 @@ def test_all_screens_render():
 
     t, seen = 0.0, set()
     floated = False
-    # idle -> READY -> P1 draws early in STEADY -> P2 draws after BANG -> replay -> winner
+    game.draw(canvas, frame)
+    seen.add(game.duel.phase)
+    # ready-up request_start -> READY -> P1 draws early in STEADY -> P2 draws after BANG -> replay -> winner
+    game.duel.request_start(0.0)
+    game._needs_ready_up = False
+    game._roster_seed_x = [110.0, 480.0]
     for states in [(H, H)] * 40 + [(D, H)] * 120 + [(D, D)] * 20 + [(H, H)] * 220:
         t += DT
         frame.image[:] = (40, 80, int(120 + (t * 30) % 80))
         game.step(t, states)
-        # Mirror update()'s record/replay ticks without re-classifying poses.
+        # Mirror update()'s record tick without re-classifying poses.
         if game.duel.phase == Phase.BANG and game.recorder.active:
             game.recorder.push(frame.image, t)
-        elif game.duel.phase == Phase.REPLAY:
-            game._tick_replay_audio()
         game.draw(canvas, frame)
         seen.add(game.duel.phase)
         floated |= bool(game.floaters)
@@ -71,7 +83,9 @@ def test_preview_placeholder_when_missing():
     pygame.init()
     game = DuelGame(SIZE, config=DuelConfig(lives=1))
     canvas = pygame.Surface(SIZE)
-    game.step(0.0, (H, H))
+    game.duel.request_start(0.0)
+    game._needs_ready_up = False
+    game.now = 0.0
     game.draw(canvas, _frame((None, None)))
     # inset from border/label: placeholder fill is theme.hint, not the camera RGB
     rect = game._preview_rect(0)
@@ -88,14 +102,15 @@ def test_replay_screen_cover_blits():
     p2 = _person((400, 40, 560, 300))
 
     t = 0.0
+    game.duel.request_start(t)
+    game._needs_ready_up = False
+    game._roster_seed_x = [110.0, 480.0]
     for states in [(H, H)] * 40 + [(H, H)] * 60 + [(D, H)] * 30:
         t += DT
         image = np.full((SIZE[1], SIZE[0], 3), (30, 90, 180), np.uint8)
         game.step(t, states)
         if game.duel.phase == Phase.BANG and game.recorder.active:
             game.recorder.push(image, t)
-        elif game.duel.phase == Phase.REPLAY:
-            game._tick_replay_audio()
         game.draw(canvas, PoseFrame(image, t, (p1, p2), [p1, p2]))
         if game.duel.phase == Phase.REPLAY:
             break
