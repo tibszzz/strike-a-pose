@@ -58,7 +58,7 @@ RESULTS_ADVANCE_BAR_MARGIN_BOTTOM = 48
 RESULTS_ADVANCE_BAR_TRACK = styles.bgr(paper.INK_FAINT)
 RESULTS_ADVANCE_BAR_FILL = styles.bgr(paper.HOLD_RING)
 RESULTS_ADVANCE_LABEL_SCALE = 2.7  # was 0.9; 3×
-RESULTS_ADVANCE_LABEL_GAP = 84  # baseline above bar top (scaled with 3× label)
+RESULTS_ADVANCE_LABEL_GAP = 56  # baseline above bar top (scaled with 3× label)
 
 # Left, top, width, height, in canvas pixels.
 Rect = tuple[int, int, int, int]
@@ -608,12 +608,17 @@ def _compose_results(screen: ResultsScreen) -> np.ndarray:
         )
 
     if screen.idle and screen.advance_progress is not None:
-        _draw_results_advance(canvas, screen.advance_progress)
+        label = (
+            copy.results_final
+            if screen.round_number >= screen.total_rounds
+            else copy.results_next_round
+        )
+        _draw_results_advance(canvas, screen.advance_progress, label)
 
     return canvas
 
 
-def _draw_results_advance(canvas: np.ndarray, progress: float) -> None:
+def _draw_results_advance(canvas: np.ndarray, progress: float, label: str) -> None:
     """Menu-style hold bar: faint track, fill grows left → right with `progress` (0–1)."""
     progress = max(0.0, min(1.0, progress))
     height, width = canvas.shape[:2]
@@ -621,7 +626,7 @@ def _draw_results_advance(canvas: np.ndarray, progress: float) -> None:
     label_gap = max(16, round(RESULTS_ADVANCE_LABEL_GAP * height / CANVAS_HEIGHT))
     draw_text(
         canvas,
-        copy.results_next_round,
+        label,
         left,
         top - label_gap,
         RESULTS_ADVANCE_LABEL_SCALE,

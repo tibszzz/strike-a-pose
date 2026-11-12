@@ -748,7 +748,7 @@ def test_results_advance_draws_next_round_label_above_bar(monkeypatch):
     left, top, right, bottom = strike_view._results_advance_bar_rect(
         CANVAS_WIDTH, CANVAS_HEIGHT
     )
-    strike_view._draw_results_advance(canvas, 0.0)
+    strike_view._draw_results_advance(canvas, 0.0, content.Strike.results_next_round)
 
     assert texts == [
         (
@@ -758,12 +758,62 @@ def test_results_advance_draws_next_round_label_above_bar(monkeypatch):
         )
     ]
     assert texts[0][2] < top < bottom
+    assert strike_view.RESULTS_ADVANCE_LABEL_GAP == 56
     assert strike_view.RESULTS_ADVANCE_LABEL_SCALE == pytest.approx(2.7)
+    assert content.Strike.results_next_round == "Next round in"
+    assert content.Strike.results_final == "Results in"
+
+
+def test_results_advance_label_is_results_in_on_last_round(monkeypatch):
+    import numpy as np
+
+    from main import content
+    from main.games.strike import game as strike_view
+    from main.games.strike.screens import ResultsScreen
+    from main.pose.library import Pose
+    from main.settings import CANVAS_HEIGHT, CANVAS_WIDTH
+
+    labels: list[str] = []
+    real = strike_view._draw_results_advance
+
+    def capture(canvas, progress, label):
+        labels.append(label)
+        return real(canvas, progress, label)
+
+    monkeypatch.setattr(strike_view, "_draw_results_advance", capture)
+    pose = Pose(name="t", joints=dict(ONE_ARM_UP))
+    snap = np.zeros((CANVAS_HEIGHT, CANVAS_WIDTH, 3), dtype=np.uint8)
+
+    mid = ResultsScreen(
+        round_number=2,
+        total_rounds=5,
+        target=pose,
+        snapshot=snap,
+        players=(),
+        display_scores=(),
+        idle=True,
+        advance_progress=0.4,
+    )
+    last = ResultsScreen(
+        round_number=5,
+        total_rounds=5,
+        target=pose,
+        snapshot=snap,
+        players=(),
+        display_scores=(),
+        idle=True,
+        advance_progress=0.4,
+    )
+    strike_view.compose(mid, snap)
+    strike_view.compose(last, snap)
+
+    assert labels == [content.Strike.results_next_round, content.Strike.results_final]
 
 
 def test_results_advance_bar_fill_grows_with_progress():
     import numpy as np
 
+    from main import content
     from main.settings import CANVAS_HEIGHT, CANVAS_WIDTH
     from main.games.strike.game import (
         RESULTS_ADVANCE_BAR_FILL,
@@ -774,9 +824,9 @@ def test_results_advance_bar_fill_grows_with_progress():
     empty = np.zeros((CANVAS_HEIGHT, CANVAS_WIDTH, 3), dtype=np.uint8)
     half = empty.copy()
     full = empty.copy()
-    _draw_results_advance(empty, 0.0)
-    _draw_results_advance(half, 0.5)
-    _draw_results_advance(full, 1.0)
+    _draw_results_advance(empty, 0.0, content.Strike.results_next_round)
+    _draw_results_advance(half, 0.5, content.Strike.results_next_round)
+    _draw_results_advance(full, 1.0, content.Strike.results_next_round)
 
     left, top, right, bottom = _results_advance_bar_rect(CANVAS_WIDTH, CANVAS_HEIGHT)
     mid_x = (left + right) // 2

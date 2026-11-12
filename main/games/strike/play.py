@@ -62,7 +62,7 @@ def _load_sounds(
         "sting": lambda: audio.reveal_sting(),
     }
     files = {
-        "tick": "ready.wav",
+        "tick": "tick.wav",
         "shutter": "shutter.wav",
         "drumroll": "drumroll.wav",
         "sting": "sting.wav",

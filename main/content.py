@@ -176,7 +176,8 @@ class Strike:
         "Closest match scores the round — best total wins",
     )
     round_of = "Round {round_number} of {total_rounds}"
-    results_next_round = "Next round starting..."
+    results_next_round = "Next round in"
+    results_final = "Results in"
     saved_pose = "Saved: {name}"
     edit_title = "Edit pose: {name}"
     player_label = "P{player}"

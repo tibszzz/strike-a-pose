@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import shutil
+
 import pytest
 
 pytest.importorskip("pygame")
@@ -11,14 +13,14 @@ import pygame
 
 from main import audio
 from main.games.strike import play as strike_play
-from main.games.strike.play import StrikeGame
+from main.games.strike.play import StrikeGame, _load_sounds
 from main.games.strike.screens import (
     CountdownTick,
     ScoreRevealLocked,
     ScoreRevealTick,
     SnapshotTaken,
 )
-from main.settings import StrikeConfig
+from main.settings import ASSETS, StrikeConfig
 
 
 @pytest.fixture()
@@ -59,6 +61,21 @@ def test_countdown_ticks_still_play_on_final_three(mixer, monkeypatch):
         game._on_logic_event(CountdownTick(seconds_left=n))
 
     assert cues == ["tick", "tick", "tick"]
+
+
+def test_strike_tick_ignores_duel_ready_wav(mixer, tmp_path):
+    """Duel's ready.wav must not override Strike's countdown synth."""
+    ready = ASSETS / "sounds" / "ready.wav"
+    assert ready.is_file()
+    shutil.copy(ready, tmp_path / "ready.wav")
+
+    sounds = _load_sounds(tmp_path)
+    tick = sounds["tick"]
+    duel_ready = pygame.mixer.Sound(str(tmp_path / "ready.wav"))
+    assert tick is not None
+    # Synth tone is ~0.25s; ready.wav is ~0.63s.
+    assert tick.get_length() == pytest.approx(0.25, abs=0.05)
+    assert duel_ready.get_length() == pytest.approx(0.63, abs=0.05)
 
 
 def test_score_reveal_starts_drumroll_once_then_sting(mixer, monkeypatch):
