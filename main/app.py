@@ -35,7 +35,7 @@ import numpy as np
 import pygame
 
 from . import styles
-from .audio import init_mixer
+from .audio import init_mixer, loop_music
 from .games.preload import GameCache, preload_games
 from .games.registry import GameEntry
 from .nav import (
@@ -48,6 +48,9 @@ from .nav import (
 )
 from .pose import SKELETON, PoseFrame
 from .pose.tracker import PoseTracker
+from .settings.paths import ASSETS
+
+MENU_MUSIC = ASSETS / "sounds" / "game_loop.mp3"
 
 PLAYER_COLORS = list(styles.BRAND.player[:2])  # P1 red, P2 blue
 
@@ -293,6 +296,9 @@ def run(
                 pygame.display.set_caption(game.title)
                 _sync_gestures(gestures, mapper, game)
                 game.update(frame)
+
+            # Menu music loops while the main menu is up and fades out elsewhere.
+            loop_music(MENU_MUSIC if _is_menu(game) else None)
 
             if hasattr(game, "render_camera"):
                 _blit_bgr(canvas, game.render_camera(frame.image), size)
