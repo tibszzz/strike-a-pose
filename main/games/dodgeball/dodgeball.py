@@ -25,12 +25,14 @@ from main.end_screen import (
 )
 from main.nav import MenuCommand, StartGame
 from main.nav.hand_geometry import NAV_GESTURE_HANDS
-from main.pose import KP, Person, PoseFrame
+from main.pose import Person, PoseFrame
 from main.pose.library import left_to_right
-from main.ready_up import ReadyUp, ReadyUpConfig, draw_player_label, draw_ready_up, head_anchor
+from main.ready_up import ReadyUp, ReadyUpConfig, draw_ready_up
 from main.settings import ASSETS, DodgeballConfig
-from main.ui.paper import PLAYER_INK_DODGEBALL
+from main.ui import paper
+from main.ui.paper import INK_FAINT, MARKER_FONT, PLAYER_INK_DODGEBALL, Frame
 
+from . import sketches
 from .ball import Ball
 
 theme = styles.DODGEBALL
@@ -61,25 +63,9 @@ def _still_paths() -> tuple:
     return tuple(sorted(root.glob("pose_*.png")))
 
 
-_HEART_SPRITES = {True: ASSETS / "sprites" / "heart-alive.png", False: ASSETS / "sprites" / "heart-dead.png"}
-_heart_cache: dict[tuple[bool, int], pygame.Surface] = {}
-
-
-def _heart_sprite(filled: bool, size: int) -> pygame.Surface:
-    """Pixel-art heart (alive or lost) scaled to `size` px, loaded once per size."""
-    key = (filled, size)
-    if key not in _heart_cache:
-        img = pygame.image.load(str(_HEART_SPRITES[filled]))
-        if pygame.display.get_surface() is not None:
-            img = img.convert_alpha()
-        # Nearest-neighbour keeps the pixel-art edges crisp.
-        _heart_cache[key] = pygame.transform.scale(img, (size, size))
-    return _heart_cache[key]
-
-
 def _draw_heart(canvas: pygame.Surface, cx: int, cy: int, size: int, filled: bool) -> None:
-    """Heart sprite centred on (cx, cy), `size` px wide: alive, or the lost-life outline."""
-    sprite = _heart_sprite(filled, size)
+    """Hand-drawn heart centred on (cx, cy), `size` px wide: alive, or a crossed-out lost life."""
+    sprite = sketches.heart_surface(filled, size)
     canvas.blit(sprite, sprite.get_rect(center=(cx, cy)))
 
 
@@ -92,37 +78,23 @@ def draw_text(
     color: tuple[int, int, int] = WHITE,
     align: str = "left",
     outline: bool = False,
+    face=None,
 ) -> pygame.Rect:
     return styles.draw_text(
-        canvas, text, x, y, scale, color, align, outline, face=theme.font
+        canvas, text, x, y, scale, color, align, outline, face=face or theme.font
     )
 
 
-LABEL_SCALE = 1.1  # player "P1" labels over heads (base label size is 0.9)
-LABEL_PAD = 16  # px between the top of the head and the label baseline
+# Hand-drawn faces like the rest of the paper UI: Patrick Hand for labels,
+# Permanent Marker for banners (hit / win messages) and the countdown digit.
+BANNER_SCALE = 3.6  # "P1 HIT!" / "P2 WINS!"
+WARNING_SCALE = 2.6  # "P1 come back! 1.5s"
+OFFSCREEN_SCALE = 3.0  # "P1 LEFT THE SCREEN!": white Patrick Hand, like Strike's "Next round in"
 
-
-def _label_anchor(person: Person, min_conf: float = 0.3) -> tuple[float, float]:
-    """Baseline point for a player label, padded clear of the top of the head.
-
-    The head top is estimated from the nose: it sits about 0.8x the
-    nose-to-shoulder drop above the nose, so the gap scales with how close the
-    player stands. Falls back to the top of the person box.
-    """
-    x1, y1, x2, _ = person.box
-    conf, xy = person.conf, person.xy
-    if float(conf[KP.NOSE]) < min_conf:
-        return (x1 + x2) / 2, y1 - LABEL_PAD
-    nx, ny = float(xy[KP.NOSE][0]), float(xy[KP.NOSE][1])
-    shoulders = [
-        float(xy[k][1]) for k in (KP.L_SHOULDER, KP.R_SHOULDER) if float(conf[k]) >= min_conf
-    ]
-    if shoulders:
-        drop = max(0.0, sum(shoulders) / len(shoulders) - ny)
-        head_top = ny - 0.8 * drop
-    else:
-        head_top = ny - 0.12 * (person.box[3] - y1)  # ~ head size from body height
-    return nx, head_top - LABEL_PAD
+# Life counter sized like High Noon's header (design px in the menu's 1552x873 space).
+HEART_DESIGN_PX = 50
+HEART_GAP_DESIGN_PX = 14
+TAG_DESIGN_PX = 38
 
 
 class DodgeballGame:
@@ -130,13 +102,12 @@ class DodgeballGame:
 
     def __init__(self, size, config: DodgeballConfig | None = None):
         self.w, self.h = size
-        # Same recipes as Duel (and the same optional assets/sounds/*.wav overrides):
-        # its short "steady" tone for wall bounces, its "hit" gunshot for player hits.
+        # Rubber-ball "bounce" thump for wall bounces; Duel's "hit" gunshot for player hits.
         # Match flow: start jingle, countdown ticks + "go", game-over sting, then
         # the winner fanfare (Duel's match_over recipe, extended). Each can be
         # replaced by dropping assets/sounds/<name>.wav in.
         synth = {
-            "steady": lambda: audio.tone(587, 0.25),
+            "bounce": lambda: audio.bounce(),
             "hit": lambda: audio.gunshot(0.4, seed=7),
             "match_start": lambda: audio.arpeggio([523, 659, 784, 1047], step=0.1),
             "go": lambda: audio.tone(880, 0.35, decay=0.12),
@@ -178,9 +149,12 @@ class DodgeballGame:
 
         self.hit_message = ""
         self.hit_message_timer = 0
+        # Who the message is about, and whether it's an off-screen loss (white) or a ball hit (their colour).
+        self.hit_message_player: int | None = None
+        self.hit_message_offscreen = False
 
-        self.person_boxes: list[tuple[int, tuple[float, float, float, float]]] = []
-        self.person_label_anchors: list[tuple[int, tuple[float, float]]] = []
+        self._frame = Frame(self.w, self.h)
+        self._tag_face = paper.hand(self._frame, TAG_DESIGN_PX)
 
         self._end = EndScreen((self.w, self.h))
         self._pending_nav = None
@@ -226,7 +200,7 @@ class DodgeballGame:
         ]
         audio.play(self.sounds["match_start"])  # stands in for the first countdown tick
         self._begin_round(tick=False)
-        self.hit_message = copy.get_ready
+        self.hit_message = ""
 
     def _begin_round(self, seconds: int = COUNTDOWN_SECONDS, tick: bool = True) -> None:
         """New ball, then a `seconds` countdown before it launches."""
@@ -362,12 +336,6 @@ class DodgeballGame:
             return
 
         slots = self._assign_players(frame.people)
-        self.person_boxes = [
-            (i, tuple(person.box)) for i, person in enumerate(slots) if person is not None
-        ]
-        self.person_label_anchors = [
-            (i, _label_anchor(person)) for i, person in enumerate(slots) if person is not None
-        ]
 
         if self.paused:
             return
@@ -382,7 +350,7 @@ class DodgeballGame:
 
         self.ball.move()
         if self.ball.bounce(self.w, self.h):
-            audio.play(self.sounds["steady"])
+            audio.play(self.sounds["bounce"])
 
         if self.hit_message_timer > 0:
             self.hit_message_timer -= 1
@@ -416,6 +384,8 @@ class DodgeballGame:
         self.lives[player_idx] = max(0, self.lives[player_idx] - 1)
         was_over = self.game_over
         self.hit_message = self._hit_message(player_idx, reason)
+        self.hit_message_player = player_idx
+        self.hit_message_offscreen = reason == "LEFT THE SCREEN!"
         self.hit_message_timer = 0
         if not self.game_over:
             # Fresh ball and an automatic restart; the hit message stays up meanwhile.
@@ -471,7 +441,7 @@ class DodgeballGame:
         # Strike's countdown digit, drawn by Strike's own renderer onto the camera
         # image (translucent, no background), before the pygame overlays go on top.
         image = image_bgr.copy()
-        draw_countdown_timer(image, *self._countdown_digit(), face=styles.DODGEBALL.font)
+        draw_countdown_timer(image, *self._countdown_digit(), face=MARKER_FONT)
         return image
 
     def debug_lines(self) -> list[str]:
@@ -518,14 +488,14 @@ class DodgeballGame:
 
     def _draw_offscreen_warnings(self, canvas: pygame.Surface) -> None:
         warn_after = FPS // 2
-        y = self.h - 90
+        y = self.h - 40
         for i, missing in enumerate(self.missing_frames):
             if missing < warn_after or self.lives[i] == 0:
                 continue
             left = (OFFSCREEN_FRAMES - missing) / FPS
             text = f"P{i + 1} come back! {left:.1f}s"
-            draw_text(canvas, text, self.w // 2, y, 1.1, PLAYER_COLORS[i], "center", outline=True)
-            y -= 44
+            draw_text(canvas, text, self.w // 2, y, WARNING_SCALE, WHITE, "center", outline=True)
+            y -= 52
 
     def _draw_launch_marker(self, canvas: pygame.Surface) -> None:
         bx, by = int(self.ball.x), int(self.ball.y)
@@ -546,19 +516,23 @@ class DodgeballGame:
         canvas.blit(overlay, (0, 0))
 
     def _draw_lives(self, canvas: pygame.Surface) -> None:
-        size = 26
-        gap = 8
-        row_h = 42
-        hearts_w = LIVES * size + (LIVES - 1) * gap
-        right = self.w - 24
+        """Top right, one row per player: coloured tag + hearts, at High Noon's sizes."""
+        f = self._frame
+        size = f.px(HEART_DESIGN_PX)
+        step = size + f.px(HEART_GAP_DESIGN_PX)
+        hearts_w = size + step * (LIVES - 1)
+        right = self.w - f.px(28)
+        row_h = size + f.px(22)
+        top = f.px(28) + size // 2
         for i in range(self.player_count):
-            color = PLAYER_COLORS[i % len(PLAYER_COLORS)]
-            cy = 36 + i * row_h
-            label_color = color if self.lives[i] > 0 else MUTED
-            draw_text(canvas, f"P{i + 1}", right - hearts_w - 14, cy + 10, 0.9, label_color, "right", outline=True)
+            cy = top + i * row_h
+            hearts_left = right - hearts_w
+            tag_color = paper.player_ink(i + 1, PLAYER_INK_DODGEBALL) if self.lives[i] > 0 else INK_FAINT
+            paper.draw_tag(
+                canvas, f"P{i + 1}", self._tag_face, tag_color, (hearts_left - f.px(16), cy), "midright"
+            )
             for k in range(LIVES):
-                cx = right - hearts_w + k * (size + gap) + size // 2
-                _draw_heart(canvas, cx, cy, size, filled=k < self.lives[i])
+                _draw_heart(canvas, hearts_left + k * step + size // 2, cy, size, filled=k < self.lives[i])
 
     def draw(self, canvas: pygame.Surface, frame: PoseFrame) -> None:
         if self.in_lobby:
@@ -575,14 +549,6 @@ class DodgeballGame:
             )
             return
 
-        anchor_by_slot = dict(self.person_label_anchors)
-        for player_idx, box in self.person_boxes:
-            out = self.lives[player_idx] == 0
-            color = MUTED if out else PLAYER_COLORS[player_idx % len(PLAYER_COLORS)]
-            anchor = anchor_by_slot.get(player_idx) or head_anchor(box)
-            label = f"P{player_idx + 1}" + (" OUT" if out else "")
-            draw_player_label(canvas, label, anchor, color, scale=LABEL_SCALE, face=theme.font)
-
         if self.countdown > 0:
             self._draw_launch_marker(canvas)
         self.ball.draw(canvas)
@@ -590,27 +556,28 @@ class DodgeballGame:
         if self.hit_message and (
             self.hit_message_timer > 0 or self.paused or self.countdown > 0
         ):
+            if self.hit_message_offscreen:
+                # Off-screen loss: plain white hand lettering, like Strike's "Next round in".
+                color, scale, face = WHITE, OFFSCREEN_SCALE, theme.font
+            else:
+                # Ball hit: Marker banner in the hit player's colour.
+                idx = self.hit_message_player
+                color = PLAYER_COLORS[idx % len(PLAYER_COLORS)] if idx is not None else RED
+                scale, face = BANNER_SCALE, MARKER_FONT
             draw_text(
                 canvas,
                 self.hit_message,
                 self.w // 2,
                 # High on the frame during countdown / game-over; else just above centre.
                 int(self.h * 0.22) if self.game_over or self.countdown > 0 else self.h // 2 - 100,
-                scale=1.4,
-                color=RED,
+                scale=scale,
+                color=color,
                 align="center",
                 outline=True,
+                face=face,
             )
 
         self._draw_lives(canvas)
 
         if not self.paused and self.countdown == 0:
             self._draw_offscreen_warnings(canvas)
-
-        instructions = "[D] Debug | [R] Reset | [F] Fullscreen | [Q/Esc] Quit"
-        instr_scale = 0.65
-        (instr_w, instr_h), _ = styles.text_size(instructions, instr_scale, theme.font)
-        instr_bg = pygame.Surface((instr_w + 32, instr_h + 16), pygame.SRCALPHA)
-        pygame.draw.rect(instr_bg, (*BLACK, 180), (0, 0, instr_bg.get_width(), instr_bg.get_height()), border_radius=6)
-        canvas.blit(instr_bg, (16, self.h - instr_h - 28))
-        draw_text(canvas, instructions, 32, self.h - 18, scale=instr_scale, color=WHITE, align="left", outline=True)

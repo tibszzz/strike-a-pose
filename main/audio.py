@@ -113,6 +113,18 @@ def reveal_sting(duration: float = 0.55, seed: int = 19) -> pygame.mixer.Sound |
     return _to_sound(0.7 * crack + 0.9 * low + 0.55 * mid + 0.35 * high)
 
 
+def bounce(duration: float = 0.14, seed: int = 23) -> pygame.mixer.Sound | None:
+    """Rubber-ball thump off a wall: a quick pitch-dropping body plus a soft slap."""
+    n = int(duration * RATE)
+    t = np.arange(n) / RATE
+    rng = np.random.default_rng(seed)
+    slap = rng.uniform(-1, 1, n) * np.exp(-t / 0.006)
+    # Pitch falls from ~260 Hz toward ~140 Hz, like a ball compressing on impact.
+    phase = 2 * np.pi * (140 * t + 120 * 0.03 * (1 - np.exp(-t / 0.03)))
+    body = np.sin(phase) * np.exp(-t / 0.045)
+    return _to_sound(0.35 * slap + 1.1 * body)
+
+
 def arpeggio(freqs: list[float], step: float = 0.14) -> pygame.mixer.Sound | None:
     n_step = int(step * RATE)
     n = n_step * (len(freqs) + 2)
