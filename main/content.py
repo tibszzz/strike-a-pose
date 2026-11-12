@@ -4,22 +4,91 @@ from __future__ import annotations
 
 
 class ReadyUp:
-    how_to_play = "HOW TO PLAY"
-    step_in = "STEP IN FRONT OF THE CAMERA"
-    need_ready = "{ready} READY · NEED {min_players}–{max_players}"
-    fist_to_start = "{ready} READY · HOLD FIST TO START"
-    thumbs_hint = "THUMBS UP TO READY · THUMBS DOWN TO CANCEL"
+    how_to_play = "HOW TO PLAY"  # ReadyUpConfig.title (no longer drawn)
+    join_heading = "Thumbs up to join"
+    join_sub = "Thumbs down to sit out."
+    step_in_sub = "Step in front of the camera."
+    start_heading = "Fist to start"
+    need_one = "Need {min_players} player ready."
+    need_many = "Need {min_players} players ready."
+    can_start = "{ready} ready. Close your hand to play."
 
 
 class EndScreen:
-    replay = "REPLAY"
-    menu = "MENU"
+    replay = "Play again"
+    menu = "Menu"
     hint = "POINT TO SELECT · HOLD FIST TO CONFIRM"
+
+
+class Hints:
+    """Gesture hint strip shared by menu, how-to-play and results pages."""
+
+    hover_heading = "Open palm to hover"
+    hover_sub = "Move your hand over an option."
+    select_heading = "Fist to select"
+    select_sub = "Close your hand to choose."
+    start_heading = "Fist to start"
+    start_sub = "Close your hand to play."
+
+
+class HowToPlay:
+    play = "Let's go!"
+    back = "Back"
+    # Per registry id: title, three (heading, sub) steps, one (heading, sub) fact.
+    # {lives} {rounds} {min_players} {max_players} come from each game's settings.
+    guides = {
+        "duel": (
+            "High Noon",
+            (
+                ("Arms down", "Holster up. Stay still."),
+                ("Wait...", "Draw on BANG, not before."),
+                ("Draw!", "Snap one arm straight out."),
+            ),
+            ("{lives} lives each", "Lose them all and you're out."),
+        ),
+        "strike": (
+            "Strike a Pose",
+            (
+                ("Get in frame", "{min_players}-{max_players} players, head to toe."),
+                ("Copy it!", "It's a mirror: same side."),
+                ("Score!", "Up to 100 a round."),
+            ),
+            ("{rounds} rounds", "Best total wins."),
+        ),
+        "dodgeball": (
+            "Dodgeball",
+            (
+                ("Join in", "Thumbs up to play, down to sit out."),
+                ("Dodge!", "Lean, duck or step aside."),
+                ("Stay in view", "{lives} lives. Last one wins."),
+            ),
+            ("Playing solo?", "Survive as long as you can."),
+        ),
+    }
+
+
+class Results:
+    duel_title = "High Noon"
+    strike_title = "Strike a Pose"
+    dodgeball_title = "Dodgeball"
+    player = "P{player}"
+    wins = "{name} wins!"
+    tie = "{names} share the win!"
+    nobody = "Nobody wins!"
+    solo_over = "Game over!"
+    solo_sub = "Nice dodging. Go again?"
+    col_player = "Player"
+    col_round = "R{n}"
+    col_total = "Total"
+    no_score = "-"
+    out = "OUT"
+    lives_left = "lives left"
 
 
 class Shell:
     brand = "moovit"
-    menu_title = "moovit"
+    menu_title = "Moooooovit"
+    menu_quit = "Quit"
     splash_prompt = "HOLD THUMBS UP TO START"
     menu_hint = "POINT TO SELECT · HOLD FIST TO START"
 
@@ -27,7 +96,7 @@ class Shell:
 class Registry:
     duel = "High Noon"
     dodgeball = "Dodgeball"
-    strike = "Strike the Pose"
+    strike = "Strike a pose"
 
 
 class Duel:

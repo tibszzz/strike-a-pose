@@ -51,11 +51,12 @@ HOLD_FILL = styles.bgr((85, 221, 224))  # #55dde0 progress arc
 HAND_TRACK = ACCENT  # #f6ae2d skeleton + ring track
 
 # Results score stack: large score over P#, anchored above the head.
-SCORE_SCALE = 1.6
-PLAYER_LABEL_SCALE = 0.9
+SCORE_SCALE = 4.0
+PLAYER_LABEL_SCALE = 1.2
 SCORE_GAP_ABOVE_LABEL = 28  # score baseline above P# baseline
 LABEL_GAP_ABOVE_HEAD = 10  # P# baseline above head top
 RESULTS_PROMPT_Y = CANVAS_HEIGHT - 48
+RESULTS_PROMPT_SCALE = 2.0
 
 # Left, top, width, height, in canvas pixels.
 Rect = tuple[int, int, int, int]
@@ -477,7 +478,7 @@ def _results_score_stack_baselines(head_y: int) -> tuple[int, int]:
 def _draw_results_player_stack(
     canvas: np.ndarray,
     player_number: int,
-    round_score: int,
+    display_score: int,
     joints: Joints,
     box: Box,
     transform: Transform,
@@ -487,7 +488,7 @@ def _draw_results_player_stack(
     score_y, label_y = _results_score_stack_baselines(head_y)
     draw_text(
         canvas,
-        str(round_score),
+        str(display_score),
         head_x,
         score_y,
         SCORE_SCALE,
@@ -519,13 +520,15 @@ def _compose_results(screen: ResultsScreen) -> np.ndarray:
     )
     draw_stick_figure(canvas, screen.target.joints, _parked_target_rect(), WHITE)
 
-    for player in screen.players:
+    for player, display_score in zip(
+        screen.players, screen.display_scores, strict=True
+    ):
         color = player_color(player.player)
         draw_skeleton(canvas, player.joints, transform, color)
         _draw_results_player_stack(
             canvas,
             player.player,
-            player.round_score,
+            display_score,
             player.joints,
             player.box,
             transform,
@@ -547,7 +550,7 @@ def _draw_results_prompt(canvas: np.ndarray, *, final_round: bool) -> None:
         prompt,
         CANVAS_WIDTH // 2,
         RESULTS_PROMPT_Y,
-        0.9,
+        RESULTS_PROMPT_SCALE,
         ACCENT,
         "center",
         outline=True,

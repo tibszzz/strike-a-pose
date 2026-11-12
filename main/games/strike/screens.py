@@ -79,7 +79,8 @@ class ResultsScreen:
     target: Pose
     snapshot: object  # the camera frame; the game never looks inside it
     players: tuple[PlayerResult, ...]
-    idle: bool  # True once the post-snapshot delay ends and thumbs-up can advance
+    display_scores: tuple[int, ...]  # parallel to players; scrambled until lock
+    idle: bool  # True once the score reveal locks and thumbs-up can advance
 
 
 @dataclass(frozen=True)
@@ -92,6 +93,9 @@ class Standing:
 @dataclass(frozen=True)
 class FinalScreen:
     standings: tuple[Standing, ...]  # best first
+    # Per-round scores per seat (index 0 = P1), in round order; feeds the points table.
+    round_scores: tuple[tuple[int, ...], ...] = ()
+    total_rounds: int = 0
 
 
 Screen = Union[LobbyScreen, CountdownScreen, RetryScreen, ResultsScreen, FinalScreen]
@@ -118,8 +122,29 @@ class RoundScored:
 
 
 @dataclass(frozen=True)
+class ScoreRevealTick:
+    """One scramble flash during the results score reveal."""
+
+    scores: tuple[int, ...]  # in player order: P1 first
+
+
+@dataclass(frozen=True)
+class ScoreRevealLocked:
+    """Final scores landed; thumbs-up may advance."""
+
+    scores: tuple[int, ...]  # in player order: P1 first
+
+
+@dataclass(frozen=True)
 class GameOver:
     standings: tuple[Standing, ...]
 
 
-Event = Union[CountdownTick, SnapshotTaken, RoundScored, GameOver]
+Event = Union[
+    CountdownTick,
+    SnapshotTaken,
+    RoundScored,
+    ScoreRevealTick,
+    ScoreRevealLocked,
+    GameOver,
+]

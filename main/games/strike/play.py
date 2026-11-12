@@ -2,12 +2,23 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Sequence
 
 import cv2
 import pygame
 
-from main import content, styles
+from main import audio, content, styles
+from main.end_screen import (
+    EndChoice,
+    EndScreen,
+    TableRow,
+    draw_end_screen,
+    draw_headline,
+    draw_points_table,
+    winners_line,
+)
+from main import audio, content, styles
 from main.end_screen import EndChoice, EndScreen, draw_end_screen
 from main.nav import GestureSnapshot, MenuCommand, StartGame, ThumbHoldTracker, load_gesture_nav_config
 from main.nav.hand_geometry import NAV_GESTURE_HANDS
@@ -19,12 +30,37 @@ from main.settings import ASSETS, StrikeConfig
 
 from .game import compose, overlay_results_hold
 from .logic import Game as StrikeLogic
-from .screens import FinalScreen, LobbyScreen, ResultsScreen, Screen
+from .screens import (
+    CountdownTick,
+    Event,
+    FinalScreen,
+    LobbyScreen,
+    ResultsScreen,
+    Screen,
+    SnapshotTaken,
+)
+
+SOUNDS = ASSETS / "sounds"
 
 
 def _still_paths() -> tuple:
     root = ASSETS / "ready_up" / "strike"
     return tuple(sorted(root.glob("pose_*.png")))
+
+
+def _load_countdown_sounds(
+    sounds_dir: Path = SOUNDS,
+) -> dict[str, pygame.mixer.Sound | None]:
+    """Reuse Duel assets: ready tick per digit, bang at snapshot."""
+    synth = {
+        "tick": lambda: audio.tone(440, 0.25),
+        "bang": lambda: audio.gunshot(),
+    }
+    files = {"tick": "ready.wav", "bang": "bang.wav"}
+    return {
+        name: audio.load_or(sounds_dir / files[name], make)
+        for name, make in synth.items()
+    }
 
 
 class StrikeGame:
@@ -41,6 +77,8 @@ class StrikeGame:
         self._config = config if config is not None else StrikeConfig()
         library = list(poses) if poses is not None else load_library(self._config.poses_dir)
         self._logic = StrikeLogic(self._config, library)
+        self._logic.subscribe(self._on_logic_event)
+        self._sounds = _load_countdown_sounds()
         self._screen: Screen = LobbyScreen(
             markers=(),
             can_start=False,
@@ -57,6 +95,12 @@ class StrikeGame:
         self._end = EndScreen((self.w, self.h))
         self._pending_nav = None
         self._frame_ts = 0.0
+
+    def _on_logic_event(self, event: Event) -> None:
+        if isinstance(event, CountdownTick) and event.seconds_left <= 3:
+            audio.play(self._sounds.get("tick"))
+        elif isinstance(event, SnapshotTaken):
+            audio.play(self._sounds.get("bang"))
 
     def _make_ready(self) -> ReadyUp:
         return ReadyUp(
@@ -94,6 +138,7 @@ class StrikeGame:
     def reset(self) -> None:
         library = load_library(self._config.poses_dir)
         self._logic = StrikeLogic(self._config, library)
+        self._logic.subscribe(self._on_logic_event)
         self._confirm = False
         self._thumb.reset()
         self.gesture_snapshot = None
@@ -197,7 +242,8 @@ class StrikeGame:
 
     def render_camera(self, image):
         source = self._image if self._image is not None else image
-        if self._in_ready_up:
+        if self._in_ready_up or self._in_end_screen():
+            # Ready-up draws over the live feed; the results page paints its own backdrop.
             composed = source
         else:
             composed = compose(self._screen, source)
@@ -223,10 +269,32 @@ class StrikeGame:
             draw_end_screen(
                 canvas,
                 self._end,
-                theme=styles.SHELL,
                 snap=self.gesture_snapshot,
-                timestamp=self._frame_ts,
+                title=content.Results.strike_title,
+                body=self._draw_final_body,
             )
+
+    def _draw_final_body(self, canvas: pygame.Surface, rect: pygame.Rect, frame) -> None:
+        """Winner headline over a points table: place, player, every round, total."""
+        screen = self._screen
+        if not isinstance(screen, FinalScreen):
+            return
+        winners = [s.player for s in screen.standings if s.place == 1]
+        bottom = draw_headline(canvas, frame, rect, winners_line(winners), size=58)
+        rounds = screen.total_rounds or self._config.rounds
+        rows = [
+            TableRow(
+                place=s.place,
+                player=s.player,
+                scores=screen.round_scores[s.player - 1]
+                if 0 < s.player <= len(screen.round_scores)
+                else (),
+                total=s.total,
+            )
+            for s in screen.standings
+        ]
+        table = pygame.Rect(rect.x, bottom + frame.px(20), rect.width, rect.bottom - bottom - frame.px(20))
+        draw_points_table(canvas, frame, table, rows, rounds)
 
     def debug_lines(self) -> list[str]:
         if self._in_ready_up:

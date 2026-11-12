@@ -15,7 +15,16 @@ import numpy as np
 import pygame
 
 from main import audio, content, styles
-from main.end_screen import EndChoice, EndScreen, draw_end_screen
+from main.end_screen import (
+    EndChoice,
+    EndScreen,
+    LivesRow,
+    draw_card_art,
+    draw_end_screen,
+    draw_headline,
+    draw_lives_rows,
+    winners_line,
+)
 from main.nav import MenuCommand, StartGame
 from main.nav.hand_geometry import NAV_GESTURE_HANDS
 from main.pose import Person, PoseFrame, PoseState, classify
@@ -335,15 +344,15 @@ class DuelGame:
             self._draw_replay(canvas)
             return
         if d.phase == Phase.MATCH_OVER and not d.showing_final_round(self.now):
-            self._draw_winner(canvas)
-            if self._in_end_screen():
-                draw_end_screen(
-                    canvas,
-                    self._end,
-                    theme=styles.SHELL,
-                    snap=self.gesture_snapshot,
-                    timestamp=self.now,
-                )
+            # Results page; buttons + pointer go live once restart is allowed.
+            draw_end_screen(
+                canvas,
+                self._end,
+                snap=self.gesture_snapshot,
+                title=content.Results.duel_title,
+                body=self._draw_results_body,
+                active=self._in_end_screen(),
+            )
             return
 
         self._draw_previews(canvas, frame)
@@ -547,18 +556,25 @@ class DuelGame:
                 text = "-"
             self._text(canvas, text, self.sz_label, (self._side_x(i), 0.905 * self.h))
 
-    def _draw_winner(self, canvas):
+    def _draw_results_body(self, canvas: pygame.Surface, rect: pygame.Rect, frame) -> None:
+        """Winner + taunt, hearts left per gunslinger, and the draw illustration."""
         d = self.duel
-        self._text(
+        winners = [] if d.match_winner is None else [d.match_winner + 1]
+        bottom = draw_headline(canvas, frame, rect, winners_line(winners), self.win_msg, size=64)
+        top = bottom + frame.px(30)
+        rows_rect = pygame.Rect(rect.x, top, min(int(rect.width * 0.6), frame.px(660)), min(frame.px(150), rect.bottom - top))
+        lives = d.config.lives
+        draw_lives_rows(
             canvas,
-            f"{copy.player_names[d.match_winner].upper()} {copy.wins_suffix}",
-            self.sz_title,
-            (self.w / 2, 0.15 * self.h),
-            bold=True,
+            frame,
+            rows_rect,
+            [
+                LivesRow(player=i + 1, lives=d.lives_left(i), max_lives=lives, winner=d.match_winner == i)
+                for i in (0, 1)
+            ],
         )
-        if self.win_img is not None:
-            canvas.blit(self.win_img, self.win_img.get_rect(center=(self.w // 2, int(0.49 * self.h))))
-        self._text(canvas, self.win_msg.upper(), self.sz_msg, (self.w / 2, 0.68 * self.h), bold=True, max_width=0.9 * self.w)
+        art_box = pygame.Rect(rows_rect.right + frame.px(40), rect.y, rect.right - rows_rect.right - frame.px(40), rect.height)
+        draw_card_art(canvas, ASSETS / "ui" / "how_to_play" / "duel" / "step_3.png", art_box)
 
     def _draw_floaters(self, canvas):
         dur = max(0.01, self.view.early_float_time)
