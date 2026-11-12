@@ -24,6 +24,7 @@ from main.nav.hand_geometry import (
 )
 from main.pose.library import BONES, HEAD_JOINT, Box, Joints, Point, Pose, midpoint
 from main.settings import CANVAS_HEIGHT, CANVAS_WIDTH
+from main.ui.paper import Frame, PaperStyle, paper_surface
 
 from .screens import (
     Action,
@@ -49,6 +50,11 @@ ACCENT = styles.bgr(theme.accent)
 PLAYER_COLORS = tuple(styles.bgr(c) for c in theme.player)
 HOLD_FILL = styles.bgr((85, 221, 224))  # #55dde0 progress arc
 HAND_TRACK = ACCENT  # #f6ae2d skeleton + ring track
+# Target stick figures sit on menu paper; black ink for contrast.
+POSE_INK = styles.bgr((0, 0, 0))
+POSE_PAPER_STYLE = PaperStyle(torn="tblr", jag=6)
+POSE_PAPER_SEED = 41
+POSE_PAPER_FRAME = Frame(CANVAS_WIDTH, CANVAS_HEIGHT)
 
 # Results score stack: large score over P#, anchored above the head.
 SCORE_SCALE = 4.0
@@ -137,6 +143,17 @@ def draw_text(
 def fill(canvas: np.ndarray, rect: Rect, color: tuple[int, int, int]) -> None:
     left, top, width, height = rect
     canvas[top : top + height, left : left + width] = color
+
+
+def draw_pose_paper(
+    canvas: np.ndarray, rect: Rect, *, seed: int = POSE_PAPER_SEED
+) -> None:
+    """Torn menu paper behind a target pose (BGR canvas)."""
+    left, top, width, height = rect
+    sheet, (dx, dy) = paper_surface(
+        (width, height), POSE_PAPER_FRAME, POSE_PAPER_STYLE, seed
+    )
+    styles.blit_rgba_to_bgr(canvas, sheet, left + dx, top + dy)
 
 
 def draw_frame(canvas: np.ndarray, frame: np.ndarray, rect: Rect) -> Transform:
@@ -358,12 +375,15 @@ def _target_panel(
 ) -> None:
     """A panel with the pose's name along the top and its stick figure below."""
     left, top, width, height = rect
-    fill(canvas, rect, PANEL)
+    draw_pose_paper(canvas, rect)
     draw_text(
         canvas, target.name, left + 16, top + round(caption_height * 0.75), caption_scale, ACCENT
     )
     draw_stick_figure(
-        canvas, target.joints, (left, top + caption_height, width, height - caption_height)
+        canvas,
+        target.joints,
+        (left, top + caption_height, width, height - caption_height),
+        POSE_INK,
     )
 
 
@@ -408,9 +428,9 @@ def _compose_countdown(screen: CountdownScreen, frame: np.ndarray) -> np.ndarray
         copy.round_of.format(round_number=screen.round_number, total_rounds=screen.total_rounds),
         show_esc=False,
     )
-    draw_stick_figure(
-        canvas, screen.target.joints, _countdown_target_rect(screen.elapsed), WHITE
-    )
+    target_rect = _countdown_target_rect(screen.elapsed)
+    draw_pose_paper(canvas, target_rect)
+    draw_stick_figure(canvas, screen.target.joints, target_rect, POSE_INK)
     draw_countdown_timer(canvas, screen.seconds_left, screen.digit_age)
     return canvas
 
@@ -523,7 +543,9 @@ def _compose_results(screen: ResultsScreen) -> np.ndarray:
         ),
         show_esc=False,
     )
-    draw_stick_figure(canvas, screen.target.joints, _parked_target_rect(), WHITE)
+    target_rect = _parked_target_rect()
+    draw_pose_paper(canvas, target_rect)
+    draw_stick_figure(canvas, screen.target.joints, target_rect, POSE_INK)
 
     for player, display_score in zip(
         screen.players, screen.display_scores, strict=True
