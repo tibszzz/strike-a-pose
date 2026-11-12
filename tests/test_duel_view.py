@@ -44,11 +44,9 @@ def test_all_screens_render():
         t += DT
         frame.image[:] = (40, 80, int(120 + (t * 30) % 80))
         game.step(t, states)
-        # Mirror update()'s record/replay ticks without re-classifying poses.
+        # Mirror update()'s record tick without re-classifying poses.
         if game.duel.phase == Phase.BANG and game.recorder.active:
             game.recorder.push(frame.image, t)
-        elif game.duel.phase == Phase.REPLAY:
-            game._tick_replay_audio()
         game.draw(canvas, frame)
         seen.add(game.duel.phase)
         floated |= bool(game.floaters)
@@ -94,8 +92,6 @@ def test_replay_screen_cover_blits():
         game.step(t, states)
         if game.duel.phase == Phase.BANG and game.recorder.active:
             game.recorder.push(image, t)
-        elif game.duel.phase == Phase.REPLAY:
-            game._tick_replay_audio()
         game.draw(canvas, PoseFrame(image, t, (p1, p2), [p1, p2]))
         if game.duel.phase == Phase.REPLAY:
             break

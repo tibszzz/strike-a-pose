@@ -82,7 +82,6 @@ class DuelGame:
         )
         self.recorder = ReplayRecorder(scale=self.view.replay_scale)
         self.playback: ReplayPlayback | None = None
-        self._replay_hit_played = False
 
         self._fonts: dict[tuple[int, bool], pygame.font.Font] = {}
         self.sz_main = theme.duel_main_px(self.h)
@@ -115,14 +114,11 @@ class DuelGame:
             tracker.reset()
         self.recorder.discard()
         self.playback = None
-        self._replay_hit_played = False
 
     def update(self, frame: PoseFrame) -> None:
         self.step(frame.timestamp, tuple(classify(p, self.gestures) for p in frame.players))
         if self.duel.phase == Phase.BANG and self.recorder.active:
             self.recorder.push(frame.image, frame.timestamp)
-        elif self.duel.phase == Phase.REPLAY:
-            self._tick_replay_audio()
 
     def step(self, now: float, states: tuple[PoseState, PoseState]) -> None:
         self.now = now
@@ -148,8 +144,6 @@ class DuelGame:
             audio.play(self.sounds.get(name))
         if was_replay and self.duel.phase != Phase.REPLAY:
             self._clear_replay()  # drop bang→draw frames once the clip has played
-        elif self.duel.phase == Phase.REPLAY:
-            self._tick_replay_audio()
 
     def debug_lines(self) -> list[str]:
         d = self.duel
@@ -188,28 +182,16 @@ class DuelGame:
     def _clear_replay(self) -> None:
         self.recorder.discard()
         self.playback = None
-        self._replay_hit_played = False
 
     def _begin_playback(self) -> None:
         times = [t for t in self.duel.draw_time if t is not None]
         end = min(times) if times else self.now
         clip = self.recorder.clip(end)
-        self._replay_hit_played = False
         if clip is None:
             self.playback = None
             return
         cfg = self.duel.config
         self.playback = ReplayPlayback(clip, speed=cfg.replay_speed, freeze=cfg.replay_freeze)
-        audio.play(self.sounds.get("bang"))
-
-    def _tick_replay_audio(self) -> None:
-        if self.playback is None or self._replay_hit_played:
-            return
-        elapsed = self.now - self.duel.phase_start
-        _, _, at_impact = self.playback.sample(elapsed)
-        if at_impact:
-            self._replay_hit_played = True
-            audio.play(self.sounds.get("hit"))
 
     def _draw_replay(self, canvas: pygame.Surface) -> None:
         elapsed = self.now - self.duel.phase_start
