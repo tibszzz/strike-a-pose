@@ -70,8 +70,9 @@ class SplashGame:
         title_y = self.h // 2 - title.get_height()
         canvas.blit(title, (self.w // 2 - title.get_width() // 2, title_y))
 
-        prompt = self._hint_font.render(copy.splash_prompt, True, theme.accent)
-        prompt_y = title_y + title.get_height() + 16
+        prompt = self._hint_font.render(copy.splash_prompt, True, theme.ink)
+        styles.apply_hint_blink(prompt, frame.timestamp)
+        prompt_y = int(self.h * 0.8) - prompt.get_height() // 2
         canvas.blit(prompt, (self.w // 2 - prompt.get_width() // 2, prompt_y))
 
     def handle_command(self, command: MenuCommand) -> None:
