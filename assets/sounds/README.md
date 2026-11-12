@@ -2,7 +2,7 @@ Optional sound overrides. Drop in any of these and it replaces the synthesized s
 
 - `ready.wav`, `steady.wav`, `bang.wav`: Duel (High Noon) countdown cues
 - `early.wav`: a player drew before BANG
-- `hit.wav`: someone got shot
+- `hit.wav`: Dodgeball — someone got hit (Duel slow-mo replay is silent)
 - `match_over.wav`: someone won the match
 - `bounce.wav`: Dodgeball ball hitting a wall (replaces the synth rubber-ball thump)
 - `tick.wav`: Strike / Dodgeball countdown tick (replaces the synth tone)
