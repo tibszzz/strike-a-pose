@@ -288,18 +288,22 @@ def _hand_anchor(snap: GestureSnapshot) -> tuple[float, float] | None:
     return None
 
 
+# Hold-to-confirm gestures stick to one hand until that hand drops them.
+_STICKY_HOLD_LABELS = frozenset({"Thumb_Up", "Closed_Fist"})
+
+
 def pick_gesture_snapshot(
     candidates: Sequence[GestureSnapshot],
     sticky_anchor: tuple[float, float] | None,
     *,
     max_dist: float,
 ) -> tuple[GestureSnapshot, tuple[float, float] | None]:
-    """Choose a hand snapshot, sticky on Thumb_Up until that hand loses it.
+    """Choose a hand snapshot, sticky on hold gestures until that hand loses it.
 
-    While `sticky_anchor` is set, any Thumb_Up whose wrist/anchor stays within
-    `max_dist` of that point wins over higher-scoring other hands. Only when no
-    such Thumb_Up remains do we fall back to normal ranking (and clear sticky
-    unless the new winner is also Thumb_Up).
+    While `sticky_anchor` is set, any Thumb_Up / Closed_Fist whose wrist/anchor
+    stays within `max_dist` of that point wins over higher-scoring other hands.
+    Only when no such hand remains do we fall back to normal ranking (and clear
+    sticky unless the new winner is also a hold gesture).
     """
     nonempty = [
         c
@@ -310,25 +314,25 @@ def pick_gesture_snapshot(
         return _empty_snapshot(), None
 
     if sticky_anchor is not None and max_dist > 0:
-        sticky_thumbs: list[GestureSnapshot] = []
+        sticky_holds: list[GestureSnapshot] = []
         for c in nonempty:
-            if c.label != "Thumb_Up":
+            if c.label not in _STICKY_HOLD_LABELS:
                 continue
             anchor = _hand_anchor(c)
             if anchor is None:
                 continue
             if math.hypot(anchor[0] - sticky_anchor[0], anchor[1] - sticky_anchor[1]) <= max_dist:
-                sticky_thumbs.append(c)
-        if sticky_thumbs:
-            best = sticky_thumbs[0]
-            for c in sticky_thumbs[1:]:
+                sticky_holds.append(c)
+        if sticky_holds:
+            best = sticky_holds[0]
+            for c in sticky_holds[1:]:
                 best = _better_snapshot(best, c)
             return best, (_hand_anchor(best) or sticky_anchor)
 
     best = nonempty[0]
     for c in nonempty[1:]:
         best = _better_snapshot(best, c)
-    if best.label == "Thumb_Up":
+    if best.label in _STICKY_HOLD_LABELS:
         return best, _hand_anchor(best)
     return best, None
 
@@ -560,7 +564,7 @@ class GestureRecognizerSession:
         )
         gated = apply_raised_arm_gate(best, people, **gate_kw)
         raised_hands = filter_raised_hands(all_hands, people, **gate_kw)
-        if gated.label == "Thumb_Up":
+        if gated.label in _STICKY_HOLD_LABELS:
             self._thumb_sticky_anchor = _hand_anchor(gated) or sticky
         else:
             self._thumb_sticky_anchor = None

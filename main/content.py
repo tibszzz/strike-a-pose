@@ -7,7 +7,7 @@ class Shell:
     brand = "moovit"
     menu_title = "moovit"
     splash_prompt = "HOLD THUMBS UP TO START"
-    menu_hint = "POINT TO SELECT · HOLD THUMBS UP TO START"
+    menu_hint = "POINT TO SELECT · HOLD FIST TO START"
 
 
 class Registry:

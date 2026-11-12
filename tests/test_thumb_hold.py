@@ -37,6 +37,16 @@ def test_thumb_hold_fires_after_duration():
     assert tracker.update(snap, 3.0, frame_size=(640, 480)) is False
 
 
+def test_hold_tracker_accepts_closed_fist_label():
+    tracker = ThumbHoldTracker(hold_s=0.5, label="Closed_Fist")
+    fist = GestureSnapshot(label="Closed_Fist", score=1.0, landmarks=((100.0, 200.0),))
+    thumb = GestureSnapshot(label="Thumb_Up", score=1.0, landmarks=((100.0, 200.0),))
+    assert tracker.update(thumb, 1.0, frame_size=(640, 480)) is False
+    assert not tracker.active
+    assert tracker.update(fist, 1.0, frame_size=(640, 480)) is False
+    assert tracker.update(fist, 1.5, frame_size=(640, 480)) is True
+
+
 def test_thumb_hold_resets_when_disarmed_or_released():
     tracker = ThumbHoldTracker(hold_s=1.0)
     snap = GestureSnapshot(label="Thumb_Up", score=1.0, landmarks=((100.0, 200.0),))
