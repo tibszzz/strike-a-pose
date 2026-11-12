@@ -16,15 +16,17 @@ def _pose() -> Pose:
 
 
 def _results(*, idle: bool) -> ResultsScreen:
+    players = (
+        PlayerResult(1, {}, (0.0, 0.0, 100.0, 200.0), 50, 50),
+        PlayerResult(2, {}, (200.0, 0.0, 300.0, 200.0), 40, 40),
+    )
     return ResultsScreen(
         round_number=1,
         total_rounds=5,
         target=_pose(),
         snapshot=object(),
-        players=(
-            PlayerResult(1, {}, (0.0, 0.0, 100.0, 200.0), 50, 50),
-            PlayerResult(2, {}, (200.0, 0.0, 300.0, 200.0), 40, 40),
-        ),
+        players=players,
+        display_scores=(50, 40) if idle else (12, 88),
         idle=idle,
     )
 

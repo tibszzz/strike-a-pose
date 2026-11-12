@@ -1,0 +1,18 @@
+{
+  "name": "pump",
+  "joints": {
+    "nose": [0.169, 0.397],
+    "left_shoulder": [0.296, 0.389],
+    "right_shoulder": [0.152, 0.637],
+    "left_elbow": [0.245, 0.199],
+    "right_elbow": [0.171, 0.838],
+    "left_wrist": [0.202, 0.000],
+    "right_wrist": [0.164, 1.000],
+    "left_hip": [0.642, 0.643],
+    "right_hip": [0.537, 0.757],
+    "left_knee": [0.848, 0.649],
+    "right_knee": [0.769, 0.763],
+    "left_ankle": [0.843, 0.916],
+    "right_ankle": [0.778, 0.964]
+  }
+}

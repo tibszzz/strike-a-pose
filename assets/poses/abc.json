@@ -1,0 +1,18 @@
+{
+  "name": "abc",
+  "joints": {
+    "nose": [0.856, 0.221],
+    "left_shoulder": [0.832, 0.321],
+    "right_shoulder": [0.706, 0.232],
+    "left_elbow": [0.931, 0.270],
+    "right_elbow": [0.610, 0.144],
+    "left_wrist": [1.000, 0.222],
+    "right_wrist": [0.550, 0.011],
+    "left_hip": [0.571, 0.542],
+    "right_hip": [0.473, 0.453],
+    "left_knee": [0.551, 0.750],
+    "right_knee": [0.219, 0.545],
+    "left_ankle": [0.522, 0.989],
+    "right_ankle": [0.000, 0.550]
+  }
+}

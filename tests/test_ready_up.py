@@ -130,3 +130,39 @@ def test_match_roster_by_seeds_picks_nearest():
 
 def test_match_roster_by_seeds_none_when_short():
     assert match_roster_by_seeds([person(100)], [100.0, 400.0]) is None
+
+
+# --- ready-up page chrome --------------------------------------------------------
+
+
+def test_start_hint_reports_who_is_missing_then_invites_the_fist():
+    from main.ready_up.draw import _join_sub, _start_sub
+
+    ready = ReadyUp(1000, cfg())
+    ready.update([], [])
+    assert _join_sub(ready) == "Step in front of the camera."
+    people = [person(200), person(600)]
+    ready.update(people, [])
+    assert _join_sub(ready) == "Thumbs down to sit out."
+    assert _start_sub(ready) == "Need 2 players ready."
+    hold_thumb(ready, people, THUMB_UP, 200)
+    hold_thumb(ready, people, THUMB_UP, 600)
+    assert _start_sub(ready) == "2 ready. Close your hand to play."
+    assert _start_sub(ReadyUp(1000, cfg(min_players=1))) == "Need 1 player ready."
+
+
+def test_draw_ready_up_smoke_with_ready_and_waiting_players():
+    import os
+
+    os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+    import pygame
+
+    from main.ready_up.draw import draw_ready_up
+    from main.styles import STRIKE
+
+    pygame.init()
+    ready = ReadyUp(640, cfg())
+    people = [person(150), person(450)]
+    ready.update(people, [])
+    hold_thumb(ready, people, THUMB_UP, 150)
+    draw_ready_up(pygame.Surface((640, 480)), ready, theme=STRIKE)
