@@ -37,6 +37,16 @@ class Duel:
         "void": "BOTH TOO EARLY",
     }
     wins_suffix = "WINS"
+    rules = (
+        "Two players: stand side by side, left half is Player 1, right half Player 2",
+        "Keep your arms down and stand still for a moment to start a round",
+        "Wait for READY, then STEADY, then BANG!",
+        "On BANG, draw: point either arm straight out sideways at shoulder height",
+        "Fastest draw shoots the other player, who loses a heart",
+        "Draw before BANG and you're too early: you can't shoot that round",
+        "Nobody draws within {draw_timeout} seconds, or it's too close to call: no one is hit",
+        "Everyone has {lives} hearts. Lose them all and your opponent wins",
+    )
     early_messages = (
         "too early....",
         "easy there, cowboy....",
@@ -95,6 +105,16 @@ class Strike:
     player_label = "P{player}"
     winner_one = "{name} wins!"
     winner_tie = "It's a tie!"
+    rules = (
+        "{min_players} to {max_players} players: stand back so your whole body is in frame",
+        "Players are numbered left to right as you appear on screen",
+        "Each round shows a stick figure: copy its pose before the timer hits zero",
+        "You get {countdown_seconds} seconds, then a snapshot is taken",
+        "The screen is a mirror: raise the arm on the same side as the figure",
+        "Each pose scores 0 to 100 for how closely your body matches",
+        "Hold thumbs up on the results to move to the next round",
+        "After {rounds} rounds, the highest total wins",
+    )
 
 
 class Dodgeball:
