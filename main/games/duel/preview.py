@@ -109,9 +109,9 @@ def resolve_results_portrait(
     frame_w: float,
     frame_h: float,
 ) -> Box | None:
-    """RESULTS portrait slot: live tracked crop, or None → fallback art.
+    """RESULTS portrait slot: live tracked crop, or None when tracking is lost.
 
-    v1 fills with the gameplay PiP crop. v2 can swap this slot to stick-only art.
+    Caller cover-blits the full frame when this returns None.
     """
     return tracker.update(person, now, frame_w, frame_h)
 

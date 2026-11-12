@@ -24,7 +24,7 @@ With `--debug`, after ready-up / gameplay has begun, `R` jumps straight to the f
 - If nobody draws within 3 seconds, no one is hit. Double early draws skip the slow-mo and show the result (the round is replayed).
 - There are no ties: the faster draw always wins, and two draws on the very same camera frame are settled by a coin flip.
 - Each player has 3 hearts. Lose them all and the other player wins.
-- The final RESULTS card shows a **live winner PiP** (same body-follow crop as the side portraits) on the right; if the winner is missing, it falls back to the how-to draw illustration.
+- The final RESULTS card shows a **live winner PiP** (same body-follow crop as the side portraits) on the right, with a small winner tag above the feed; if the winner is missing from frame, it cover-fills from the full camera image.
 
 ## Keys
 

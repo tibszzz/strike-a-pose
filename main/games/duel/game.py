@@ -4,8 +4,9 @@ Look matches the menu / how-to / results pages: sketch-paper sheet, marker +
 hand-lettered type, hand-drawn hearts for lives. Side portrait
 PiPs show each player's body so they can check framing; after a hit, a slow-mo
 camera replay fills the screen before the result. Final RESULTS puts a live
-winner PiP in the card art slot (how-to art if tracking is lost). Debug overlay
-(D) still puts the full camera image behind the same UI.
+winner PiP in the card art slot (full-frame cover if tracking is lost) with a
+winner tag on the feed. Debug overlay (D) still puts the full camera image
+behind the same UI.
 """
 
 from __future__ import annotations
@@ -21,7 +22,6 @@ from main.end_screen import (
     EndChoice,
     EndScreen,
     LivesRow,
-    draw_card_art,
     draw_end_screen,
     draw_headline,
     draw_lives_rows,
@@ -118,6 +118,7 @@ class DuelGame:
         self.shout_face = paper.marker(f, 58)  # GET READY, shot taunt, missing names
         self.replay_face = paper.marker(f, 54)
         self.tag_face = paper.hand(f, 38)  # Player 1 / Player 2 tags
+        self.winner_tag_face = paper.hand(f, 26)  # RESULTS feed winner label
         self.body_face = paper.hand(f, 42)  # reaction times, WAITING FOR
         self.note_face = paper.hand(f, 34)  # floaters, lower your gun, preview WAITING
         self.early_face = paper.marker(f, 46)  # "too early" taunts drifting up
@@ -566,7 +567,7 @@ class DuelGame:
     def _draw_results_body(
         self, canvas: pygame.Surface, rect: pygame.Rect, frame, pose: PoseFrame
     ) -> None:
-        """Winner + taunt, hearts left, live winner PiP (how-to art fallback)."""
+        """Winner + taunt, hearts left, live winner PiP with winner tag."""
         d = self.duel
         winners = [] if d.match_winner is None else [d.match_winner + 1]
         bottom = draw_headline(canvas, frame, rect, winners_line(winners), self.win_msg, size=64)
@@ -588,26 +589,46 @@ class DuelGame:
     def _draw_results_portrait(
         self, canvas: pygame.Surface, art_box: pygame.Rect, pose: PoseFrame
     ) -> None:
-        """RESULTS portrait slot: live winner PiP, or step_3 how-to art."""
-        fallback = ASSETS / "ui" / "how_to_play" / "duel" / "step_3.png"
+        """RESULTS portrait: winner tag above live crop (full frame if lost)."""
+        if art_box.width <= 0 or art_box.height <= 0:
+            return
         winner = self.duel.match_winner
-        if winner is None or art_box.width <= 0 or art_box.height <= 0:
-            draw_card_art(canvas, fallback, art_box)
-            return
+        feed = art_box
+        if winner is not None:
+            face = self.winner_tag_face
+            # Match draw_tag vertical padding so the feed starts cleanly below the label.
+            tag_h = face.get_height() + 2 * max(1, face.get_height() // 12)
+            gap = self.frame.px(10)
+            feed = pygame.Rect(
+                art_box.x, art_box.y + tag_h + gap, art_box.width, art_box.height - tag_h - gap
+            )
+            if feed.height <= 0:
+                return
+            paper.draw_tag(
+                canvas,
+                f"{content.Results.player.format(player=winner + 1)} {copy.wins_suffix}",
+                face,
+                paper.player_ink(winner + 1),
+                (art_box.centerx, art_box.top),
+                "midtop",
+            )
         fh, fw = pose.image.shape[:2]
-        box = resolve_results_portrait(
-            self.previews[winner],
-            pose.players[winner],
-            now=self.now,
-            frame_w=fw,
-            frame_h=fh,
+        full = (0.0, 0.0, float(fw), float(fh))
+        if winner is None:
+            box = full
+        else:
+            box = resolve_results_portrait(
+                self.previews[winner],
+                pose.players[winner],
+                now=self.now,
+                frame_w=fw,
+                frame_h=fh,
+            ) or full
+        self._blit_preview_crop(
+            canvas, pose.image, box, feed, cover=True, missing_placeholder=False
         )
-        if box is None or not self._blit_preview_crop(
-            canvas, pose.image, box, art_box, cover=True, missing_placeholder=False
-        ):
-            draw_card_art(canvas, fallback, art_box)
-            return
-        paper.draw_marker_box(canvas, art_box, self.frame, INK, seed=80 + winner)
+        seed = 80 if winner is None else 80 + winner
+        paper.draw_marker_box(canvas, feed, self.frame, INK, seed=seed)
 
     def _draw_floaters(self, canvas):
         dur = max(0.01, self.view.early_float_time)

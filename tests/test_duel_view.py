@@ -174,7 +174,7 @@ def test_results_art_box_shows_live_winner_crop():
     assert sample[0] > 200 and sample[2] > 200 and sample[1] < 80
 
 
-def test_results_art_box_falls_back_when_winner_missing():
+def test_results_art_box_shows_feed_when_winner_missing():
     pygame.init()
     game = _results_game()
     canvas = pygame.Surface(SIZE)
@@ -183,8 +183,33 @@ def test_results_art_box_falls_back_when_winner_missing():
     game.draw(canvas, frame)
     art = _art_box(game)
     sample = canvas.get_at((art.centerx, art.centery))
-    # how-to PNG, not the solid camera magenta
-    assert not (sample[0] > 200 and sample[2] > 200 and sample[1] < 40)
+    # full-frame cover, not a PNG fallback
+    assert sample[0] > 200 and sample[2] > 200 and sample[1] < 40
+
+
+def test_results_art_box_draws_winner_label():
+    pygame.init()
+    game = _results_game()
+    canvas = pygame.Surface(SIZE)
+    image = np.zeros((SIZE[1], SIZE[0], 3), np.uint8)
+    image[:] = (10, 10, 10)
+    p1 = _person((40, 40, 180, 300))
+    frame = PoseFrame(image, game.now, (p1, None), [p1])
+    game.draw(canvas, frame)
+    art = _art_box(game)
+    # Smaller winner tag sits above the camera feed in P1 ink (red).
+    ink = paper.player_ink(1)
+    tag_band = art.top + game.winner_tag_face.get_height() + 8
+    found = False
+    for y in range(art.top, min(tag_band, art.bottom)):
+        for x in range(art.left + 8, art.right - 8, 4):
+            sample = canvas.get_at((x, y))[:3]
+            if all(abs(sample[i] - ink[i]) < 40 for i in range(3)):
+                found = True
+                break
+        if found:
+            break
+    assert found
 
 
 def test_debug_skip_to_results_after_gameplay():
