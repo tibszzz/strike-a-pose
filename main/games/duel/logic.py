@@ -1,9 +1,12 @@
 """Pure duel rules. No camera, no pygame: feed it (timestamp, pose states) per frame.
 
 Round flow:
-  WAIT_START -> READY -> STEADY -> BANG -> ROUND_OVER -> WAIT_START ...
-  The hit that takes a player's last life goes straight to MATCH_OVER, which first shows
-  that round's result for `round_result_time`, then the winner.
+  WAIT_START -> (shell ready-up on first entry, or idle hold between rounds) -> READY
+  -> STEADY -> BANG -> (hit) REPLAY -> ROUND_OVER -> WAIT_START ...
+  Non-hits (tie / timeout / void) skip REPLAY and go straight to ROUND_OVER.
+  The hit that takes a player's last life goes REPLAY -> MATCH_OVER, which first shows
+  that round's result for `round_result_time`, then the winner. Rematch is owned by the
+  shell end-screen (Replay -> ready-up again); `request_start` still clears MATCH_OVER.
 
 A draw only counts once it has held for `draw_confirm_frames` consecutive frames; its
 time is the capture timestamp of the first of those frames. A draw that started at or
@@ -17,6 +20,14 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 from main.pose import PoseState
+from main.settings import DuelConfig
+
+__all__ = [
+    "Duel",
+    "DuelConfig",
+    "Phase",
+    "RoundResult",
+]
 
 
 class Phase(Enum):
@@ -24,23 +35,9 @@ class Phase(Enum):
     READY = "ready"
     STEADY = "steady"
     BANG = "bang"
+    REPLAY = "replay"
     ROUND_OVER = "round_over"
     MATCH_OVER = "match_over"
-
-
-@dataclass(frozen=True)
-class DuelConfig:
-    lives: int = 3  # hits a player can take; the last one loses the match
-    start_hold: float = 1.0  # both visible and not drawing this long to start a round
-    ready_to_steady: float = 1.5
-    bang_delay_min: float = 1.5  # STEADY -> BANG, uniform random
-    bang_delay_max: float = 5.0
-    draw_timeout: float = 3.0  # after BANG, no valid draw in this time -> no point
-    tie_window: float = 0.034  # draws this close (about 1 frame at 30 fps) are a tie
-    settle_time: float = 0.15  # after first draw, wait this long for a possible tie
-    draw_confirm_frames: int = 2
-    round_result_time: float = 3.0  # how long the round result is shown
-    match_result_min_time: float = 3.0  # winner screen shown at least this long (after the round result)
 
 
 @dataclass(frozen=True)
@@ -87,6 +84,7 @@ class Duel:
         self.missing = (False, False)
         self._enter(Phase.WAIT_START, now=None)
         self._idle_since: float | None = None
+        self._match_over_pending = False
         self._clear_round()
 
     def lives_left(self, i: int) -> int:
@@ -108,16 +106,35 @@ class Duel:
             return 0.0
         return min(1.0, (now - self._idle_since) / self.config.start_hold)
 
+    def request_start(self, now: float) -> list[Event]:
+        """Begin a round after the shell ready-up confirms two players."""
+        events: list[Event] = []
+        if self.phase == Phase.MATCH_OVER:
+            if not self.can_restart(now):
+                return events
+            self.scores = [0, 0]
+            self.match_winner = None
+            self.last_result = None
+            self._match_over_pending = False
+        elif self.phase != Phase.WAIT_START:
+            return events
+        self._start_round(now, events)
+        return events
+
     # -- per-frame update -------------------------------------------------------------
 
     def update(self, now: float, states: tuple[PoseState, PoseState]) -> list[Event]:
         events: list[Event] = []
+        states = self._with_debug_ghost(states)
         self.missing = tuple(s == PoseState.MISSING for s in states)
         present = not any(self.missing)
         cfg = self.config
 
         if self.phase == Phase.WAIT_START:
-            if self._both_idle_held(now, states):
+            # Between rounds (and after abort): both idle for start_hold begins READY.
+            # First match entry is gated by the shell ReadyUp, which never calls update
+            # until request_start.
+            if present and self._both_idle_held(now, states):
                 self._start_round(now, events)
 
         elif self.phase in (Phase.READY, Phase.STEADY):
@@ -143,21 +160,36 @@ class Duel:
             self._track_draws(now, states, events)
             self._maybe_resolve(now, events)
 
+        elif self.phase == Phase.REPLAY:
+            if now >= self.replay_until:
+                self._leave_replay(now, events)
+
         elif self.phase == Phase.ROUND_OVER:
             if now - self.phase_start >= cfg.round_result_time:
                 self._enter(Phase.WAIT_START, now)
                 self._idle_since = None
 
         elif self.phase == Phase.MATCH_OVER:
-            if self.can_restart(now) and self._both_idle_held(now, states):
-                self.scores = [0, 0]
-                self.match_winner = None
-                self.last_result = None
-                self._start_round(now, events)
+            if self._match_over_pending and not self.showing_final_round(now):
+                self._match_over_pending = False
+                events.append(("match_over", self.match_winner))
 
         return events
 
     # -- internals --------------------------------------------------------------------
+
+    def _with_debug_ghost(
+        self, states: tuple[PoseState, PoseState]
+    ) -> tuple[PoseState, PoseState]:
+        """In debug mode, fill the empty half with an idle opponent so one person can play."""
+        if not self.config.debug:
+            return states
+        missing = [i for i, s in enumerate(states) if s == PoseState.MISSING]
+        if len(missing) != 1:
+            return states
+        out = list(states)
+        out[missing[0]] = PoseState.NEUTRAL
+        return (out[0], out[1])
 
     def _enter(self, phase: Phase, now: float | None) -> None:
         self.phase = phase
@@ -169,6 +201,7 @@ class Duel:
         self.early = [False, False]
         self.draw_time: list[float | None] = [None, None]
         self._debounce = [_Debounce(), _Debounce()]
+        self.replay_until: float = 0.0
 
     def _both_idle_held(self, now: float, states) -> bool:
         if all(s == PoseState.NEUTRAL for s in states):
@@ -224,9 +257,22 @@ class Duel:
             events.append(("hit", winner))
             if self.scores[winner] >= self.config.lives:
                 self.match_winner = winner
-                self._enter(Phase.MATCH_OVER, now)
-                events.append(("match_over", winner))
-                return
-        else:
-            events.append((reason, None))
+            self._enter_replay(now)
+            return
+        events.append((reason, None))
         self._enter(Phase.ROUND_OVER, now)
+
+    def _enter_replay(self, now: float) -> None:
+        cfg = self.config
+        first = min(t for t in self.draw_time if t is not None)
+        clip = max(0.0, first - (self.bang_time or first))
+        speed = max(1e-6, cfg.replay_speed)
+        self.replay_until = now + clip / speed + cfg.replay_freeze
+        self._enter(Phase.REPLAY, now)
+
+    def _leave_replay(self, now: float, events: list[Event]) -> None:
+        if self.match_winner is not None and self.scores[self.match_winner] >= self.config.lives:
+            self._match_over_pending = True
+            self._enter(Phase.MATCH_OVER, now)
+        else:
+            self._enter(Phase.ROUND_OVER, now)

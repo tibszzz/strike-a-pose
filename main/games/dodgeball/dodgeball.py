@@ -1,35 +1,86 @@
-"""Dodgeball Game: Avoid the bouncing ball! Ball hits body = lose points."""
+"""Dodgeball Game: Avoid the bouncing ball! Each player has 3 lives; a ball hit costs one."""
 
 from __future__ import annotations
+
 import math
 import random
-import cv2
-import numpy as np
+
 import pygame
-from main.pose import Person, PoseFrame
+
+from main import audio, content, styles
+from main.countdown import TIMER_VISIBLE_AT_SECONDS
+from main.games.strike.game import draw_countdown_timer
+from main.games.strike.play import _load_countdown_sounds
+from main.games.strike.screens import CountdownTick
+from main import content, styles
+from main.end_screen import (
+    EndChoice,
+    EndScreen,
+    LivesRow,
+    draw_card_art,
+    draw_end_screen,
+    draw_headline,
+    draw_lives_rows,
+    winners_line,
+)
+from main.nav import MenuCommand, StartGame
+from main.nav.hand_geometry import NAV_GESTURE_HANDS
+from main.pose import KP, Person, PoseFrame
 from main.pose.library import left_to_right
+from main.ready_up import ReadyUp, ReadyUpConfig, draw_player_label, draw_ready_up, head_anchor
+from main.settings import ASSETS, DodgeballConfig
+from main.ui.paper import PLAYER_INK_DODGEBALL
 
-# Colors
-WHITE = (255, 255, 255)
-BLACK = (0, 0, 0)
-MUTED = (175, 175, 175)
-ACCENT = (70, 215, 255)
-BLUE = (80, 170, 255)
-RED = (255, 80, 80)
-GREEN = (100, 255, 100)
-YELLOW = (255, 255, 100)
-ORANGE = (255, 165, 0)
+from .ball import Ball
 
-# Player colors, P1..P3 left to right
-PLAYER_COLORS = [BLUE, RED, GREEN]
+theme = styles.DODGEBALL
+copy = content.Dodgeball
+_cfg = DodgeballConfig()
 
-# Same lobby idea as Strike a Pose: count the people in frame, then confirm.
-MIN_PLAYERS = 1
-MAX_PLAYERS = 3
-FPS = 30
+WHITE = theme.ink
+BLACK = theme.bg
+MUTED = theme.muted
+ACCENT = theme.accent
+RED = theme.danger
+YELLOW = theme.ball_slow
+ORANGE = theme.ball_medium
+PLAYER_COLORS = list(theme.player)
 
-# Font style from games/pose/game.py (Strike a Pose)
-FONT = cv2.FONT_HERSHEY_DUPLEX
+MIN_PLAYERS = _cfg.min_players
+MAX_PLAYERS = _cfg.max_players
+FPS = _cfg.fps
+COUNTDOWN_SECONDS = 3  # before the ball launches at match start
+HIT_RESTART_SECONDS = 5  # after a hit the round restarts by itself (3, 2, 1 shown)
+LIVES = _cfg.lives
+OFFSCREEN_SECONDS = int(_cfg.offscreen_seconds)
+OFFSCREEN_FRAMES = _cfg.offscreen_frames
+
+
+def _still_paths() -> tuple:
+    root = ASSETS / "ready_up" / "dodgeball"
+    return tuple(sorted(root.glob("pose_*.png")))
+
+
+_HEART_SPRITES = {True: ASSETS / "sprites" / "heart-alive.png", False: ASSETS / "sprites" / "heart-dead.png"}
+_heart_cache: dict[tuple[bool, int], pygame.Surface] = {}
+
+
+def _heart_sprite(filled: bool, size: int) -> pygame.Surface:
+    """Pixel-art heart (alive or lost) scaled to `size` px, loaded once per size."""
+    key = (filled, size)
+    if key not in _heart_cache:
+        img = pygame.image.load(str(_HEART_SPRITES[filled]))
+        if pygame.display.get_surface() is not None:
+            img = img.convert_alpha()
+        # Nearest-neighbour keeps the pixel-art edges crisp.
+        _heart_cache[key] = pygame.transform.scale(img, (size, size))
+    return _heart_cache[key]
+
+
+def _draw_heart(canvas: pygame.Surface, cx: int, cy: int, size: int, filled: bool) -> None:
+    """Heart sprite centred on (cx, cy), `size` px wide: alive, or the lost-life outline."""
+    sprite = _heart_sprite(filled, size)
+    canvas.blit(sprite, sprite.get_rect(center=(cx, cy)))
 
 
 def draw_text(
@@ -42,305 +93,213 @@ def draw_text(
     align: str = "left",
     outline: bool = False,
 ) -> pygame.Rect:
-    """Draw text matching games/pose/game.py font style (cv2.FONT_HERSHEY_DUPLEX).
-
-    `y` is the baseline position. `align` places `x` at left, center, or right.
-    `outline` keeps text readable over video with a black border.
-    """
-    if not text:
-        return pygame.Rect(x, y, 0, 0)
-    thickness = max(1, round(scale * 1.6))
-    (text_w, text_h), baseline = cv2.getTextSize(text, FONT, scale, thickness)
-    pad = thickness + 4
-    buf_w = text_w + pad * 2
-    buf_h = text_h + baseline + pad * 2
-
-    img = np.zeros((buf_h, buf_w, 4), dtype=np.uint8)
-    origin_x = pad
-    origin_y = pad + text_h
-
-    if outline:
-        cv2.putText(
-            img,
-            text,
-            (origin_x, origin_y),
-            FONT,
-            scale,
-            (0, 0, 0, 255),
-            thickness + 4,
-            cv2.LINE_AA,
-        )
-    r, g, b = color[:3]
-    cv2.putText(
-        img,
-        text,
-        (origin_x, origin_y),
-        FONT,
-        scale,
-        (r, g, b, 255),
-        thickness,
-        cv2.LINE_AA,
+    return styles.draw_text(
+        canvas, text, x, y, scale, color, align, outline, face=theme.font
     )
 
-    surf = pygame.image.frombuffer(img.tobytes(), (buf_w, buf_h), "RGBA")
 
-    if align == "center":
-        blit_x = x - text_w // 2 - pad
-    elif align == "right":
-        blit_x = x - text_w - pad
+LABEL_SCALE = 1.1  # player "P1" labels over heads (base label size is 0.9)
+LABEL_PAD = 16  # px between the top of the head and the label baseline
+
+
+def _label_anchor(person: Person, min_conf: float = 0.3) -> tuple[float, float]:
+    """Baseline point for a player label, padded clear of the top of the head.
+
+    The head top is estimated from the nose: it sits about 0.8x the
+    nose-to-shoulder drop above the nose, so the gap scales with how close the
+    player stands. Falls back to the top of the person box.
+    """
+    x1, y1, x2, _ = person.box
+    conf, xy = person.conf, person.xy
+    if float(conf[KP.NOSE]) < min_conf:
+        return (x1 + x2) / 2, y1 - LABEL_PAD
+    nx, ny = float(xy[KP.NOSE][0]), float(xy[KP.NOSE][1])
+    shoulders = [
+        float(xy[k][1]) for k in (KP.L_SHOULDER, KP.R_SHOULDER) if float(conf[k]) >= min_conf
+    ]
+    if shoulders:
+        drop = max(0.0, sum(shoulders) / len(shoulders) - ny)
+        head_top = ny - 0.8 * drop
     else:
-        blit_x = x - pad
-    blit_y = y - text_h - pad
-
-    canvas.blit(surf, (blit_x, blit_y))
-    return pygame.Rect(blit_x + pad, blit_y + pad, text_w, text_h)
-
-
-
-class Ball:
-    """Ball that bounces around the screen randomly."""
-    
-    def __init__(
-        self,
-        x: float,
-        y: float,
-        radius: float = 25,
-        max_speed: float = 40.0,
-        elasticity: float = 0.95,
-    ):
-        self.x = x
-        self.y = y
-        self.radius = radius
-        self.max_speed = max_speed
-        self.elasticity = elasticity
-        self.vx = 0.0
-        self.vy = 0.0
-        self.reset_velocity()
-        self.color = ORANGE
-    
-    def reset_velocity(self) -> None:
-        """Give the ball a random initial velocity."""
-        angle = random.uniform(0, 2 * math.pi)
-        speed = random.uniform(10, self.max_speed)
-        self.vx = math.cos(angle) * speed
-        self.vy = math.sin(angle) * speed
-    
-    def move(self) -> None:
-        """Update ball position."""
-        self.x += self.vx
-        self.y += self.vy
-        
-        # Clamp speed
-        speed = math.sqrt(self.vx**2 + self.vy**2)
-        if speed > self.max_speed:
-            scale = self.max_speed / speed
-            self.vx *= scale
-            self.vy *= scale
-    
-    def bounce(self, width: float, height: float) -> None:
-        """Bounce off screen boundaries with randomness."""
-        if self.x - self.radius < 0:
-            self.x = self.radius
-            self.vx = -self.vx * self.elasticity
-            self.vy += random.uniform(-3, 3)
-            if random.random() < 0.1:
-                self.vy = random.uniform(-10, 10)
-        elif self.x + self.radius > width:
-            self.x = width - self.radius
-            self.vx = -self.vx * self.elasticity
-            self.vy += random.uniform(-3, 3)
-            if random.random() < 0.1:
-                self.vy = random.uniform(-10, 10)
-        
-        if self.y - self.radius < 0:
-            self.y = self.radius
-            self.vy = -self.vy * self.elasticity
-            self.vx += random.uniform(-3, 3)
-            if random.random() < 0.1:
-                self.vx = random.uniform(-10, 10)
-        elif self.y + self.radius > height:
-            self.y = height - self.radius
-            self.vy = -self.vy * self.elasticity
-            self.vx += random.uniform(-3, 3)
-            if random.random() < 0.1:
-                self.vx = random.uniform(-10, 10)
-        
-        # Random direction change (1% chance)
-        if random.random() < 0.01:
-            angle_change = random.uniform(-math.pi/4, math.pi/4)
-            current_angle = math.atan2(self.vy, self.vx)
-            new_angle = current_angle + angle_change
-            speed = math.sqrt(self.vx**2 + self.vy**2)
-            self.vx = math.cos(new_angle) * speed
-            self.vy = math.sin(new_angle) * speed
-    
-    def check_collision(self, person) -> tuple[bool, list | None]:
-        """Check if ball collides with person's body shape (keypoints polygon).
-        
-        Returns:
-            Tuple of (collision: bool, body_polygon_points: list | None)
-        """
-        if person is None:
-            return False, None
-        
-        # Get all keypoints from the person
-        keypoints = person.xy
-        
-        # Create a polygon from the keypoints for more accurate collision
-        # Use all 17 COCO keypoints to form the body shape
-        body_polygon = []
-        for i in range(len(keypoints)):
-            x, y = float(keypoints[i, 0]), float(keypoints[i, 1])
-            body_polygon.append((x, y))
-        
-        # Check if ball center is inside the polygon
-        if self._point_in_polygon((self.x, self.y), body_polygon):
-            return True, body_polygon
-        
-        # Also check if ball is close to any edge of the polygon
-        # This gives a little buffer space
-        for i in range(len(body_polygon)):
-            p1 = body_polygon[i]
-            p2 = body_polygon[(i + 1) % len(body_polygon)]
-            if self._point_to_line_distance((self.x, self.y), p1, p2) < self.radius:
-                return True, body_polygon
-        
-        return False, body_polygon
-    
-    def _point_in_polygon(self, point: tuple[float, float], polygon: list[tuple[float, float]]) -> bool:
-        """Check if a point is inside a polygon using ray casting algorithm."""
-        x, y = point
-        n = len(polygon)
-        inside = False
-        p1x, p1y = polygon[0]
-        for i in range(n + 1):
-            p2x, p2y = polygon[i % n]
-            if y > min(p1y, p2y):
-                if y <= max(p1y, p2y):
-                    if x <= max(p1x, p2x):
-                        if p1y != p2y:
-                            xinters = (y - p1y) * (p2x - p1x) / (p2y - p1y) + p1x
-                        if p1x == p2x or x <= xinters:
-                            inside = not inside
-            p1x, p1y = p2x, p2y
-        return inside
-    
-    def _point_to_line_distance(self, point: tuple[float, float], line_p1: tuple[float, float], line_p2: tuple[float, float]) -> float:
-        """Calculate distance from point to line segment."""
-        x, y = point
-        x1, y1 = line_p1
-        x2, y2 = line_p2
-        
-        # Calculate the line equation: ax + by + c = 0
-        a = y2 - y1
-        b = x1 - x2
-        c = x2 * y1 - x1 * y2
-        
-        # Distance from point to infinite line
-        distance = abs(a * x + b * y + c) / math.sqrt(a * a + b * b)
-        
-        # Check if the closest point on the line is within the segment
-        # Project point onto line
-        dot = ((x - x1) * (x2 - x1) + (y - y1) * (y2 - y1)) / ((x2 - x1) ** 2 + (y2 - y1) ** 2)
-        
-        if dot < 0:
-            # Closest to p1
-            return math.sqrt((x - x1) ** 2 + (y - y1) ** 2)
-        elif dot > 1:
-            # Closest to p2
-            return math.sqrt((x - x2) ** 2 + (y - y2) ** 2)
-        else:
-            # Closest to line segment
-            return distance
-    
-    def draw(self, canvas: pygame.Surface) -> None:
-        """Draw the ball."""
-        pygame.draw.circle(canvas, self.color, (int(self.x), int(self.y)), int(self.radius) + 4, 2)
-        pygame.draw.circle(canvas, self.color, (int(self.x), int(self.y)), int(self.radius))
-        pygame.draw.circle(canvas, WHITE, (int(self.x) - 5, int(self.y) - 5), 4)
-
-
-NUMBER_KEYS = {
-    pygame.K_1: 1, pygame.K_KP1: 1,
-    pygame.K_2: 2, pygame.K_KP2: 2,
-    pygame.K_3: 3, pygame.K_KP3: 3,
-}
+        head_top = ny - 0.12 * (person.box[3] - y1)  # ~ head size from body height
+    return nx, head_top - LABEL_PAD
 
 
 class DodgeballGame:
-    title = "Dodgeball"
+    title = copy.window_title
 
-    def __init__(self, size):
+    def __init__(self, size, config: DodgeballConfig | None = None):
         self.w, self.h = size
-        
-        # Ball
+        # Same recipes as Duel (and the same optional assets/sounds/*.wav overrides):
+        # its short "steady" tone for wall bounces, its "hit" gunshot for player hits.
+        # Match flow: start jingle, countdown ticks + "go", game-over sting, then
+        # the winner fanfare (Duel's match_over recipe, extended). Each can be
+        # replaced by dropping assets/sounds/<name>.wav in.
+        synth = {
+            "steady": lambda: audio.tone(587, 0.25),
+            "hit": lambda: audio.gunshot(0.4, seed=7),
+            "match_start": lambda: audio.arpeggio([523, 659, 784, 1047], step=0.1),
+            "go": lambda: audio.tone(880, 0.35, decay=0.12),
+            "game_over": lambda: audio.arpeggio([392, 330, 262, 196], step=0.2),
+            "match_over": lambda: audio.arpeggio([392, 494, 587, 784, 587, 784, 988], step=0.13),
+        }
+        self.sounds = {
+            name: audio.load_or(ASSETS / "sounds" / f"{name}.wav", make) for name, make in synth.items()
+        }
+        # Countdown tick: Strike's own sound, so both countdowns sound the same.
+        self.sounds["tick"] = _load_countdown_sounds()["tick"]
+        self.config = config if config is not None else DodgeballConfig()
+        self.debug = bool(self.config.debug)
+
         self.ball = Ball(
             x=self.w // 2,
             y=self.h // 2,
             radius=50,
             max_speed=40.0,
             elasticity=0.95,
+            color=theme.ball_medium,
         )
-        
-        # Lobby: wait for people to step in and confirm how many are playing
-        self.in_lobby = True
-        self.lobby_people: list[Person] = []
-        self.player_count = 0
-        self.last_x: list[float] = []  # last known centre x per player slot
 
-        # Hit counters per player (P1..Pn)
-        self.hits: list[int] = []
-        
-        # Game state
-        self.paused = False  # Pause after hit
-        self.hit_Registered: list[bool] = []  # Track if hit was already counted for each player
-        self.countdown = 0  # Countdown timer for restart
-        
-        # Hit tracking
+        self.in_lobby = True
+        self.ready_up = self._new_ready_up()
+        self.gesture_snapshot = None
+        self.player_count = 0
+        self.last_x: list[float] = []
+
+        self.lives: list[int] = []
+        self.game_over = False
+        self.missing_frames: list[int] = []
+
+        self.paused = False
+        self.hit_registered: list[bool] = []
+        self.countdown = 0
+        self._countdown_total = COUNTDOWN_SECONDS
+        self._last_tick: int | None = None
+
         self.hit_message = ""
         self.hit_message_timer = 0
-        
-        # Visual effects
-        self.hit_timer = 0
-        self.hit_position = (0, 0)
-        
-        # Person bounding boxes for visualization
-        self.person_boxes = []
+
+        self.person_boxes: list[tuple[int, tuple[float, float, float, float]]] = []
+        self.person_label_anchors: list[tuple[int, tuple[float, float]]] = []
+
+        self._end = EndScreen((self.w, self.h))
+        self._pending_nav = None
+        self._frame_ts = 0.0
+
+    def _new_ready_up(self) -> ReadyUp:
+        return ReadyUp(
+            self.w,
+            ReadyUpConfig(
+                min_players=self.config.min_players,
+                max_players=self.config.max_players,
+                title=copy.how_to_play,
+                how_to_lines=copy.ready_how_to,
+                pose_stills=_still_paths(),
+                hold_frames=self.config.gesture_hold_frames,
+                fist_hold_frames=max(1, self.config.fps // 2),
+                forget_frames=self.config.fps,
+                debug=self.debug,
+            ),
+        )
 
     @property
-    def can_start(self) -> bool:
-        return MIN_PLAYERS <= len(self.lobby_people) <= MAX_PLAYERS
+    def gesture_hands(self) -> int:
+        if self.game_over and not self.in_lobby:
+            return NAV_GESTURE_HANDS
+        return self.config.max_players * 2
 
-    def start(self, count: int) -> None:
-        """Leave the lobby and play with `count` players."""
+    @property
+    def wants_gestures(self) -> bool:
+        return self.in_lobby or self.game_over
+
+    def start(self, count: int, seed_x: list[float] | None = None) -> None:
+        """Leave ready-up and play with `count` players."""
         self.in_lobby = False
         self.player_count = count
-        self.hits = [0] * count
-        # Seed slots from the lobby layout so P1..Pn keep their left-to-right order.
-        lobby_x = [p.center_x for p in self.lobby_people]
+        self.lives = [LIVES] * count
+        self.game_over = False
+        self._end.reset()
+        lobby_x = seed_x if seed_x is not None else []
         self.last_x = [
             lobby_x[i] if i < len(lobby_x) else self.w * (i + 1) / (count + 1)
             for i in range(count)
         ]
-        self.reset()
-        self.hit_message = "Get ready!"
+        audio.play(self.sounds["match_start"])  # stands in for the first countdown tick
+        self._begin_round(tick=False)
+        self.hit_message = copy.get_ready
 
-    def reset(self) -> None:
-        """Reset the game - start countdown to restart."""
-        if self.in_lobby:
-            return
+    def _begin_round(self, seconds: int = COUNTDOWN_SECONDS, tick: bool = True) -> None:
+        """New ball, then a `seconds` countdown before it launches."""
         self.paused = False
-        self.countdown = 5 * FPS
-        self.hit_Registered = [False] * self.player_count
-        self.hit_message = "Game restarting..."
+        self.countdown = seconds * FPS
+        self._countdown_total = seconds
+        # tick=False: the caller's own sound stands in for the first digit.
+        self._last_tick = None if tick else self._countdown_digit()[0]
+        self._emit_countdown_tick()
+        self.hit_registered = [False] * self.player_count
+        self.missing_frames = [0] * self.player_count
         self.hit_message_timer = 0
-        self.hit_timer = 0
-        self.person_boxes = []
-        # Pick the launch spot now so players can see it during the countdown.
         self._start_ball()
 
+    def _countdown_digit(self) -> tuple[int, float]:
+        """(seconds_left, digit_age), computed exactly like Strike's round countdown."""
+        remaining = self.countdown / FPS
+        # Capped so rounding can never show one more than the countdown length.
+        seconds_left = min(math.ceil(remaining), math.ceil(self._countdown_total))
+        return seconds_left, max(0.0, seconds_left - remaining)
+
+    def _emit_countdown_tick(self) -> None:
+        """Strike's CountdownTick: once per new digit; audible for the shown 3, 2, 1."""
+        if self.countdown <= 0:
+            return
+        seconds_left, _ = self._countdown_digit()
+        if seconds_left == self._last_tick:
+            return
+        self._last_tick = seconds_left
+        self._on_countdown_tick(CountdownTick(seconds_left=seconds_left))
+
+    def _on_countdown_tick(self, tick: CountdownTick) -> None:
+        if tick.seconds_left <= TIMER_VISIBLE_AT_SECONDS:
+            audio.play(self.sounds["tick"])
+
+    def reset(self) -> None:
+        """R key: clear ready-up choices, or rematch into ready-up after game over.
+
+        Mid-match it does nothing: after a hit the round restarts by itself.
+        """
+        if self.in_lobby:
+            self.ready_up.reset()
+            return
+        if self.game_over:
+            self._enter_ready_up()
+
+    def _enter_ready_up(self) -> None:
+        self.in_lobby = True
+        self.game_over = False
+        self.ready_up = self._new_ready_up()
+        self._end.reset()
+        self.hit_message = ""
+        self._pending_nav = None
+
+    def handle_command(self, command: MenuCommand) -> None:
+        if not self.game_over or self.in_lobby:
+            return
+        choice = self._end.handle_command(command)
+        if choice is not None:
+            self._apply_end_choice(choice)
+
+    def poll_nav(self):
+        nav = self._pending_nav
+        self._pending_nav = None
+        return nav
+
+    def _apply_end_choice(self, choice: EndChoice) -> None:
+        if choice is EndChoice.MENU:
+            self._pending_nav = StartGame(None)
+            return
+        self._enter_ready_up()
+
     def _start_ball(self) -> None:
-        """Place the ball at a random position with a random launch velocity."""
         self.ball = Ball(
             x=random.randint(50, self.w - 50),
             y=random.randint(50, self.h - 50),
@@ -350,14 +309,9 @@ class DodgeballGame:
         )
 
     def _assign_players(self, people: list[Person]) -> list[Person | None]:
-        """Map detections to player slots P1..Pn.
-
-        Like Strike a Pose, the tallest people are the players and extras are
-        bystanders. With everyone in frame, slots go left to right; when some
-        are missing, each person takes the free slot nearest where it was last seen.
-        """
+        """Map detections to player slots P1..Pn using last known positions."""
         n = self.player_count
-        tallest = sorted(people, key=lambda p: p.box[3] - p.box[1], reverse=True)[:n]
+        tallest = self._nearest_to_players(people) if len(people) > n else list(people)
         slots: list[Person | None] = [None] * n
         if len(tallest) == n:
             for i, person in enumerate(left_to_right(tallest)):
@@ -373,151 +327,210 @@ class DodgeballGame:
                 self.last_x[i] = person.center_x
         return slots
 
+    def _nearest_to_players(self, people: list[Person]) -> list[Person]:
+        pairs = sorted(
+            (abs(self.last_x[s] - p.center_x), s, i)
+            for s in range(self.player_count)
+            for i, p in enumerate(people)
+        )
+        used_s: set[int] = set()
+        used_i: set[int] = set()
+        for _, s, i in pairs:
+            if s not in used_s and i not in used_i:
+                used_s.add(s)
+                used_i.add(i)
+        return [people[i] for i in sorted(used_i)]
+
     def update(self, frame: PoseFrame) -> None:
-        """Update game state."""
+        self._frame_ts = frame.timestamp
         if self.in_lobby:
-            self.lobby_people = left_to_right(frame.people)
+            snap = self.gesture_snapshot
+            hands = snap.hands if snap is not None else ()
+            started = self.ready_up.update(frame.people, hands)
+            if started is not None:
+                roster = [p for p in started.roster if isinstance(p, Person)]
+                if not roster and started.roster:
+                    # Candidate fallbacks shouldn't happen when people were tracked
+                    roster = list(frame.people)[: len(started.roster)]
+                self.start(len(roster), seed_x=[p.center_x for p in roster])
             return
 
-        # If paused, only update message timer
+        if self.game_over:
+            choice = self._end.update(self.gesture_snapshot, frame.timestamp)
+            if choice is not None:
+                self._apply_end_choice(choice)
+            return
+
+        slots = self._assign_players(frame.people)
+        self.person_boxes = [
+            (i, tuple(person.box)) for i, person in enumerate(slots) if person is not None
+        ]
+        self.person_label_anchors = [
+            (i, _label_anchor(person)) for i, person in enumerate(slots) if person is not None
+        ]
+
         if self.paused:
             return
-        
-        # Handle countdown
+
         if self.countdown > 0:
             self.countdown -= 1
             if self.countdown == 0:
-                self.hits = [0] * self.player_count  # Reset counters when ball starts
-            return  # Don't update game during countdown
-        
-        # Store person boxes for drawing
-        self.person_boxes = []
-        
-        # Move ball
+                audio.play(self.sounds["go"])  # ball launches next frame
+            else:
+                self._emit_countdown_tick()
+            return
+
         self.ball.move()
-        self.ball.bounce(self.w, self.h)
-        
-        # Update timers
-        if self.hit_timer > 0:
-            self.hit_timer -= 1
+        if self.ball.bounce(self.w, self.h):
+            audio.play(self.sounds["steady"])
+
         if self.hit_message_timer > 0:
             self.hit_message_timer -= 1
-        
-        # Reset hit registration at start of each frame
-        # (only register one hit per player per collision event)
-        for i in range(len(self.hit_Registered)):
+
+        for i in range(len(self.hit_registered)):
             if not self.paused:
-                self.hit_Registered[i] = False
-        
-        # Check for collisions
-        for player_idx, person in enumerate(self._assign_players(frame.people)):
-            if person is not None:
+                self.hit_registered[i] = False
+
+        for player_idx, person in enumerate(slots):
+            if person is not None and self.lives[player_idx] > 0:
                 collision, body_polygon = self.ball.check_collision(person)
-                self.person_boxes.append((player_idx, body_polygon))
-                
-                if collision and not self.hit_Registered[player_idx]:
-                    # Hit! Increment hit counter ONCE
-                    self.hits[player_idx] += 1
-                    self.hit_Registered[player_idx] = True
-                    self.hit_timer = 45
-                    self.hit_position = (int(self.ball.x), int(self.ball.y))
-                    
-                    # Show hit message
-                    self.hit_message = f"P{player_idx + 1} HIT! Press R to resume"
-                    self.hit_message_timer = 0  # Keep showing until reset
-                    
-                    # Pause the game
-                    self.paused = True
-                    
-                    # Bounce ball away from person
-                    # Calculate center from body polygon
-                    if body_polygon:
-                        polygon_center_x = sum(p[0] for p in body_polygon) / len(body_polygon)
-                        polygon_center_y = sum(p[1] for p in body_polygon) / len(body_polygon)
-                    else:
-                        polygon_center_x = self.w / 2
-                        polygon_center_y = self.h / 2
-                    
-                    dx = self.ball.x - polygon_center_x
-                    dy = self.ball.y - polygon_center_y
-                    dist = math.sqrt(dx*dx + dy*dy)
-                    
-                    if dist < 1:
-                        # Ball is at center, push in random direction
-                        angle = random.uniform(0, 2 * math.pi)
-                        self.ball.vx = math.cos(angle) * 15
-                        self.ball.vy = math.sin(angle) * 15
-                        self.ball.x = polygon_center_x + math.cos(angle) * (self.ball.radius + 30)
-                        self.ball.y = polygon_center_y + math.sin(angle) * (self.ball.radius + 30)
-                    else:
-                        # Push ball away
-                        self.ball.vx = (dx / dist) * 15
-                        self.ball.vy = (dy / dist) * 15
-                        push_dist = self.ball.radius + 30
-                        self.ball.x = polygon_center_x + (dx / dist) * push_dist
-                        self.ball.y = polygon_center_y + (dy / dist) * push_dist
-                    
-                    break  # Only check first person
-        
-        # Update ball color based on speed
+
+                if collision and not self.hit_registered[player_idx]:
+                    self._lose_life(player_idx, "HIT!")
+                    audio.play(self.sounds["hit"])
+                    self.hit_registered[player_idx] = True
+                    break
+
+        if not self.paused:
+            self._check_offscreen(slots)
+
         speed = math.sqrt(self.ball.vx**2 + self.ball.vy**2)
         if speed > 15:
-            self.ball.color = RED
+            self.ball.color, self.ball.pace = RED, "fast"
         elif speed > 8:
-            self.ball.color = ORANGE
+            self.ball.color, self.ball.pace = ORANGE, "medium"
         else:
-            self.ball.color = YELLOW
+            self.ball.color, self.ball.pace = YELLOW, "slow"
+
+    def _lose_life(self, player_idx: int, reason: str) -> None:
+        self.lives[player_idx] = max(0, self.lives[player_idx] - 1)
+        was_over = self.game_over
+        self.hit_message = self._hit_message(player_idx, reason)
+        self.hit_message_timer = 0
+        if not self.game_over:
+            # Fresh ball and an automatic restart; the hit message stays up meanwhile.
+            self._begin_round(seconds=HIT_RESTART_SECONDS)
+            return
+        self.paused = True
+        if not was_over:
+            alive = [i for i, lives in enumerate(self.lives) if lives > 0]
+            has_winner = self.player_count > 1 and len(alive) == 1
+            # Sting first; a winner then gets the fanfare queued right after it.
+            fanfare = self.sounds["match_over"] if has_winner else None
+            audio.play_then(self.sounds["game_over"], fanfare)
+
+    def _check_offscreen(self, slots: list[Person | None]) -> None:
+        for i, person in enumerate(slots):
+            if person is not None or self.lives[i] == 0:
+                self.missing_frames[i] = 0
+                continue
+            self.missing_frames[i] += 1
+            if self.missing_frames[i] >= OFFSCREEN_FRAMES:
+                self.missing_frames[i] = 0
+                self._lose_life(i, "LEFT THE SCREEN!")
+                return
+
+    def _hit_message(self, player_idx: int, reason: str = "HIT!") -> str:
+        name = f"P{player_idx + 1}"
+        alive = [i for i, lives in enumerate(self.lives) if lives > 0]
+        if self.player_count == 1 and not alive:
+            self.game_over = True
+            self._end.reset()
+            return "GAME OVER!"
+        if self.player_count > 1 and len(alive) <= 1:
+            self.game_over = True
+            self._end.reset()
+            winner = f"P{alive[0] + 1} WINS!" if alive else "Nobody wins!"
+            return winner
+        if self.lives[player_idx] == 0:
+            return f"{name} is OUT!"
+        return f"{name} {reason}"
 
     def handle_key(self, key: int) -> None:
-        """Handle keyboard input. (R is routed to reset() by the app shell.)"""
         if not self.in_lobby:
             return
-        if key == pygame.K_SPACE and self.can_start:
-            self.start(len(self.lobby_people))
-        elif key in NUMBER_KEYS:
-            self.start(NUMBER_KEYS[key])
-    
+        if key == pygame.K_SPACE and self.debug:
+            started = self.ready_up.force_start()
+            if started is not None:
+                roster = [p for p in started.roster if isinstance(p, Person)]
+                self.start(len(roster), seed_x=[p.center_x for p in roster])
+
     def render_camera(self, image_bgr):
-        """Pass through camera image."""
-        return image_bgr
+        if self.in_lobby or self.game_over or self.countdown <= 0:
+            return image_bgr
+        # Strike's countdown digit, drawn by Strike's own renderer onto the camera
+        # image (translucent, no background), before the pygame overlays go on top.
+        image = image_bgr.copy()
+        draw_countdown_timer(image, *self._countdown_digit())
+        return image
 
     def debug_lines(self) -> list[str]:
         if self.in_lobby:
-            return [f"Lobby: {len(self.lobby_people)} people in frame"]
+            return [
+                f"Ready-up: {self.ready_up.ready_count} ready / "
+                f"{len(self.ready_up.eligible)} eligible"
+            ]
         return [
-            " | ".join(f"P{i + 1}: {h}" for i, h in enumerate(self.hits)),
+            " | ".join(f"P{i + 1}: {n}/{LIVES} lives" for i, n in enumerate(self.lives)),
             f"Ball speed: {math.sqrt(self.ball.vx**2 + self.ball.vy**2):.1f} px/f",
+            "NOTE: Red ball = fast, orange = medium, yellow = slow",
         ]
 
-    def _draw_lobby(self, canvas: pygame.Surface) -> None:
-        """Boxes around everyone in frame, numbered left to right, plus a prompt."""
-        for i, person in enumerate(self.lobby_people):
-            color = PLAYER_COLORS[i] if i < MAX_PLAYERS else MUTED
-            x1, y1, x2, y2 = (int(v) for v in person.box)
-            pygame.draw.rect(canvas, color, (x1, y1, x2 - x1, y2 - y1), 2)
-            draw_text(canvas, f"P{i + 1}", x1 + 6, max(y1 - 10, 30), 0.9, color, outline=True)
-
-        band = pygame.Surface((self.w, 84), pygame.SRCALPHA)
-        band.fill((*BLACK, 160))
-        canvas.blit(band, (0, 0))
-        canvas.blit(band, (0, self.h - 84))
-        draw_text(canvas, "DODGEBALL", self.w // 2, 58, 1.6, WHITE, "center")
-
-        count = len(self.lobby_people)
-        if self.can_start:
-            label = "player" if count == 1 else "players"
-            message, color = f"{count} {label} in frame  -  press SPACE to start", ACCENT
+    def _draw_results_body(self, canvas: pygame.Surface, rect: pygame.Rect, frame) -> None:
+        """Winner (or solo game over), hearts left per player, dodge illustration."""
+        results = content.Results
+        if self.player_count <= 1:
+            headline, sub = results.solo_over, results.solo_sub
         else:
-            message = f"Need {MIN_PLAYERS} to {MAX_PLAYERS} players in frame  -  found {count}"
-            color = WHITE
-        draw_text(canvas, message, self.w // 2, self.h - 44, 1.0, color, "center", outline=True)
-        draw_text(canvas, "or press 1 / 2 / 3 to choose", self.w // 2, self.h - 14, 0.6, MUTED, "center")
+            alive = [i + 1 for i, lives in enumerate(self.lives) if lives > 0]
+            headline, sub = winners_line(alive), ""
+        bottom = draw_headline(canvas, frame, rect, headline, sub, size=64)
+        top = bottom + frame.px(28)
+        rows_rect = pygame.Rect(rect.x, top, min(int(rect.width * 0.6), frame.px(660)), rect.bottom - top)
+        alive_count = sum(1 for lives in self.lives if lives > 0)
+        draw_lives_rows(
+            canvas,
+            frame,
+            rows_rect,
+            [
+                LivesRow(
+                    player=i + 1,
+                    lives=lives,
+                    max_lives=LIVES,
+                    winner=self.player_count > 1 and lives > 0 and alive_count == 1,
+                )
+                for i, lives in enumerate(self.lives)
+            ],
+            palette=PLAYER_INK_DODGEBALL,
+        )
+        art_box = pygame.Rect(rows_rect.right + frame.px(40), rect.y, rect.right - rows_rect.right - frame.px(40), rect.height)
+        draw_card_art(canvas, ASSETS / "ui" / "how_to_play" / "dodgeball" / "step_2.png", art_box)
+
+    def _draw_offscreen_warnings(self, canvas: pygame.Surface) -> None:
+        warn_after = FPS // 2
+        y = self.h - 90
+        for i, missing in enumerate(self.missing_frames):
+            if missing < warn_after or self.lives[i] == 0:
+                continue
+            left = (OFFSCREEN_FRAMES - missing) / FPS
+            text = f"P{i + 1} come back! {left:.1f}s"
+            draw_text(canvas, text, self.w // 2, y, 1.1, PLAYER_COLORS[i], "center", outline=True)
+            y -= 44
 
     def _draw_launch_marker(self, canvas: pygame.Surface) -> None:
-        """Pulsing ring plus an arrow showing the direction the ball will fly."""
         bx, by = int(self.ball.x), int(self.ball.y)
         r = int(self.ball.radius)
-        pulse = (math.sin(self.countdown * 0.25) + 1) / 2  # 0..1
+        pulse = (math.sin(self.countdown * 0.25) + 1) / 2
         overlay = pygame.Surface(canvas.get_size(), pygame.SRCALPHA)
         pygame.draw.circle(overlay, (*YELLOW, int(90 + 120 * pulse)), (bx, by), r + 12 + int(14 * pulse), 4)
 
@@ -532,83 +545,70 @@ class DodgeballGame:
         pygame.draw.polygon(overlay, (*YELLOW, 220), [tip, left, right])
         canvas.blit(overlay, (0, 0))
 
+    def _draw_lives(self, canvas: pygame.Surface) -> None:
+        size = 26
+        gap = 8
+        row_h = 42
+        hearts_w = LIVES * size + (LIVES - 1) * gap
+        right = self.w - 24
+        for i in range(self.player_count):
+            color = PLAYER_COLORS[i % len(PLAYER_COLORS)]
+            cy = 36 + i * row_h
+            label_color = color if self.lives[i] > 0 else MUTED
+            draw_text(canvas, f"P{i + 1}", right - hearts_w - 14, cy + 10, 0.9, label_color, "right", outline=True)
+            for k in range(LIVES):
+                cx = right - hearts_w + k * (size + gap) + size // 2
+                _draw_heart(canvas, cx, cy, size, filled=k < self.lives[i])
+
     def draw(self, canvas: pygame.Surface, frame: PoseFrame) -> None:
-        """Draw game elements."""
         if self.in_lobby:
-            self._draw_lobby(canvas)
+            draw_ready_up(canvas, self.ready_up, theme=theme, snap=self.gesture_snapshot)
+            return
+        if self.game_over:
+            draw_end_screen(
+                canvas,
+                self._end,
+                snap=self.gesture_snapshot,
+                title=content.Results.dodgeball_title,
+                body=self._draw_results_body,
+            )
             return
 
-        # Draw person body polygons
-        for player_idx, body_polygon in self.person_boxes:
-            if body_polygon is not None:
-                color = PLAYER_COLORS[player_idx]
-                temp_surf = pygame.Surface(canvas.get_size(), pygame.SRCALPHA)
-                pygame.draw.polygon(temp_surf, (*color, 80), body_polygon, 2)
-                canvas.blit(temp_surf, (0, 0))
-        
-        # Draw ball (during the countdown, also flag where it launches from)
+        anchor_by_slot = dict(self.person_label_anchors)
+        for player_idx, box in self.person_boxes:
+            out = self.lives[player_idx] == 0
+            color = MUTED if out else PLAYER_COLORS[player_idx % len(PLAYER_COLORS)]
+            anchor = anchor_by_slot.get(player_idx) or head_anchor(box)
+            label = f"P{player_idx + 1}" + (" OUT" if out else "")
+            draw_player_label(canvas, label, anchor, color, scale=LABEL_SCALE, face=theme.font)
+
         if self.countdown > 0:
             self._draw_launch_marker(canvas)
         self.ball.draw(canvas)
 
-        # Draw hit effect
-        if self.hit_timer > 0:
-            alpha = int(255 * (self.hit_timer / 45))
-            temp_surf = pygame.Surface(canvas.get_size(), pygame.SRCALPHA)
-            radius = int(30 + (45 - self.hit_timer))
-            pygame.draw.circle(temp_surf, (*RED, alpha), self.hit_position, radius, 3)
-            
-            # X mark
-            x, y = self.hit_position
-            pygame.draw.line(temp_surf, (*RED, alpha),
-                            (x - 25, y - 25), (x + 25, y + 25), 3)
-            pygame.draw.line(temp_surf, (*RED, alpha),
-                            (x - 25, y + 25), (x + 25, y - 25), 3)
-            canvas.blit(temp_surf, (0, 0))
-        
-        # Draw hit message in center (timer > 0, or paused with a sticky message)
-        if self.hit_message and (self.hit_message_timer > 0 or self.paused or self.countdown > 0):
+        if self.hit_message and (
+            self.hit_message_timer > 0 or self.paused or self.countdown > 0
+        ):
             draw_text(
                 canvas,
                 self.hit_message,
                 self.w // 2,
-                self.h // 2 - 100,
+                # Above the big countdown digit while it shows; else just above centre.
+                int(self.h * 0.22) if self.game_over or self.countdown > 0 else self.h // 2 - 100,
                 scale=1.4,
                 color=RED,
                 align="center",
                 outline=True,
             )
-        
-        # Draw countdown in center
-        if self.countdown > 0:
-            countdown_sec = (self.countdown + 29) // 30  # Convert frames to seconds
-            countdown_text = f"Starting in {countdown_sec}..."
-            draw_text(
-                canvas,
-                countdown_text,
-                self.w // 2,
-                self.h // 2,
-                scale=1.5,
-                color=YELLOW,
-                align="center",
-                outline=True,
-            )
-        
-        # Draw scoreboard in top-right, P1..Pn reading left to right
-        score_scale = 0.95
-        score_thickness = max(1, round(score_scale * 1.6))
-        right = self.w - 24
-        for i in reversed(range(self.player_count)):
-            text = f"P{i + 1}: {self.hits[i]}"
-            draw_text(canvas, text, right, 48, scale=score_scale, color=PLAYER_COLORS[i], align="right", outline=True)
-            (text_w, _), _ = cv2.getTextSize(text, FONT, score_scale, score_thickness)
-            right -= text_w + 28
-        
-        # Draw instructions strip at bottom
+
+        self._draw_lives(canvas)
+
+        if not self.paused and self.countdown == 0:
+            self._draw_offscreen_warnings(canvas)
+
         instructions = "[D] Debug | [R] Reset | [F] Fullscreen | [Q/Esc] Quit"
         instr_scale = 0.65
-        instr_thickness = max(1, round(instr_scale * 1.6))
-        (instr_w, instr_h), _ = cv2.getTextSize(instructions, FONT, instr_scale, instr_thickness)
+        (instr_w, instr_h), _ = styles.text_size(instructions, instr_scale, theme.font)
         instr_bg = pygame.Surface((instr_w + 32, instr_h + 16), pygame.SRCALPHA)
         pygame.draw.rect(instr_bg, (*BLACK, 180), (0, 0, instr_bg.get_width(), instr_bg.get_height()), border_radius=6)
         canvas.blit(instr_bg, (16, self.h - instr_h - 28))

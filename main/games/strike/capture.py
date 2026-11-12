@@ -18,7 +18,8 @@ from typing import Sequence
 
 import numpy as np
 
-from main.config import Config
+from main import content
+from main.settings import StrikeConfig as Config
 from main.pose.library import (
     BODY_JOINTS,
     POSE_FILE_JOINTS,
@@ -30,7 +31,6 @@ from main.pose.library import (
     save_pose,
 )
 from main.pose.tracker import Camera, CameraError, PoseDetector
-
 from .game import (
     ACCENT,
     CANVAS_HEIGHT,
@@ -39,7 +39,6 @@ from .game import (
     PANEL,
     WHITE,
     CvRenderer,
-    dim,
     draw_frame,
     draw_skeleton,
     draw_stick_figure,
@@ -94,26 +93,34 @@ def compose_live(
     if person is not None:
         draw_skeleton(canvas, person.visible_joints(min_confidence), transform, ACCENT)
 
-    dim(canvas, (0, 0, CANVAS_WIDTH, 84))
     header = title if title is not None else f"New pose: {name}"
-    draw_text(canvas, header, CANVAS_WIDTH // 2, 58, 1.4, WHITE, "center")
+    draw_text(canvas, header, CANVAS_WIDTH // 2, 58, 1.4, WHITE, "center", outline=True)
     if seconds_left is not None:
         # Off to the side, so the number does not cover the person posing.
         draw_text(
             canvas, str(seconds_left), CANVAS_WIDTH - 130, 300, 6.0, ACCENT, "center", outline=True
         )
-    dim(canvas, (0, CANVAS_HEIGHT - 84, CANVAS_WIDTH, 84))
-    draw_text(canvas, message, CANVAS_WIDTH // 2, CANVAS_HEIGHT - 32, 0.9, WHITE, "center")
+    draw_text(
+        canvas, message, CANVAS_WIDTH // 2, CANVAS_HEIGHT - 32, 0.9, WHITE, "center", outline=True
+    )
     return canvas
 
 
 def compose_saved(pose: Pose) -> np.ndarray:
     canvas = new_canvas()
-    draw_text(canvas, f"Saved: {pose.name}", CANVAS_WIDTH // 2, 62, 1.4, WHITE, "center")
+    draw_text(
+        canvas,
+        content.Strike.saved_pose.format(name=pose.name),
+        CANVAS_WIDTH // 2,
+        62,
+        1.4,
+        WHITE,
+        "center",
+    )
     panel = (270, 90, 740, 540)
     fill(canvas, panel, PANEL)
     draw_stick_figure(canvas, pose.joints, panel)
-    draw_text(canvas, "SPACE or Q: close", CANVAS_WIDTH // 2, 680, 0.9, ACCENT, "center")
+    draw_text(canvas, content.Strike.capture_close, CANVAS_WIDTH // 2, 680, 0.9, ACCENT, "center")
     return canvas
 
 

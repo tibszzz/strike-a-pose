@@ -1,0 +1,18 @@
+{
+  "name": "nicha",
+  "joints": {
+    "nose": [0.463, 0.118],
+    "left_shoulder": [0.577, 0.214],
+    "right_shoulder": [0.374, 0.221],
+    "left_elbow": [0.656, 0.108],
+    "right_elbow": [0.275, 0.097],
+    "left_wrist": [0.536, 0.000],
+    "right_wrist": [0.375, 0.014],
+    "left_hip": [0.565, 0.550],
+    "right_hip": [0.412, 0.579],
+    "left_knee": [0.725, 0.695],
+    "right_knee": [0.434, 0.840],
+    "left_ankle": [0.555, 0.846],
+    "right_ankle": [0.477, 1.000]
+  }
+}

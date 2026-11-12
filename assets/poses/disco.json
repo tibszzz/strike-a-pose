@@ -2,17 +2,17 @@
   "name": "disco",
   "joints": {
     "nose": [0.416, 0.123],
-    "left_shoulder": [0.516, 0.264],
-    "right_shoulder": [0.316, 0.264],
-    "left_elbow": [0.667, 0.264],
-    "right_elbow": [0.252, 0.127],
-    "left_wrist": [0.807, 0.264],
-    "right_wrist": [0.193, 0.000],
-    "left_hip": [0.476, 0.565],
-    "right_hip": [0.356, 0.565],
-    "left_knee": [0.533, 0.778],
-    "right_knee": [0.317, 0.783],
-    "left_ankle": [0.591, 0.992],
-    "right_ankle": [0.279, 1.000]
+    "left_shoulder": [0.495, 0.269],
+    "right_shoulder": [0.295, 0.269],
+    "left_elbow": [0.589, 0.387],
+    "right_elbow": [0.237, 0.129],
+    "left_wrist": [0.524, 0.511],
+    "right_wrist": [0.183, 0.000],
+    "left_hip": [0.455, 0.570],
+    "right_hip": [0.335, 0.570],
+    "left_knee": [0.563, 0.762],
+    "right_knee": [0.367, 0.789],
+    "left_ankle": [0.588, 0.982],
+    "right_ankle": [0.280, 0.992]
   }
 }

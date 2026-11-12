@@ -20,7 +20,8 @@ from typing import Sequence
 import cv2
 import numpy as np
 
-from main.config import Config
+from main import content
+from main.settings import StrikeConfig as Config
 from main.pose.library import (
     HEAD_JOINT,
     Pose,
@@ -58,7 +59,6 @@ from .game import (
     MouseEvent,
     Rect,
     Transform,
-    dim,
     draw_skeleton,
     draw_text,
     fill,
@@ -318,7 +318,7 @@ def canvas_to_unit(transform: Transform, x: int, y: int) -> tuple[float, float]:
 
 def compose_editor(editor: PoseEditor, transform: Transform) -> np.ndarray:
     canvas = new_canvas()
-    title = f"Edit pose: {editor.name}"
+    title = content.Strike.edit_title.format(name=editor.name)
     if editor.existed_at_open:
         title += " (existing)"
     else:
@@ -344,9 +344,15 @@ def compose_editor(editor: PoseEditor, transform: Transform) -> np.ndarray:
         cv2.circle(canvas, transform.apply(point), 8, color, -1, cv2.LINE_AA)
         cv2.circle(canvas, transform.apply(point), 8, ACCENT, 1, cv2.LINE_AA)
 
-    dim(canvas, (0, CANVAS_HEIGHT - 84, CANVAS_WIDTH, 84))
     draw_text(
-        canvas, editor.prompt(), CANVAS_WIDTH // 2, CANVAS_HEIGHT - 32, 0.75, MUTED, "center"
+        canvas,
+        editor.prompt(),
+        CANVAS_WIDTH // 2,
+        CANVAS_HEIGHT - 32,
+        0.75,
+        MUTED,
+        "center",
+        outline=True,
     )
     return canvas
 

@@ -8,7 +8,7 @@ from __future__ import annotations
 import sys
 import time
 
-from main.config import Config
+from main.settings import StrikeConfig as Config
 from .game import CvRenderer
 from .logic import Game
 from .screens import Action

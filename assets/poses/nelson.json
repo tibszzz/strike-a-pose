@@ -1,0 +1,18 @@
+{
+  "name": "nelson",
+  "joints": {
+    "nose": [0.317, 0.289],
+    "left_shoulder": [0.454, 0.259],
+    "right_shoulder": [0.310, 0.454],
+    "left_elbow": [0.540, 0.128],
+    "right_elbow": [0.163, 0.521],
+    "left_wrist": [0.558, 0.000],
+    "right_wrist": [0.010, 0.609],
+    "left_hip": [0.663, 0.479],
+    "right_hip": [0.561, 0.601],
+    "left_knee": [0.788, 0.421],
+    "right_knee": [0.573, 0.723],
+    "left_ankle": [0.990, 0.568],
+    "right_ankle": [0.552, 1.000]
+  }
+}

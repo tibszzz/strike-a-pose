@@ -1,0 +1,18 @@
+{
+  "name": "srivatsa",
+  "joints": {
+    "nose": [0.163, 0.361],
+    "left_shoulder": [0.261, 0.243],
+    "right_shoulder": [0.219, 0.407],
+    "left_elbow": [0.330, 0.184],
+    "right_elbow": [0.147, 0.493],
+    "left_wrist": [0.304, 0.134],
+    "right_wrist": [0.000, 0.617],
+    "left_hip": [0.537, 0.332],
+    "right_hip": [0.468, 0.450],
+    "left_knee": [0.742, 0.350],
+    "right_knee": [0.412, 0.609],
+    "left_ankle": [1.000, 0.354],
+    "right_ankle": [0.442, 0.866]
+  }
+}

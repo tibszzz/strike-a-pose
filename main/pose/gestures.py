@@ -3,27 +3,28 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
 from enum import Enum
 
 import numpy as np
 
+from main.settings import GestureConfig
+
 from .types import KP, Person
+
+__all__ = [
+    "GestureConfig",
+    "PoseState",
+    "classify",
+    "is_arm_extended",
+    "is_drawn",
+    "is_wrist_raised",
+]
 
 
 class PoseState(Enum):
     MISSING = "missing"
     DRAWN = "drawn"
     NEUTRAL = "neutral"
-
-
-@dataclass(frozen=True)
-class GestureConfig:
-    min_conf: float = 0.5
-    # Elbow angle in degrees (180 = perfectly straight) needed to count as extended.
-    min_elbow_angle: float = 140.0
-    # Max angle of the shoulder->wrist line away from horizontal, in degrees.
-    max_arm_tilt: float = 30.0
 
 
 _ARMS = {
@@ -60,6 +61,34 @@ def is_arm_extended(p: Person, side: str, cfg: GestureConfig = GestureConfig()) 
 
 def is_drawn(p: Person, cfg: GestureConfig = GestureConfig()) -> bool:
     return is_arm_extended(p, "left", cfg) or is_arm_extended(p, "right", cfg)
+
+
+def is_wrist_raised(
+    p: Person,
+    side: str,
+    *,
+    min_conf: float = 0.35,
+    min_lift_frac: float = 0.08,
+) -> bool:
+    """True when the wrist sits clearly above the elbow (hand not at the hip/side).
+
+    Image y grows downward. `min_lift_frac` is a fraction of torso length
+    (shoulder→hip) so the margin scales with distance from the camera.
+    Hip-level / hands-on-hips wrists sit below the elbow and must not count.
+    """
+    s_i, e_i, w_i = _ARMS[side]
+    hip_i = KP.L_HIP if side == "left" else KP.R_HIP
+    if not all(float(p.conf[i]) >= min_conf for i in (e_i, w_i)):
+        return False
+    elbow_y = float(p.xy[e_i][1])
+    wrist_y = float(p.xy[w_i][1])
+    torso = 0.0
+    if float(p.conf[s_i]) >= min_conf and float(p.conf[hip_i]) >= min_conf:
+        torso = abs(float(p.xy[s_i][1]) - float(p.xy[hip_i][1]))
+    if torso < 1e-3:
+        box_h = max(0.0, float(p.box[3]) - float(p.box[1]))
+        torso = box_h if box_h > 1e-3 else 100.0
+    return wrist_y < elbow_y - torso * min_lift_frac
 
 
 def classify(p: Person | None, cfg: GestureConfig = GestureConfig()) -> PoseState:
