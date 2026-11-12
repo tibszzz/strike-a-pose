@@ -10,9 +10,9 @@ ORANGE = styles.DODGEBALL.ball_medium
 
 # Sprite per pace (set by the game from the ball's speed each frame).
 _SPRITES = {
-    "slow": ASSETS / "sprites" / "smug.png",
-    "medium": ASSETS / "sprites" / "sun.png",
-    "fast": ASSETS / "sprites" / "full-moon.png",
+    "slow": ASSETS / "sprites" / "slow.png",
+    "medium": ASSETS / "sprites" / "medium.png",
+    "fast": ASSETS / "sprites" / "fast.png",
 }
 _sprite_cache: dict[tuple[str, int], pygame.Surface] = {}
 
