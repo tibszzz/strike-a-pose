@@ -22,7 +22,7 @@ from main.nav.hand_geometry import (
     primary_landmarks,
     show_hold_ring,
 )
-from main.pose.library import BONES, HEAD_JOINT, Box, Joints, Point, Pose, midpoint
+from main.pose.library import BONES, HEAD_JOINT, Box, Joints, Point, midpoint
 from main.settings import CANVAS_HEIGHT, CANVAS_WIDTH
 from main.ui.paper import Frame, PaperStyle, paper_surface
 
@@ -32,7 +32,6 @@ from .screens import (
     FinalScreen,
     LobbyScreen,
     ResultsScreen,
-    RetryScreen,
     Screen,
 )
 
@@ -267,16 +266,10 @@ def compose(screen: Screen, frame: np.ndarray) -> np.ndarray:
         return _compose_lobby(screen, frame)
     if isinstance(screen, CountdownScreen):
         return _compose_countdown(screen, frame)
-    if isinstance(screen, RetryScreen):
-        return _compose_retry(screen)
     if isinstance(screen, ResultsScreen):
         return _compose_results(screen)
     return _compose_final(screen)
 
-
-TARGET_PANEL: Rect = (40, 90, 740, 590)
-SIDE_LEFT, SIDE_WIDTH = 820, 420
-SIDE_CENTER = SIDE_LEFT + SIDE_WIDTH // 2
 
 # Countdown target HUD: final size ~18% of canvas height, parked top-right
 # under the header. Intro holds 2x at center for 1.5s, then eases over 0.5s.
@@ -370,27 +363,6 @@ def _draw_translucent_text(
     cv2.addWeighted(overlay, opacity, canvas, 1.0 - opacity, 0, canvas)
 
 
-def _target_panel(
-    canvas: np.ndarray, target: Pose, rect: Rect, caption_height: int, caption_scale: float
-) -> None:
-    """A panel with the pose's name along the top and its stick figure below."""
-    left, top, width, height = rect
-    draw_pose_paper(canvas, rect)
-    draw_text(
-        canvas, target.name, left + 16, top + round(caption_height * 0.75), caption_scale, ACCENT
-    )
-    draw_stick_figure(
-        canvas,
-        target.joints,
-        (left, top + caption_height, width, height - caption_height),
-        POSE_INK,
-    )
-
-
-def _large_target_panel(canvas: np.ndarray, target: Pose) -> None:
-    _target_panel(canvas, target, TARGET_PANEL, caption_height=56, caption_scale=1.0)
-
-
 def _compose_lobby(screen: LobbyScreen, frame: np.ndarray) -> np.ndarray:
     """Legacy lobby compose (shell uses shared ReadyUp). Labels only — no boxes."""
     canvas = new_canvas()
@@ -449,28 +421,6 @@ def draw_countdown_timer(canvas: np.ndarray, seconds_left: int, digit_age: float
     (_, glyph_h), descent = styles.text_size(text, TIMER_CENTER_SCALE, theme.font, h=height)
     baseline = round(height // 2 + (glyph_h - descent) / 2)
     _draw_translucent_text(canvas, text, width // 2, baseline, TIMER_CENTER_SCALE, WHITE, opacity)
-
-
-def _compose_retry(screen: RetryScreen) -> np.ndarray:
-    canvas = new_canvas()
-    _header(
-        canvas,
-        copy.round_of.format(round_number=screen.round_number, total_rounds=screen.total_rounds),
-    )
-    _large_target_panel(canvas, screen.target)
-
-    draw_text(
-        canvas,
-        copy.found_players.format(found=screen.found, expected=screen.expected),
-        SIDE_CENTER,
-        300,
-        1.1,
-        ACCENT,
-        "center",
-    )
-    for line_number, line in enumerate(copy.missing_retry):
-        draw_text(canvas, line, SIDE_CENTER, 370 + line_number * 44, 0.9, WHITE, "center")
-    return canvas
 
 
 def _parked_target_rect() -> Rect:

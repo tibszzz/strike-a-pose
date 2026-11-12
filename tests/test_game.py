@@ -13,7 +13,6 @@ from main.games.strike.screens import (
     GameOver,
     LobbyScreen,
     ResultsScreen,
-    RetryScreen,
     RoundScored,
     ScoreRevealLocked,
     ScoreRevealTick,
@@ -400,27 +399,20 @@ def test_confirm_during_the_countdown_does_nothing():
 # --- who gets scored ---------------------------------------------------------
 
 
-def test_too_few_people_replays_the_round_with_the_same_pose():
+def test_missing_players_score_zero_and_continue():
     game, events = new_game()
-    first = start_game(game, players=3)
+    start_game(game, players=3)
 
-    retry = play_round(game, 0.0, lambda target: standing_people(2))
+    results = play_round(game, 0.0, lambda target: standing_people(2))
 
-    assert isinstance(retry, RetryScreen)
-    assert (retry.found, retry.expected, retry.round_number) == (2, 3, 1)
-    assert retry.target == first.target
-    assert of_type(events, RoundScored) == []
-    assert game.step(8.0) == retry  # waits for a key press
-
-    again = game.step(20.0, confirm=True)
-    assert isinstance(again, CountdownScreen)
-    assert (again.round_number, again.seconds_left) == (1, 5)
-    assert again.target == first.target
-
-    results = play_round(game, 20.0, everyone_perfect(3))
     assert isinstance(results, ResultsScreen)
     assert results.round_number == 1
-    assert [player.total for player in results.players] == [100, 100, 100]
+    assert [player.player for player in results.players] == [1, 2, 3]
+    assert results.players[2].round_score == 0
+    assert results.players[2].joints == {}
+    scored = of_type(events, RoundScored)
+    assert len(scored) == 1
+    assert scored[0].scores[2] == 0
 
 
 def test_bystanders_are_ignored_by_roster_seeds():

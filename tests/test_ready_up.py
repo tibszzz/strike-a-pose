@@ -132,6 +132,13 @@ def test_match_roster_by_seeds_none_when_short():
     assert match_roster_by_seeds([person(100)], [100.0, 400.0]) is None
 
 
+def test_match_roster_slots_partial_when_short():
+    from main.ready_up import match_roster_slots
+
+    slots = match_roster_slots([person(100, "a")], [100.0, 400.0])
+    assert [p.tag if p is not None else None for p in slots] == ["a", None]
+
+
 def test_hold_progress_fills_toward_ready_then_stops_counting():
     ready = ReadyUp(1000, cfg(min_players=1, max_players=2, hold_frames=4))
     p = person(200)

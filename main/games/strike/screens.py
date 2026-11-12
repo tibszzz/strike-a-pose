@@ -53,17 +53,6 @@ class CountdownScreen:
 
 
 @dataclass(frozen=True)
-class RetryScreen:
-    """The snapshot found too few people, so the round will be replayed."""
-
-    round_number: int
-    total_rounds: int
-    target: Pose
-    found: int
-    expected: int
-
-
-@dataclass(frozen=True)
 class PlayerResult:
     player: int
     joints: dict[str, Point]  # visible joints only, in snapshot pixels
@@ -98,7 +87,7 @@ class FinalScreen:
     total_rounds: int = 0
 
 
-Screen = Union[LobbyScreen, CountdownScreen, RetryScreen, ResultsScreen, FinalScreen]
+Screen = Union[LobbyScreen, CountdownScreen, ResultsScreen, FinalScreen]
 
 
 # --- events ------------------------------------------------------------------

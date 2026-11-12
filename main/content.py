@@ -181,7 +181,6 @@ class Strike:
     col_player = "PLAYER"
     col_round = "ROUND"
     col_total = "TOTAL"
-    missing_retry = ("Everyone back in frame,", "then press SPACE", "to try this pose again.")
     capture_close = "SPACE or Q: close"
     lobby_ready = "{count} {label} in frame  -  press SPACE to start"
     lobby_need = "Need {min_players} to {max_players} players in frame"
@@ -192,7 +191,6 @@ class Strike:
     )
     round_of = "Round {round_number} of {total_rounds}"
     round_results = "Round {round_number} of {total_rounds}  -  results"
-    found_players = "Found {found} of {expected} players"
     saved_pose = "Saved: {name}"
     edit_title = "Edit pose: {name}"
     player_label = "P{player}"
