@@ -8,10 +8,11 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class DodgeballConfig:
     min_players: int = 1
-    max_players: int = 3
+    max_players: int = 4
     fps: int = 30
     lives: int = 5  # chances per player; at 0 the player is out
     offscreen_seconds: float = 3.0  # out of frame this long during play = lose a life
+    debug: bool = False  # SPACE force-starts ready-up when enough are ready
 
     @property
     def offscreen_frames(self) -> int:

@@ -1,8 +1,10 @@
-"""Shared Thumb_Up hold-to-confirm tracker for splash, menu, and future screens.
+"""Shared hold-to-confirm tracker for splash, menu, and future screens.
 
 Call `update` each frame with the latest gesture snapshot. Returns True once
-when the hold duration elapses. A different hand's Thumb_Up is ignored until
-the confirming hand drops the gesture; releasing Thumb_Up resets progress.
+when the hold duration elapses. Defaults to Thumb_Up; pass `label` for other
+confirm gestures (e.g. Closed_Fist on the menu). A different hand showing the
+same label is ignored until the confirming hand drops it; releasing resets
+progress.
 """
 
 from __future__ import annotations
@@ -17,6 +19,7 @@ from .gestures import GestureSnapshot
 class ThumbHoldTracker:
     hold_s: float = 1.0
     min_score: float = 0.5
+    label: str = "Thumb_Up"
     match_min_px: float = 80.0
     match_frac: float = 0.15  # of min(frame w, h)
 
@@ -46,7 +49,8 @@ class ThumbHoldTracker:
 
     def hold_status(self) -> str | None:
         if self.active and not self.fired:
-            return f"HOLD THUMBS UP… {self.progress:.0%}"
+            pretty = self.label.replace("_", " ").upper()
+            return f"HOLD {pretty}… {self.progress:.0%}"
         return None
 
     def update(
@@ -59,7 +63,7 @@ class ThumbHoldTracker:
     ) -> bool:
         """Advance or reset the hold. Returns True once when the hold completes."""
         label = effective_label(snap, self.min_score)
-        if label != "Thumb_Up" or not armed:
+        if label != self.label or not armed:
             self.reset()
             return False
 

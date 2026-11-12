@@ -15,7 +15,15 @@ import numpy as np
 import pygame
 
 from main import audio, content, styles
-from main.pose import PoseFrame, PoseState, classify
+from main.pose import Person, PoseFrame, PoseState, classify
+from main.ready_up import (
+    ReadyUp,
+    ReadyUpConfig,
+    draw_player_label,
+    draw_ready_up,
+    head_anchor,
+    match_roster_by_seeds,
+)
 from main.settings import ASSETS, DuelConfig, GestureConfig, Messages, ViewConfig, from_env
 
 from .float_path import FloatPath, ease_out, fade
@@ -28,6 +36,11 @@ copy = content.Duel
 
 SPRITES = ASSETS / "sprites"
 SOUNDS = ASSETS / "sounds"
+
+
+def _still_paths() -> tuple:
+    root = ASSETS / "ready_up" / "duel"
+    return tuple(sorted(root.glob("pose_*.png")))
 
 
 @dataclass
@@ -82,7 +95,6 @@ class DuelGame:
         )
         self.recorder = ReplayRecorder(scale=self.view.replay_scale)
         self.playback: ReplayPlayback | None = None
-        self._replay_hit_played = False
 
         self._fonts: dict[tuple[int, bool], pygame.font.Font] = {}
         self.sz_main = theme.duel_main_px(self.h)
@@ -106,6 +118,41 @@ class DuelGame:
         }
         self.sounds = {name: audio.load_or(SOUNDS / f"{name}.wav", make) for name, make in synth.items()}
 
+        self.gesture_snapshot = None
+        self._roster_seed_x: list[float] = []
+        self._slot_people: tuple[Person | None, Person | None] = (None, None)
+        self._ready = self._make_ready()
+
+    def _make_ready(self) -> ReadyUp:
+        return ReadyUp(
+            self.w,
+            ReadyUpConfig(
+                min_players=2,
+                max_players=2,
+                title=content.ReadyUp.how_to_play,
+                how_to_lines=copy.ready_how_to,
+                pose_stills=_still_paths(),
+                hold_frames=max(1, 10),
+                fist_hold_frames=max(1, 15),
+                forget_frames=30,
+                debug=bool(self.duel.config.debug),
+            ),
+        )
+
+    @property
+    def gesture_hands(self) -> int:
+        return 4
+
+    @property
+    def wants_gestures(self) -> bool:
+        return self._in_ready_up()
+
+    def _in_ready_up(self) -> bool:
+        d = self.duel
+        if d.phase == Phase.WAIT_START:
+            return True
+        return d.phase == Phase.MATCH_OVER and d.can_restart(self.now)
+
     # -- Game protocol ----------------------------------------------------------------
 
     def reset(self) -> None:
@@ -115,14 +162,64 @@ class DuelGame:
             tracker.reset()
         self.recorder.discard()
         self.playback = None
-        self._replay_hit_played = False
+        self._roster_seed_x = []
+        self._slot_people = (None, None)
+        self._ready = self._make_ready()
+        self.gesture_snapshot = None
+
+    def handle_key(self, key: int) -> None:
+        if key == pygame.K_SPACE and self.duel.config.debug and self._in_ready_up():
+            started = self._ready.force_start()
+            if started is not None:
+                self._apply_started(started, self.now)
 
     def update(self, frame: PoseFrame) -> None:
-        self.step(frame.timestamp, tuple(classify(p, self.gestures) for p in frame.players))
+        self.now = frame.timestamp
+        if self._in_ready_up():
+            # Full-bleed ready-up: ignore white-page waiting UI
+            snap = self.gesture_snapshot
+            hands = snap.hands if snap is not None else ()
+            started = self._ready.update(frame.people, hands)
+            if started is not None:
+                self._apply_started(started, frame.timestamp)
+            return
+
+        slots = self._slots_from_frame(frame)
+        self._slot_people = slots
+        self.step(frame.timestamp, tuple(classify(p, self.gestures) for p in slots))
         if self.duel.phase == Phase.BANG and self.recorder.active:
             self.recorder.push(frame.image, frame.timestamp)
-        elif self.duel.phase == Phase.REPLAY:
-            self._tick_replay_audio()
+        if self.duel.phase == Phase.WAIT_START:
+            self._ready = self._make_ready()
+
+    def _apply_started(self, started, now: float) -> None:
+        roster = [p for p in started.roster if isinstance(p, Person)]
+        self._roster_seed_x = [p.center_x for p in roster]
+        while len(self._roster_seed_x) < 2 and self.duel.config.debug:
+            self._roster_seed_x.append(self.w * 0.75)
+        for name, player in self.duel.request_start(now):
+            if name == "ready":
+                self.floaters.clear()
+            audio.play(self.sounds.get(name))
+
+    def _slots_from_frame(self, frame: PoseFrame) -> tuple[Person | None, Person | None]:
+        if not self._roster_seed_x:
+            # Fallback before first ready-up freeze (tests that call step() directly)
+            return frame.players
+        matched = match_roster_by_seeds(frame.people, self._roster_seed_x)
+        if matched is None:
+            # Keep last known or partial fill by nearest seed
+            slots: list[Person | None] = [None, None]
+            people = list(frame.people)
+            for i, seed in enumerate(self._roster_seed_x[:2]):
+                if not people:
+                    break
+                best = min(range(len(people)), key=lambda j: abs(people[j].center_x - seed))
+                slots[i] = people.pop(best)
+            return (slots[0], slots[1])
+        if len(matched) == 1:
+            return (matched[0], None)
+        return (matched[0], matched[1])
 
     def step(self, now: float, states: tuple[PoseState, PoseState]) -> None:
         self.now = now
@@ -133,6 +230,7 @@ class DuelGame:
                 self.floaters.clear()
                 if name == "abort":
                     self._clear_replay()
+                    self._ready = self._make_ready()
             elif name == "bang":
                 self.recorder.start(now)
             elif name == "early":
@@ -148,11 +246,14 @@ class DuelGame:
             audio.play(self.sounds.get(name))
         if was_replay and self.duel.phase != Phase.REPLAY:
             self._clear_replay()  # drop bang→draw frames once the clip has played
-        elif self.duel.phase == Phase.REPLAY:
-            self._tick_replay_audio()
 
     def debug_lines(self) -> list[str]:
         d = self.duel
+        if self._in_ready_up():
+            return [
+                f"Ready-up: {self._ready.ready_count} ready / "
+                f"{len(self._ready.eligible)} eligible"
+            ]
         return [
             f"phase {d.phase.value}  P1 {self.states[0].value}  P2 {self.states[1].value}",
             f"early {d.early}  draw_t {[None if t is None else round(t, 3) for t in d.draw_time]}",
@@ -160,6 +261,19 @@ class DuelGame:
 
     def draw(self, canvas: pygame.Surface, frame: PoseFrame) -> None:
         d = self.duel
+        if self._in_ready_up():
+            # Full-bleed camera under ready-up chrome (duel play stays on white page).
+            rgb = frame.image[:, :, ::-1]
+            surf = pygame.image.frombuffer(
+                np.ascontiguousarray(rgb).tobytes(),
+                (frame.image.shape[1], frame.image.shape[0]),
+                "RGB",
+            )
+            if surf.get_size() != canvas.get_size():
+                surf = pygame.transform.smoothscale(surf, canvas.get_size())
+            canvas.blit(surf, (0, 0))
+            draw_ready_up(canvas, self._ready, theme=theme)
+            return
         if d.phase == Phase.REPLAY:
             self._draw_replay(canvas)
             return
@@ -172,15 +286,27 @@ class DuelGame:
             self._draw_result(canvas)
         else:
             self._draw_header(canvas)
-            if d.phase == Phase.WAIT_START:
-                self._draw_waiting(canvas)
-            elif d.phase in (Phase.READY, Phase.STEADY, Phase.BANG):
+            if d.phase in (Phase.READY, Phase.STEADY, Phase.BANG):
                 word = {
                     Phase.READY: copy.phase["ready"],
                     Phase.STEADY: copy.phase["steady"],
                     Phase.BANG: copy.phase["bang"],
                 }[d.phase]
                 self._text(canvas, word, self.sz_main, (self.w / 2, self.h / 2), bold=True, shadow=True)
+            for i, person in enumerate(self._slot_people):
+                if person is None:
+                    continue
+                nose = None
+                if float(person.conf[0]) >= 0.3:
+                    nose = (float(person.xy[0][0]), float(person.xy[0][1]))
+                anchor = head_anchor(person.box, nose)
+                draw_player_label(
+                    canvas,
+                    f"P{i + 1}",
+                    anchor,
+                    theme.player[i % len(theme.player)],
+                    face=theme.font,
+                )
         self._draw_floaters(canvas)
 
     # -- screens ----------------------------------------------------------------------
@@ -188,28 +314,16 @@ class DuelGame:
     def _clear_replay(self) -> None:
         self.recorder.discard()
         self.playback = None
-        self._replay_hit_played = False
 
     def _begin_playback(self) -> None:
         times = [t for t in self.duel.draw_time if t is not None]
         end = min(times) if times else self.now
         clip = self.recorder.clip(end)
-        self._replay_hit_played = False
         if clip is None:
             self.playback = None
             return
         cfg = self.duel.config
         self.playback = ReplayPlayback(clip, speed=cfg.replay_speed, freeze=cfg.replay_freeze)
-        audio.play(self.sounds.get("bang"))
-
-    def _tick_replay_audio(self) -> None:
-        if self.playback is None or self._replay_hit_played:
-            return
-        elapsed = self.now - self.duel.phase_start
-        _, _, at_impact = self.playback.sample(elapsed)
-        if at_impact:
-            self._replay_hit_played = True
-            audio.play(self.sounds.get("hit"))
 
     def _draw_replay(self, canvas: pygame.Surface) -> None:
         elapsed = self.now - self.duel.phase_start

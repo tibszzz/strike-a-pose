@@ -54,7 +54,7 @@ def hand_ring_radius(box: tuple[float, float, float, float]) -> float:
 
 def show_hold_ring(progress: float, label: str | None) -> bool:
     """True when the palm hold ring should be visible."""
-    return progress > 0 or label == "Thumb_Up"
+    return progress > 0 or label in {"Thumb_Up", "Closed_Fist"}
 
 
 def primary_landmarks(snap: object | None) -> tuple[tuple[float, float], ...]:
