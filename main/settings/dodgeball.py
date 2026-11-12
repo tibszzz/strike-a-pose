@@ -12,7 +12,7 @@ class DodgeballConfig:
     fps: int = 30
     lives: int = 3  # chances per player; at 0 the player is out
     offscreen_seconds: float = 3.0  # out of frame this long during play = lose a life
-    debug: bool = False  # SPACE force-starts ready-up when enough are ready
+    debug: bool = False  # SPACE force-start; ReadyUp.required_min floors to 1
 
     @property
     def offscreen_frames(self) -> int:

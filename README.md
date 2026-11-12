@@ -79,11 +79,12 @@ Optional: jump straight into a game (`Esc` still returns to the menu):
 python -m main duel
 python -m main dodgeball
 python -m main strike
-python -m main --debug          # keyboard menu nav + strike/duel solo
+python -m main --debug          # keyboard menu nav + solo play (all games)
 python -m main duel --debug
 python -m main strike --debug
+python -m main dodgeball --debug
 # With --debug, after gameplay begins: R skips to that game's final RESULTS
-# (in ready-up, R still resets).
+# (in ready-up, R still resets). Solo ready-up / Space force-start work for all titles.
 ```
 
 ### Menu / how-to-play / results controls

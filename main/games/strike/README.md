@@ -6,7 +6,7 @@ Party game for 2 to 4 players on one webcam. Each round shows a stick-figure pos
 python -m main strike
 ```
 
-For solo testing while developing, pass `--debug` so the lobby accepts one person:
+For solo testing while developing, pass `--debug` so ready-up / lobby accept one person:
 
 ```sh
 python -m main strike --debug

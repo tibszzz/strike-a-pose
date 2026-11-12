@@ -34,7 +34,7 @@ def test_strike_debug_skip_to_final_after_start():
     poses = [Pose(name=f"p{i}", joints={"nose": (0.5, 0.2)}) for i in range(5)]
     game = StrikeGame(
         (640, 480),
-        config=StrikeConfig(debug=True, min_players=1, max_players=2, rounds=2),
+        config=StrikeConfig(debug=True, max_players=2, rounds=2),
         poses=poses,
     )
     assert game.debug_skip_to_results() is False

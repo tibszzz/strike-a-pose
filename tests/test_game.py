@@ -150,7 +150,9 @@ def test_confirm_with_2_to_4_people_starts_round_1(count):
 
 
 def test_debug_lobby_allows_a_solo_player():
-    game, _ = new_game(min_players=1, debug=True)
+    # Default min_players is 2; debug alone must still accept one body.
+    game, _ = new_game(debug=True)
+    assert game._config.min_players == 2
 
     lobby = game.step(0.0, people=standing_people(1))
     assert lobby.can_start

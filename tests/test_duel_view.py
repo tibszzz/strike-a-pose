@@ -200,3 +200,26 @@ def test_debug_skip_to_results_after_gameplay():
     assert game.duel.match_winner is not None
     assert game.duel.can_restart(game.now)
     assert game.win_msg
+
+
+def test_debug_ready_up_allows_solo_force_start():
+    """`--debug` duel ready-up starts with one thumbs-up (ghost fills P2)."""
+    from main.ready_up.logic import THUMB_UP
+
+    pygame.init()
+    game = DuelGame(SIZE, config=DuelConfig(debug=True, lives=3))
+    assert game._ready.config.min_players == 2
+    assert game._ready.config.required_min == 1
+    p1 = _person((40, 40, 180, 300))
+
+    class _Hand:
+        label = THUMB_UP
+        score = 0.9
+        center = (110.0, 120.0)
+
+    for _ in range(12):
+        game._ready.update([p1], [_Hand()])
+    assert game._ready.can_start
+    started = game._ready.force_start()
+    assert started is not None
+    assert len(started.roster) == 1

@@ -195,7 +195,9 @@ class Game:
         if people is not None:
             self._lobby_people = left_to_right(people)
         count = len(self._lobby_people)
-        can_start = self._config.min_players <= count <= self._config.max_players
+        # `--debug`: solo lobby even when configured min_players > 1.
+        min_players = 1 if self._config.debug else self._config.min_players
+        can_start = min_players <= count <= self._config.max_players
 
         if confirm and can_start:
             self._player_count = count
@@ -215,7 +217,7 @@ class Game:
                 for index, person in enumerate(self._lobby_people)
             ),
             can_start=can_start,
-            min_players=self._config.min_players,
+            min_players=min_players,
             max_players=self._config.max_players,
         )
 

@@ -6,7 +6,7 @@ Two-player quick-draw. Stand side by side facing the camera. Left half of the sc
 python -m main duel
 ```
 
-For solo testing while developing, pass `--debug` so the empty half is an idle ghost:
+For solo testing while developing, pass `--debug` so ready-up accepts one player and the empty half is an idle ghost:
 
 ```sh
 python -m main duel --debug
