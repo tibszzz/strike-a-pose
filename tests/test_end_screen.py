@@ -12,12 +12,11 @@ from main.nav import GestureSnapshot, MenuCommand, StartGame
 from main.pose import PoseFrame
 from main.styles import SHELL
 
+from cursor_util import landmarks_on
+
 
 def _landmarks_at(x: float, y: float, count: int = 21) -> tuple[tuple[float, float], ...]:
-    pts = [(0.0, 0.0)] * count
-    pts[0] = (x, y)
-    pts[8] = (x, y)  # INDEX_FINGERTIP
-    return tuple(pts)
+    return landmarks_on(x, y, count=count)
 
 
 def test_tip_hard_locks_tile():
