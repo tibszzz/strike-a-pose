@@ -1,10 +1,12 @@
 """Pure duel rules. No camera, no pygame: feed it (timestamp, pose states) per frame.
 
 Round flow:
-  WAIT_START -> READY -> STEADY -> BANG -> (hit) REPLAY -> ROUND_OVER -> WAIT_START ...
+  WAIT_START -> (shell ready-up calls request_start) -> READY -> STEADY -> BANG
+  -> (hit) REPLAY -> ROUND_OVER -> WAIT_START ...
   Non-hits (tie / timeout / void) skip REPLAY and go straight to ROUND_OVER.
   The hit that takes a player's last life goes REPLAY -> MATCH_OVER, which first shows
-  that round's result for `round_result_time`, then the winner.
+  that round's result for `round_result_time`, then the winner. Rematch goes through
+  ready-up again via request_start after can_restart.
 
 A draw only counts once it has held for `draw_confirm_frames` consecutive frames; its
 time is the capture timestamp of the first of those frames. A draw that started at or
@@ -104,6 +106,21 @@ class Duel:
             return 0.0
         return min(1.0, (now - self._idle_since) / self.config.start_hold)
 
+    def request_start(self, now: float) -> list[Event]:
+        """Begin a round after the shell ready-up confirms two players."""
+        events: list[Event] = []
+        if self.phase == Phase.MATCH_OVER:
+            if not self.can_restart(now):
+                return events
+            self.scores = [0, 0]
+            self.match_winner = None
+            self.last_result = None
+            self._match_over_pending = False
+        elif self.phase != Phase.WAIT_START:
+            return events
+        self._start_round(now, events)
+        return events
+
     # -- per-frame update -------------------------------------------------------------
 
     def update(self, now: float, states: tuple[PoseState, PoseState]) -> list[Event]:
@@ -114,8 +131,7 @@ class Duel:
         cfg = self.config
 
         if self.phase == Phase.WAIT_START:
-            if self._both_idle_held(now, states):
-                self._start_round(now, events)
+            pass  # shell ready-up calls request_start
 
         elif self.phase in (Phase.READY, Phase.STEADY):
             if not present:
@@ -153,12 +169,6 @@ class Duel:
             if self._match_over_pending and not self.showing_final_round(now):
                 self._match_over_pending = False
                 events.append(("match_over", self.match_winner))
-            if self.can_restart(now) and self._both_idle_held(now, states):
-                self.scores = [0, 0]
-                self.match_winner = None
-                self.last_result = None
-                self._match_over_pending = False
-                self._start_round(now, events)
 
         return events
 

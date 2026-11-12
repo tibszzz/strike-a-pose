@@ -29,18 +29,28 @@ def _results(*, idle: bool) -> ResultsScreen:
     )
 
 
-def test_strike_tracks_one_gesture_hand():
-    assert StrikeGame.gesture_hands == NAV_GESTURE_HANDS
+def test_strike_tracks_one_gesture_hand_outside_ready_up():
+    game = StrikeGame((640, 480))
+    game._in_ready_up = False
+    assert game.gesture_hands == NAV_GESTURE_HANDS
 
 
 def test_wants_gestures_only_when_results_are_idle():
     game = StrikeGame((640, 480))
+    game._in_ready_up = False
     game._screen = _results(idle=False)
     assert game.wants_gestures is False
     game._screen = _results(idle=True)
     assert game.wants_gestures is True
     game._screen = object()
     assert game.wants_gestures is False
+
+
+def test_wants_gestures_during_ready_up():
+    game = StrikeGame((640, 480))
+    assert game._in_ready_up is True
+    assert game.wants_gestures is True
+    assert game.gesture_hands == game._config.max_players * 2
 
 
 def test_overlay_draws_only_the_primary_hand(monkeypatch):

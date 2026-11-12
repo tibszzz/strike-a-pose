@@ -161,3 +161,4 @@ Layout:
 - `assets/models/`: pose model weights
 - `assets/poses/`: strike pose library
 - `assets/fonts/`: Press Start 2P (SIL OFL; see `PressStart2P-OFL.txt`)
+- `assets/ready_up/`: placeholder pose stills for the shared ready-up rules card (swap art in place)

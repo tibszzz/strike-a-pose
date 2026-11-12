@@ -295,6 +295,7 @@ DODGEBALL = BRAND.with_overrides(
         (80, 170, 255),
         (255, 80, 80),
         (100, 255, 100),
+        (255, 215, 70),
     ),
     ball_fast=(255, 80, 80),
     ball_medium=(255, 165, 0),

@@ -419,15 +419,16 @@ def test_too_few_people_replays_the_round_with_the_same_pose():
     assert [player.total for player in results.players] == [100, 100, 100]
 
 
-def test_bystanders_are_ignored_by_keeping_the_tallest():
+def test_bystanders_are_ignored_by_roster_seeds():
+    """Snapshot keeps the people nearest the ready-up L→R seeds, not the tallest."""
     game, _ = new_game()
-    start_game(game, players=2)
+    start_game(game, players=2)  # seeds at SPOTS[0]=200 and SPOTS[1]=500
 
     def strike(target):
         return [
-            person_striking(target.joints, center_x=900.0, height=420.0),
-            person_striking(target.joints, center_x=500.0, height=150.0),  # bystander
-            person_striking(target.joints, center_x=100.0, height=400.0),
+            person_striking(target.joints, center_x=900.0, height=420.0),  # far bystander
+            person_striking(target.joints, center_x=510.0, height=150.0),
+            person_striking(target.joints, center_x=190.0, height=400.0),
         ]
 
     results = play_round(game, 0.0, strike)
@@ -435,7 +436,7 @@ def test_bystanders_are_ignored_by_keeping_the_tallest():
     assert isinstance(results, ResultsScreen)
     assert [player.player for player in results.players] == [1, 2]
     centers = [(player.box[0] + player.box[2]) / 2 for player in results.players]
-    assert centers == [100.0, 900.0]
+    assert centers == [190.0, 510.0]
 
 
 # --- scoring inside the game -------------------------------------------------

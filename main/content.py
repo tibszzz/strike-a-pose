@@ -3,6 +3,14 @@
 from __future__ import annotations
 
 
+class ReadyUp:
+    how_to_play = "HOW TO PLAY"
+    step_in = "STEP IN FRONT OF THE CAMERA"
+    need_ready = "{ready} READY · NEED {min_players}–{max_players}"
+    fist_to_start = "{ready} READY · HOLD FIST TO START"
+    thumbs_hint = "THUMBS UP TO READY · THUMBS DOWN TO CANCEL"
+
+
 class Shell:
     brand = "moovit"
     menu_title = "moovit"
@@ -21,6 +29,11 @@ class Duel:
     player_names = ("Player 1", "Player 2")
     waiting_for = "WAITING FOR"
     preview_waiting = "WAITING"
+    ready_how_to = (
+        "Two players: thumbs up to ready, fist to start",
+        "Wait for READY · STEADY · BANG — then draw sideways",
+        "Don't draw early or you're out for that round",
+    )
     replay_label = "REPLAY"
     get_ready = "GET READY, PARTNERS"
     lower_gun = "lower your gun"
@@ -87,6 +100,11 @@ class Strike:
     capture_close = "SPACE or Q: close"
     lobby_ready = "{count} {label} in frame  -  press SPACE to start"
     lobby_need = "Need {min_players} to {max_players} players in frame"
+    ready_how_to = (
+        "2–4 players: thumbs up to ready, fist to start",
+        "Copy the target pose before the countdown ends",
+        "Closest match scores the round — best total wins",
+    )
     round_of = "Round {round_number} of {total_rounds}"
     round_results = "Round {round_number} of {total_rounds}  -  results"
     found_players = "Found {found} of {expected} players"
@@ -101,19 +119,15 @@ class Dodgeball:
     window_title = "Dodgeball"
     banner = "DODGEBALL"
     how_to_play = "HOW TO PLAY"
-    whos_playing = "WHO'S PLAYING?"
-    to_play = "to play"
-    to_sit_out = "to sit out"
-    lobby_prompt = "Press SPACE to choose who's playing"
-    lobby_skip = "or press 1 / 2 / 3 to skip and start with that many"
-    confirm_hint = "R clear  |  Backspace rules  |  1 / 2 / 3 skip gestures"
-    step_in = "Step in front of the camera"
-    everyone_thumbs = "Everyone playing: give a thumbs up!"
-    max_players = "Max {max_players} players - someone give a thumbs down first"
     get_ready = "Get ready!"
     restarting = "Game restarting..."
     out_label = "OUT"
-    unknown_label = "?"
+    ready_how_to = (
+        "Thumbs up to ready · thumbs down to cancel",
+        "Hold a closed fist when enough players are ready to start",
+        "Dodge the ball on the live feed — each hit costs a life",
+        "Last player standing wins (solo: survive as long as you can)",
+    )
     rules = (
         "Stand in front of the camera",
         "Dodge the ball bouncing around the live feed",

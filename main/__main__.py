@@ -18,7 +18,7 @@ from dataclasses import replace
 from typing import Sequence
 
 from .config import Config, env, from_env
-from .settings import DuelConfig
+from .settings import DodgeballConfig, DuelConfig
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -71,12 +71,17 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     strike_config = Config(min_players=1, debug=True) if args.debug else Config()
     duel_config = from_env(DuelConfig)
+    dodgeball_config = DodgeballConfig(debug=True) if args.debug else DodgeballConfig()
     if args.debug:
         duel_config = replace(duel_config, debug=True)
     from .app import run
     from .games.registry import build_registry, make_menu, make_splash
 
-    registry = build_registry(strike_config=strike_config, duel_config=duel_config)
+    registry = build_registry(
+        strike_config=strike_config,
+        duel_config=duel_config,
+        dodgeball_config=dodgeball_config,
+    )
     run(
         registry=registry,
         make_menu=make_menu(registry),

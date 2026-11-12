@@ -379,19 +379,12 @@ def _large_target_panel(canvas: np.ndarray, target: Pose) -> None:
 
 
 def _compose_lobby(screen: LobbyScreen, frame: np.ndarray) -> np.ndarray:
+    """Legacy lobby compose (shell uses shared ReadyUp). Labels only — no boxes."""
     canvas = new_canvas()
     transform = draw_frame(canvas, frame, FULL_CANVAS)
 
     for marker in screen.markers:
         color = player_color(marker.player)
-        cv2.rectangle(
-            canvas,
-            transform.apply((marker.box[0], marker.box[1])),
-            transform.apply((marker.box[2], marker.box[3])),
-            color,
-            2,
-            cv2.LINE_AA,
-        )
         draw_box_label(canvas, player_name(marker.player), marker.box, transform, color)
 
     draw_text(canvas, copy.banner, CANVAS_WIDTH // 2, 58, 1.6, WHITE, "center", outline=True)
