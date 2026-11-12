@@ -96,14 +96,14 @@ def test_splash_draw_uses_primary_hand_hold(monkeypatch):
     assert calls[0][1] == 0.4
 
 
-def test_menu_draw_uses_primary_hand_hold_not_tile_fill(monkeypatch):
+def test_menu_draw_passes_hold_progress_to_paper_cursor(monkeypatch):
     pygame.init()
     calls: list[tuple] = []
 
-    def fake_draw(surf, snap, progress, *, color):
-        calls.append((snap, progress, color))
+    def fake_draw(surf, frame, snap, progress):
+        calls.append((snap, progress))
 
-    monkeypatch.setattr("main.games.menu.draw_primary_hand_hold", fake_draw)
+    monkeypatch.setattr("main.ui.widgets.draw_cursor", fake_draw)
     menu = MenuGame((640, 480), _entries())
     menu._hard_lock = 0
     primary = tuple((100.0 + i, 200.0) for i in range(21))

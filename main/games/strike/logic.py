@@ -136,6 +136,7 @@ class Game:
         self._targets: list[Pose] = []
         self._round_index = 0
         self._totals: list[int] = []
+        self._round_scores: list[list[int]] = []
         self._deadline = 0.0
         self._last_tick: int | None = None
         self._found = 0
@@ -190,6 +191,7 @@ class Game:
                 self._config.max_players if self._config.debug else count
             )
             self._totals = [0] * seats
+            self._round_scores = [[] for _ in range(seats)]
             self._targets = self._rng.sample(self._poses, self._config.rounds)
             self._round_index = 0
             return self._start_countdown(now)
@@ -275,6 +277,10 @@ class Game:
                 totals=self._totals,
             )
 
+        for result in scored:
+            if 0 < result.player <= len(self._round_scores):
+                self._round_scores[result.player - 1].append(result.round_score)
+
         self._phase = _Phase.RESULTS
         self._results_at = now
         self._results = ResultsScreen(
@@ -324,7 +330,7 @@ class Game:
             return self._start_countdown(now)
         self._phase = _Phase.FINAL
         self._emit(GameOver(standings=rank(self._totals)))
-        return FinalScreen(standings=rank(self._totals))
+        return self._final_screen()
 
     def _step_final(self, now: float, confirm: bool) -> Screen:
         if confirm:
@@ -332,7 +338,14 @@ class Game:
             self._lobby_people = []
             self._roster_seed_x = []
             return self._step_lobby(now, False, None)
-        return FinalScreen(standings=rank(self._totals))
+        return self._final_screen()
+
+    def _final_screen(self) -> FinalScreen:
+        return FinalScreen(
+            standings=rank(self._totals),
+            round_scores=tuple(tuple(scores) for scores in self._round_scores),
+            total_rounds=self._config.rounds,
+        )
 
     # --- helpers -------------------------------------------------------------
 

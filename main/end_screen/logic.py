@@ -1,7 +1,7 @@
-"""Two-tile Replay / Menu chooser: tip hard-lock + Closed_Fist confirm.
+"""Two-button Play again / Menu chooser: tip hard-lock + Closed_Fist confirm.
 
-Mirrors MenuGame interaction: index fingertip over a tile hard-locks it
-(follows while you move); Closed_Fist held confirms. While a fist hold is
+Mirrors MenuGame interaction: hovering a button (index fingertip) selects it
+and the selection sticks; Closed_Fist held anywhere presses the selection. While a fist hold is
 in progress, selection does not switch.
 """
 
@@ -13,6 +13,7 @@ from enum import Enum, auto
 import pygame
 
 from main.nav import GestureSnapshot, MenuCommand, ThumbHoldTracker, load_gesture_nav_config
+from main.ui.paper import Frame
 
 # MediaPipe hand landmark index for index fingertip.
 INDEX_FINGERTIP = 8
@@ -70,27 +71,9 @@ class EndScreen:
         self._thumb.reset()
 
     def tile_rects(self) -> list[pygame.Rect]:
-        n = len(self.OPTIONS)
-        margin_x = self.w * 0.12
-        gap = self.w * 0.05
-        available = self.w - 2 * margin_x - (n - 1) * gap
-        # Center band below a winner headline / above the hint.
-        band_top = int(self.h * 0.42)
-        band_bottom = int(self.h * 0.82)
-        band_h = max(1, band_bottom - band_top)
-        side = min(available / n, band_h)
-        total_w = n * side + (n - 1) * gap
-        start_x = (self.w - total_w) / 2
-        top = band_top + (band_h - side) / 2
-        return [
-            pygame.Rect(
-                int(start_x + i * (side + gap)),
-                int(top),
-                int(side),
-                int(side),
-            )
-            for i in range(n)
-        ]
+        """Play again / Menu note buttons, top-right beside the title."""
+        f = Frame(self.w, self.h)
+        return [f.rect(964, 84, 1232, 188), f.rect(1254, 90, 1428, 184)]
 
     def update(
         self,

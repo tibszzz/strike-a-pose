@@ -5,7 +5,7 @@
   python -m main [--debug]
   python -m main strike [--debug]
 
-Bare launch opens the splash, then the in-window menu (pose tracker stays warm
+Bare launch opens the in-window menu (pose tracker stays warm
 across switches). Defaults for the shell come from `.env` (CAMERA, CAM_WIDTH,
 CAM_HEIGHT, IMGSZ, DEVICE, FULLSCREEN); flags override them.
 """
@@ -38,7 +38,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "game",
         nargs="?",
         choices=("duel", "dodgeball", "strike"),
-        help="optional game to start; omit for the splash then menu",
+        help="optional game to start; omit for the menu",
     )
     parser.add_argument("--camera", type=int, default=camera, help=f"camera index (default {camera})")
     parser.add_argument(
@@ -75,7 +75,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.debug:
         duel_config = replace(duel_config, debug=True)
     from .app import run
-    from .games.registry import build_registry, make_menu, make_splash
+    from .games.registry import build_registry, make_how_to, make_menu
 
     registry = build_registry(
         strike_config=strike_config,
@@ -85,7 +85,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     run(
         registry=registry,
         make_menu=make_menu(registry),
-        make_splash=make_splash(),
+        make_how_to=make_how_to(registry),
         initial_game=args.game,
         camera_index=args.camera,
         camera_width=args.width,

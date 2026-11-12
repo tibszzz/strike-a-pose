@@ -8,7 +8,15 @@ import cv2
 import pygame
 
 from main import content, styles
-from main.end_screen import EndChoice, EndScreen, draw_end_screen
+from main.end_screen import (
+    EndChoice,
+    EndScreen,
+    TableRow,
+    draw_end_screen,
+    draw_headline,
+    draw_points_table,
+    winners_line,
+)
 from main.nav import GestureSnapshot, MenuCommand, StartGame, ThumbHoldTracker, load_gesture_nav_config
 from main.nav.hand_geometry import NAV_GESTURE_HANDS
 from main.pose import PoseFrame
@@ -197,7 +205,8 @@ class StrikeGame:
 
     def render_camera(self, image):
         source = self._image if self._image is not None else image
-        if self._in_ready_up:
+        if self._in_ready_up or self._in_end_screen():
+            # Ready-up draws over the live feed; the results page paints its own backdrop.
             composed = source
         else:
             composed = compose(self._screen, source)
@@ -223,10 +232,32 @@ class StrikeGame:
             draw_end_screen(
                 canvas,
                 self._end,
-                theme=styles.SHELL,
                 snap=self.gesture_snapshot,
-                timestamp=self._frame_ts,
+                title=content.Results.strike_title,
+                body=self._draw_final_body,
             )
+
+    def _draw_final_body(self, canvas: pygame.Surface, rect: pygame.Rect, frame) -> None:
+        """Winner headline over a points table: place, player, every round, total."""
+        screen = self._screen
+        if not isinstance(screen, FinalScreen):
+            return
+        winners = [s.player for s in screen.standings if s.place == 1]
+        bottom = draw_headline(canvas, frame, rect, winners_line(winners), size=58)
+        rounds = screen.total_rounds or self._config.rounds
+        rows = [
+            TableRow(
+                place=s.place,
+                player=s.player,
+                scores=screen.round_scores[s.player - 1]
+                if 0 < s.player <= len(screen.round_scores)
+                else (),
+                total=s.total,
+            )
+            for s in screen.standings
+        ]
+        table = pygame.Rect(rect.x, bottom + frame.px(20), rect.width, rect.bottom - bottom - frame.px(20))
+        draw_points_table(canvas, frame, table, rows, rounds)
 
     def debug_lines(self) -> list[str]:
         if self._in_ready_up:

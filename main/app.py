@@ -14,6 +14,8 @@ Background rules:
 Keys: D overlay, R reset, F toggle fullscreen, Q quit app.
 Starts fullscreen by default; pass fullscreen=False / --windowed for a window.
 Esc leaves a playable game for the menu; on the splash or menu Esc quits.
+Picking a game on the menu opens its how-to-play page (`make_how_to`) first;
+that page emits StartGame(game_id) to enter the game's ready-up.
 With `--debug`, arrow keys / Enter also feed MenuCommand (dev keyboard nav).
 When the game sets wants_gestures, MediaPipe runs and attaches a snapshot.
 `wants_gestures` is re-checked every frame; `gesture_hands` (default 2) sets
@@ -111,6 +113,11 @@ def _esc_quits(game: Game) -> bool:
     return _is_menu(game) or _is_splash(game)
 
 
+def _owns_gestures(game: Game) -> bool:
+    """Pages that read `gesture_snapshot` themselves (no rising-edge commands)."""
+    return _is_menu(game) or _is_splash(game) or bool(getattr(game, "owns_gestures", False))
+
+
 def _wants_gestures(game: Game) -> bool:
     return bool(getattr(game, "wants_gestures", False))
 
@@ -143,6 +150,7 @@ def run(
     registry: Mapping[str, GameEntry],
     make_menu: Callable[[tuple[int, int]], Game],
     make_splash: Callable[[tuple[int, int]], Game] | None = None,
+    make_how_to: Callable[[tuple[int, int], str], Game | None] | None = None,
     initial_game: str | None = None,
     camera_index: int = 0,
     imgsz: int = 640,
@@ -257,11 +265,7 @@ def run(
                     game.gesture_snapshot = snap
                 # Splash/menu own gesture actions from the snapshot; other
                 # gesture games still use the rising-edge label mapper.
-                if (
-                    not _is_menu(game)
-                    and not _is_splash(game)
-                    and hasattr(game, "handle_command")
-                ):
+                if not _owns_gestures(game) and hasattr(game, "handle_command"):
                     command = mapper.feed(snap, _timestamp_ms(frame))
                     if command is not None:
                         game.handle_command(command)
@@ -271,7 +275,13 @@ def run(
             if isinstance(nav, QuitApp):
                 running = False
             elif isinstance(nav, StartGame):
-                game = start_game(nav.game_id)
+                # Menu picks go through the game's how-to-play page first.
+                how_to = (
+                    make_how_to(size, nav.game_id)
+                    if make_how_to is not None and nav.game_id is not None and _is_menu(game)
+                    else None
+                )
+                game = how_to if how_to is not None else start_game(nav.game_id)
                 pygame.display.set_caption(game.title)
                 _sync_gestures(gestures, mapper, game)
                 game.update(frame)

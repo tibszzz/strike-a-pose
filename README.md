@@ -70,9 +70,8 @@ Launch the shared window (camera + pose stay warm while you switch titles):
 python -m main
 ```
 
-Opens the shared window on a splash screen. Hold thumbs up (or Enter with
-`--debug`) advances to the game menu. Camera and pose stay warm while you
-switch titles.
+Opens the shared window straight on the game menu. Camera and pose stay warm
+while you switch titles.
 
 Optional: jump straight into a game (`Esc` still returns to the menu):
 
@@ -85,22 +84,43 @@ python -m main duel --debug
 python -m main strike --debug
 ```
 
-### Splash / menu controls
+### Menu / how-to-play / results controls
 
-| Gesture | Splash | Menu |
-|---|---|---|
-| Thumbs up | Hold ~0.5s to open the menu | — |
-| Closed fist | — | Hold ~0.5s to confirm the selected game |
-| Tip over tile | — | Selects that game (selection follows the fingertip) |
+| Gesture | Menu | How to play | Results |
+|---|---|---|---|
+| Open palm over a note | Selects it | Moving the cursor onto **Let's go!** / **Back** selects it | Selects Play again / Menu |
+| Closed fist (hold ~0.5s), anywhere | Presses the selected note | Presses the selected button | Presses the selected note |
 
-Hold Thumbs_Up for 0.5s on the splash to open the menu. Menu shows large square
-tiles: move your index fingertip over a tile to select it (selection follows
-as you move), then hold Closed_Fist for 0.5s to start. With `--debug`, arrow
-keys (including Left/Right) move the menu selection and Enter confirms instantly
-(on splash, Enter / Up also advances). In a game, `Esc` returns to the menu;
-on splash or menu, `Esc` quits. `Q` always quits.
+Hovering selects, and the selection stays after your hand moves away; the fist
+then presses it from wherever your hand is (a bar fills on the selected note).
+Nothing is selected when a page opens, so a fist does nothing until you hover.
 
-Gesture recognition uses MediaPipe (`assets/models/gesture_recognizer.task`). It runs only while the splash/menu (or a game with `wants_gestures`) is active. When YOLO sees wrists raised above the elbow, the shell crops and upscales those regions before MediaPipe so hands stay recognizable farther from the camera. If people are visible but no wrists are above the elbow, hand detection is skipped entirely (no full-frame fallback). Env tunables: `MIN_SCORE` (default 0.5), `REFRACTORY_MS` (default 350), `GESTURE_MODEL_PATH`, `ROI` (1/0), `ROI_SIZE` (320), `ROI_SCALE` (2.5), `ROI_MIN_PX` (80), `ROI_MAX` (2), `MIN_WRIST_CONF` (0.35), `RAISE_GATE` (1/0), `RAISE_LIFT_FRAC` (0.08), `RAISE_MATCH_FRAC` (0.35), `THUMB_HOLD_S` (0.5).
+On a game's ready-up screen, each player gets a "P1"/"P2"… triangle above
+their head: grey while waiting, filled with their colour after a thumbs up
+(thumbs down sits out). Any ready player holds a fist to start; the hint strip
+bottom-left shows how many more players are needed.
+
+Flow: menu → the game's how-to-play page → the game's ready-up → play →
+results page (Play again returns to ready-up, Menu to the menu).
+
+The menu shows the live camera with a row of torn-paper notes across the top
+(High Noon, Strike a pose, Dodgeball, Quit), faint gesture hints bottom-left
+and the title bottom-right. On how-to-play the cursor starts at the centre of
+the screen and follows your hand's movement like a mouse (lower your hand to
+"lift" it), so the fist that picked the game can't press anything; the hand
+must also open once before a new fist counts. The menu does the same
+open-first check when you come back from results. With `--debug`, arrow keys
+move the selection and Enter confirms instantly. In a game or on the
+how-to-play page, `Esc` returns to the menu; on the menu, `Esc` quits. `Q`
+always quits.
+
+The paper look (menu, how-to-play, results) lives in `main/ui/`. How-to-play
+copy is `content.HowToPlay`; its illustrations are
+`assets/ui/how_to_play/<game>/step_{1,2,3}.png` + `info.png` (replace the PNGs
+to restyle). Fonts: Permanent Marker (Apache 2.0) and Patrick Hand (SIL OFL)
+in `assets/fonts/`.
+
+Gesture recognition uses MediaPipe (`assets/models/gesture_recognizer.task`). It runs only while the menu, how-to-play page (or a game with `wants_gestures`) is active. When YOLO sees wrists raised above the elbow, the shell crops and upscales those regions before MediaPipe so hands stay recognizable farther from the camera. If people are visible but no wrists are above the elbow, hand detection is skipped entirely (no full-frame fallback). Env tunables: `MIN_SCORE` (default 0.5), `REFRACTORY_MS` (default 350), `GESTURE_MODEL_PATH`, `ROI` (1/0), `ROI_SIZE` (320), `ROI_SCALE` (2.5), `ROI_MIN_PX` (80), `ROI_MAX` (2), `MIN_WRIST_CONF` (0.35), `RAISE_GATE` (1/0), `RAISE_LIFT_FRAC` (0.08), `RAISE_MATCH_FRAC` (0.35), `THUMB_HOLD_S` (0.5).
 
 ### Shared flags
 
