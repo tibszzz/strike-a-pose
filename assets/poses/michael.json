@@ -1,17 +1,17 @@
 {
   "name": "michael",
   "joints": {
-    "nose": [0.590, 0.014],
-    "left_shoulder": [0.698, 0.103],
-    "right_shoulder": [0.430, 0.113],
-    "left_elbow": [0.841, 0.063],
-    "right_elbow": [0.222, 0.096],
-    "left_wrist": [0.991, 0.000],
-    "right_wrist": [0.009, 0.025],
-    "left_hip": [0.688, 0.466],
-    "right_hip": [0.517, 0.508],
-    "left_knee": [0.835, 0.573],
-    "right_knee": [0.585, 0.778],
+    "nose": [0.478, 0.064],
+    "left_shoulder": [0.623, 0.176],
+    "right_shoulder": [0.355, 0.186],
+    "left_elbow": [0.751, 0.101],
+    "right_elbow": [0.152, 0.139],
+    "left_wrist": [0.891, 0.018],
+    "right_wrist": [0.328, 0.000],
+    "left_hip": [0.613, 0.539],
+    "right_hip": [0.442, 0.581],
+    "left_knee": [0.793, 0.566],
+    "right_knee": [0.633, 0.784],
     "left_ankle": [0.768, 0.827],
     "right_ankle": [0.583, 1.000]
   }

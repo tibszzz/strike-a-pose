@@ -1,18 +1,18 @@
 {
   "name": "scarecrow",
   "joints": {
-    "nose": [0.500, 0.000],
-    "left_shoulder": [0.614, 0.159],
-    "right_shoulder": [0.386, 0.159],
-    "left_elbow": [0.784, 0.159],
-    "right_elbow": [0.216, 0.159],
+    "nose": [0.498, 0.176],
+    "left_shoulder": [0.618, 0.315],
+    "right_shoulder": [0.390, 0.315],
+    "left_elbow": [0.714, 0.175],
+    "right_elbow": [0.291, 0.178],
     "left_wrist": [0.784, 0.318],
     "right_wrist": [0.216, 0.318],
-    "left_hip": [0.568, 0.500],
-    "right_hip": [0.432, 0.500],
-    "left_knee": [0.568, 0.750],
-    "right_knee": [0.432, 0.750],
+    "left_hip": [0.572, 0.656],
+    "right_hip": [0.436, 0.656],
+    "left_knee": [0.752, 0.830],
+    "right_knee": [0.537, 0.826],
     "left_ankle": [0.568, 1.000],
-    "right_ankle": [0.432, 1.000]
+    "right_ankle": [0.354, 0.996]
   }
 }

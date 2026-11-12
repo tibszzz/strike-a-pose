@@ -11,8 +11,8 @@
     "left_hip": [0.520, 0.493],
     "right_hip": [0.365, 0.418],
     "left_knee": [0.546, 0.755],
-    "right_knee": [0.163, 0.646],
+    "right_knee": [0.117, 0.432],
     "left_ankle": [0.470, 1.000],
-    "right_ankle": [0.093, 0.889]
+    "right_ankle": [0.047, 0.675]
   }
 }
