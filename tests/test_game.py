@@ -664,3 +664,23 @@ def test_results_reveal_emits_ticks_at_flash_rate():
     game.step(COUNTDOWN + 0.5)
     assert len(of_type(events, ScoreRevealLocked)) == 1
     assert len(of_type(events, ScoreRevealTick)) == 5
+
+
+def test_shared_countdown_timer_matches_strike_layout_pixel_for_pixel():
+    import numpy as np
+
+    from main.settings import CANVAS_HEIGHT, CANVAS_WIDTH
+    from main.games.strike.game import (
+        WHITE,
+        _countdown_timer_opacity,
+        _countdown_timer_style,
+        _draw_translucent_text,
+        draw_countdown_timer,
+    )
+
+    base = np.random.default_rng(0).integers(0, 255, (CANVAS_HEIGHT, CANVAS_WIDTH, 3), dtype=np.uint8)
+    shared, manual = base.copy(), base.copy()
+    draw_countdown_timer(shared, 2, 0.6)
+    x, y, scale = _countdown_timer_style(2)
+    _draw_translucent_text(manual, "2", x, y, scale, WHITE, _countdown_timer_opacity(2, 0.6))
+    assert np.array_equal(shared, manual)

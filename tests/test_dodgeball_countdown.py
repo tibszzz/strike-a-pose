@@ -75,19 +75,22 @@ def test_last_life_still_ends_the_match_and_waits_there():
     assert game.countdown == 0
 
 
-def test_countdown_draws_the_shared_digit(monkeypatch):
+def test_countdown_digit_is_drawn_by_strikes_renderer(monkeypatch):
     calls = []
-    monkeypatch.setattr(d, "draw_countdown_digit", lambda canvas, n, age, **kw: calls.append((n, round(age, 3), kw)))
-    import pygame
+    monkeypatch.setattr(d, "draw_countdown_timer", lambda image, n, age: calls.append((image.shape, n, round(age, 3))))
 
     game = d.DodgeballGame((640, 480))
     game.start(1)
     game.countdown = int(2.5 * d.FPS)
-    game.draw(pygame.Surface((640, 480)), _frame())
-    assert calls and calls[0][0] == 3
-    assert calls[0][1] == pytest.approx(0.5, abs=0.05)
-    assert calls[0][2]["face"] == d.styles.STRIKE.font
+    camera = np.zeros((480, 640, 3), np.uint8)
+    out = game.render_camera(camera)
 
+    assert calls == [((480, 640, 3), 3, 0.5)]
+    assert out is not camera  # draws on a copy, never the shared camera frame
+
+    calls.clear()
+    game.countdown = 0
+    assert game.render_camera(camera) is camera and not calls  # no digit while playing
 
 def test_countdown_emits_strike_countdown_ticks_once_per_digit(monkeypatch):
     from main.games.strike.screens import CountdownTick

@@ -8,7 +8,9 @@ import random
 import pygame
 
 from main import audio, content, styles
-from main.countdown import TIMER_VISIBLE_AT_SECONDS, draw_countdown_digit
+from main.countdown import TIMER_VISIBLE_AT_SECONDS
+from main.games.strike.game import draw_countdown_timer
+from main.games.strike.play import _load_countdown_sounds
 from main.games.strike.screens import CountdownTick
 from main import content, styles
 from main.end_screen import (
@@ -137,7 +139,6 @@ class DodgeballGame:
             "steady": lambda: audio.tone(587, 0.25),
             "hit": lambda: audio.gunshot(0.4, seed=7),
             "match_start": lambda: audio.arpeggio([523, 659, 784, 1047], step=0.1),
-            "tick": lambda: audio.tone(440, 0.12, decay=0.05),
             "go": lambda: audio.tone(880, 0.35, decay=0.12),
             "game_over": lambda: audio.arpeggio([392, 330, 262, 196], step=0.2),
             "match_over": lambda: audio.arpeggio([392, 494, 587, 784, 587, 784, 988], step=0.13),
@@ -145,6 +146,8 @@ class DodgeballGame:
         self.sounds = {
             name: audio.load_or(ASSETS / "sounds" / f"{name}.wav", make) for name, make in synth.items()
         }
+        # Countdown tick: Strike's own sound, so both countdowns sound the same.
+        self.sounds["tick"] = _load_countdown_sounds()["tick"]
         self.config = config if config is not None else DodgeballConfig()
         self.debug = bool(self.config.debug)
 
@@ -463,7 +466,13 @@ class DodgeballGame:
                 self.start(len(roster), seed_x=[p.center_x for p in roster])
 
     def render_camera(self, image_bgr):
-        return image_bgr
+        if self.in_lobby or self.game_over or self.countdown <= 0:
+            return image_bgr
+        # Strike's countdown digit, drawn by Strike's own renderer onto the camera
+        # image (translucent, no background), before the pygame overlays go on top.
+        image = image_bgr.copy()
+        draw_countdown_timer(image, *self._countdown_digit())
+        return image
 
     def debug_lines(self) -> list[str]:
         if self.in_lobby:
@@ -591,11 +600,6 @@ class DodgeballGame:
                 align="center",
                 outline=True,
             )
-
-        if self.countdown > 0:
-            # Strike's round timer: same digit maths, font, size, blink and fade.
-            seconds_left, digit_age = self._countdown_digit()
-            draw_countdown_digit(canvas, seconds_left, digit_age, face=styles.STRIKE.font)
 
         self._draw_lives(canvas)
 

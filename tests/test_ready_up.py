@@ -132,7 +132,6 @@ def test_match_roster_by_seeds_none_when_short():
     assert match_roster_by_seeds([person(100)], [100.0, 400.0]) is None
 
 
-<<<<<<< HEAD
 def test_hold_progress_fills_toward_ready_then_stops_counting():
     ready = ReadyUp(1000, cfg(min_players=1, max_players=2, hold_frames=4))
     p = person(200)
@@ -161,7 +160,6 @@ def test_hand_outside_everyone_has_no_owner():
     ready = ReadyUp(1000, cfg())
     ready.update([person(200)])
     assert ready.hand_owner(hand_at(THUMB_UP, 800)) is None
-=======
 # --- ready-up page chrome --------------------------------------------------------
 
 
@@ -196,4 +194,3 @@ def test_draw_ready_up_smoke_with_ready_and_waiting_players():
     ready.update(people, [])
     hold_thumb(ready, people, THUMB_UP, 150)
     draw_ready_up(pygame.Surface((640, 480)), ready, theme=STRIKE)
->>>>>>> dev

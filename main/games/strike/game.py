@@ -411,19 +411,24 @@ def _compose_countdown(screen: CountdownScreen, frame: np.ndarray) -> np.ndarray
     draw_stick_figure(
         canvas, screen.target.joints, _countdown_target_rect(screen.elapsed), WHITE
     )
-    opacity = _countdown_timer_opacity(screen.seconds_left, screen.digit_age)
-    if opacity is not None and opacity > 0:
-        timer_x, timer_y, timer_scale = _countdown_timer_style(screen.seconds_left)
-        _draw_translucent_text(
-            canvas,
-            str(screen.seconds_left),
-            timer_x,
-            timer_y,
-            timer_scale,
-            WHITE,
-            opacity,
-        )
+    draw_countdown_timer(canvas, screen.seconds_left, screen.digit_age)
     return canvas
+
+
+def draw_countdown_timer(canvas: np.ndarray, seconds_left: int, digit_age: float) -> None:
+    """The big translucent countdown digit, centred on any BGR canvas.
+
+    Strike's round timer; Dodgeball draws its countdown with this too. On the
+    1280x720 Strike canvas this is exactly `_countdown_timer_style`.
+    """
+    opacity = _countdown_timer_opacity(seconds_left, digit_age)
+    if opacity is None or opacity <= 0:
+        return
+    height, width = canvas.shape[:2]
+    text = str(seconds_left)
+    (_, glyph_h), descent = styles.text_size(text, TIMER_CENTER_SCALE, theme.font, h=height)
+    baseline = round(height // 2 + (glyph_h - descent) / 2)
+    _draw_translucent_text(canvas, text, width // 2, baseline, TIMER_CENTER_SCALE, WHITE, opacity)
 
 
 def _compose_retry(screen: RetryScreen) -> np.ndarray:
