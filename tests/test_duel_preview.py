@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from main.games.duel.preview import (
+from main.ui.preview import (
     PreviewTracker,
     aspect_expand,
     crop_source,
@@ -60,7 +60,7 @@ def test_preview_tracker_grace_then_placeholder():
 
 
 def test_cover_crop_center_crops_wider_source():
-    from main.games.duel.preview import cover_crop
+    from main.ui.preview import cover_crop
 
     # 200x100 source into 50x50 dest → keep full height, crop sides to 100x100 in src
     x, y, w, h = cover_crop(200, 100, 50, 50)
@@ -68,16 +68,24 @@ def test_cover_crop_center_crops_wider_source():
 
 
 def test_cover_crop_center_crops_taller_source():
-    from main.games.duel.preview import cover_crop
+    from main.ui.preview import cover_crop
 
     x, y, w, h = cover_crop(100, 200, 50, 50)
     assert (x, y, w, h) == (0.0, 50.0, 100.0, 100.0)
 
 
 def test_resolve_results_portrait_tracks_then_clears():
-    from main.games.duel.preview import resolve_results_portrait
+    from main.ui.preview import resolve_results_portrait
 
     t = PreviewTracker(pad=0.0, smooth=1.0, grace=0.0, target_aspect=0.5)
     box = resolve_results_portrait(t, _person((100, 100, 200, 300)), now=1.0, frame_w=1000, frame_h=1000)
     assert box is not None
     assert resolve_results_portrait(t, None, now=2.0, frame_w=1000, frame_h=1000) is None
+
+
+def test_duel_preview_reexports_shared_module():
+    from main.games.duel import preview as duel_preview
+    from main.ui import preview as shared
+
+    assert duel_preview.PreviewTracker is shared.PreviewTracker
+    assert duel_preview.cover_crop is shared.cover_crop

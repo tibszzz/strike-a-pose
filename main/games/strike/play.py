@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Sequence
 
 import cv2
+import numpy as np
 import pygame
 
 from main import audio, content, styles
@@ -23,8 +24,11 @@ from main.nav.hand_geometry import NAV_GESTURE_HANDS
 from main.pose import PoseFrame
 from main.pose.library import Pose, from_coco_person, load_library
 from main.pose.types import Person as CocoPerson
-from main.ready_up import ReadyUp, ReadyUpConfig, Started, draw_ready_up
+from main.ready_up import ReadyUp, ReadyUpConfig, Started, draw_ready_up, match_roster_slots
 from main.settings import ASSETS, StrikeConfig
+from main.ui import paper
+from main.ui.paper import INK
+from main.ui.preview import PreviewTracker, cover_crop, resolve_results_portrait
 
 from .game import compose
 from .logic import Game as StrikeLogic
@@ -107,6 +111,7 @@ class StrikeGame:
         self._end = EndScreen((self.w, self.h))
         self._pending_nav = None
         self._frame_ts = 0.0
+        self._results_preview = PreviewTracker()
 
     def _on_logic_event(self, event: Event) -> None:
         if isinstance(event, CountdownTick) and event.seconds_left <= 3:
@@ -170,6 +175,7 @@ class StrikeGame:
         self._in_ready_up = True
         self._ready = self._make_ready()
         self._end.reset()
+        self._results_preview.reset()
         self._pending_nav = None
         self._screen = LobbyScreen(
             markers=(),
@@ -202,6 +208,7 @@ class StrikeGame:
         self._stop_drumroll()
         self._screen = screen
         self._end.reset()
+        self._results_preview.reset()
         return True
 
     def handle_command(self, command: MenuCommand) -> None:
@@ -261,9 +268,11 @@ class StrikeGame:
         people = None
         if self._logic.wants_people(now):
             people = [from_coco_person(person) for person in frame.people]
+        prev = self._screen
         self._screen = self._logic.step(now, confirm, frame.image, people)
-        if isinstance(self._screen, FinalScreen):
+        if isinstance(self._screen, FinalScreen) and not isinstance(prev, FinalScreen):
             self._end.reset()
+            self._results_preview.reset()
 
     def render_camera(self, image):
         source = self._image if self._image is not None else image
@@ -286,12 +295,14 @@ class StrikeGame:
                 self._end,
                 snap=self.gesture_snapshot,
                 title=content.Results.strike_title,
-                body=self._draw_final_body,
+                body=lambda c, r, f: self._draw_final_body(c, r, f, frame),
                 pose=frame,
             )
 
-    def _draw_final_body(self, canvas: pygame.Surface, rect: pygame.Rect, frame) -> None:
-        """Winner headline over a points table: place, player, every round, total."""
+    def _draw_final_body(
+        self, canvas: pygame.Surface, rect: pygame.Rect, frame, pose: PoseFrame
+    ) -> None:
+        """Winner headline, points table (~75%), live winner PiP on the right."""
         screen = self._screen
         if not isinstance(screen, FinalScreen):
             return
@@ -309,8 +320,101 @@ class StrikeGame:
             )
             for s in screen.standings
         ]
-        table = pygame.Rect(rect.x, bottom + frame.px(20), rect.width, rect.bottom - bottom - frame.px(20))
+        gap = frame.px(40)
+        art_w = max(1, int(rect.width * 0.25) - gap)
+        table = pygame.Rect(
+            rect.x,
+            bottom + frame.px(20),
+            max(1, rect.width - art_w - gap),
+            max(1, rect.bottom - bottom - frame.px(20)),
+        )
         draw_points_table(canvas, frame, table, rows, rounds)
+        art_box = pygame.Rect(table.right + gap, rect.y, art_w, rect.height)
+        self._draw_results_portrait(canvas, frame, art_box, pose, winners)
+
+    def _draw_results_portrait(
+        self,
+        canvas: pygame.Surface,
+        frame,
+        art_box: pygame.Rect,
+        pose: PoseFrame,
+        winners: list[int],
+    ) -> None:
+        """Final portrait: P# above live crop of first place-1 (full frame if lost)."""
+        if art_box.width <= 0 or art_box.height <= 0:
+            return
+        winner = winners[0] if winners else None
+        feed = art_box
+        if winner is not None:
+            face = paper.hand(frame, 26)
+            tag_h = face.get_height() + 2 * max(1, face.get_height() // 12)
+            label_gap = frame.px(10)
+            feed = pygame.Rect(
+                art_box.x,
+                art_box.y + tag_h + label_gap,
+                art_box.width,
+                art_box.height - tag_h - label_gap,
+            )
+            if feed.height <= 0:
+                return
+            paper.draw_tag(
+                canvas,
+                content.Results.player.format(player=winner),
+                face,
+                paper.player_ink(winner),
+                (art_box.centerx, art_box.top),
+                "midtop",
+            )
+        fh, fw = pose.image.shape[:2]
+        full = (0.0, 0.0, float(fw), float(fh))
+        person = self._winner_person(pose, winner) if winner is not None else None
+        self._results_preview.target_aspect = feed.width / max(1, feed.height)
+        box = (
+            resolve_results_portrait(
+                self._results_preview,
+                person,
+                now=self._frame_ts,
+                frame_w=fw,
+                frame_h=fh,
+            )
+            or full
+        )
+        self._blit_preview_crop(canvas, pose.image, box, feed)
+        seed = 80 if winner is None else 80 + winner
+        paper.draw_marker_box(canvas, feed, frame, INK, seed=seed)
+
+    def _winner_person(self, pose: PoseFrame, winner: int) -> CocoPerson | None:
+        """Rematch the 1-based winner seat to a live detection via roster seeds."""
+        seeds = self._logic.roster_seed_x
+        if not seeds or winner < 1:
+            return None
+        slots = match_roster_slots(pose.people, seeds)
+        idx = winner - 1
+        if idx >= len(slots):
+            return None
+        return slots[idx]
+
+    def _blit_preview_crop(
+        self,
+        canvas: pygame.Surface,
+        image_bgr: np.ndarray,
+        box: tuple[float, float, float, float],
+        dest: pygame.Rect,
+    ) -> bool:
+        """Cover-blit a BGR crop into `dest`. Returns False if empty."""
+        x1, y1, x2, y2 = (int(v) for v in box)
+        x1, x2 = max(0, min(x1, x2)), min(image_bgr.shape[1], max(x1, x2))
+        y1, y2 = max(0, min(y1, y2)), min(image_bgr.shape[0], max(y1, y2))
+        if x2 <= x1 or y2 <= y1:
+            return False
+        crop = np.ascontiguousarray(image_bgr[y1:y2, x1:x2, ::-1])  # BGR -> RGB
+        cx, cy, cw, ch = cover_crop(crop.shape[1], crop.shape[0], dest.width, dest.height)
+        ix, iy = int(cx), int(cy)
+        iw, ih = max(1, int(cw)), max(1, int(ch))
+        crop = np.ascontiguousarray(crop[iy : iy + ih, ix : ix + iw])
+        surf = pygame.image.frombuffer(crop.tobytes(), (crop.shape[1], crop.shape[0]), "RGB")
+        canvas.blit(pygame.transform.smoothscale(surf, dest.size), dest)
+        return True
 
     def debug_lines(self) -> list[str]:
         if self._in_ready_up:

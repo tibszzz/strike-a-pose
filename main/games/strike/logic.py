@@ -165,9 +165,10 @@ class Game:
     def wants_people(self, now: float) -> bool:
         """Whether the next `step` needs the frame and the people in it.
 
-        True all through the lobby, and at the moment a snapshot is due.
+        True all through the lobby, on the final card (live winner PiP rematch),
+        and at the moment a snapshot is due.
         """
-        if self._phase is _Phase.LOBBY:
+        if self._phase is _Phase.LOBBY or self._phase is _Phase.FINAL:
             return True
         return self._phase is _Phase.COUNTDOWN and now >= self._deadline
 
@@ -443,6 +444,11 @@ class Game:
             round_scores=tuple(tuple(scores) for scores in self._round_scores),
             total_rounds=self._config.rounds,
         )
+
+    @property
+    def roster_seed_x(self) -> tuple[float, ...]:
+        """Frozen L→R seat centres from match start (empty before confirm)."""
+        return tuple(self._roster_seed_x)
 
     # --- helpers -------------------------------------------------------------
 

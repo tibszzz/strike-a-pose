@@ -606,7 +606,7 @@ class DuelGame:
                 return
             paper.draw_tag(
                 canvas,
-                f"{content.Results.player.format(player=winner + 1)} {copy.wins_suffix}",
+                content.Results.player.format(player=winner + 1),
                 face,
                 paper.player_ink(winner + 1),
                 (art_box.centerx, art_box.top),

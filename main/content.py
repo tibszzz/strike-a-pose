@@ -115,7 +115,6 @@ class Duel:
         "timeout": "NOBODY FIRED",
         "void": "BOTH TOO EARLY",
     }
-    wins_suffix = "WINS"
     rules = (
         "Two players: stand side by side, left half is Player 1, right half Player 2",
         "Keep your arms down and stand still for a moment to start a round",
