@@ -165,9 +165,10 @@ class Game:
     def wants_people(self, now: float) -> bool:
         """Whether the next `step` needs the frame and the people in it.
 
-        True all through the lobby, and at the moment a snapshot is due.
+        True all through the lobby, on the final card (live winner PiP rematch),
+        and at the moment a snapshot is due.
         """
-        if self._phase is _Phase.LOBBY:
+        if self._phase is _Phase.LOBBY or self._phase is _Phase.FINAL:
             return True
         return self._phase is _Phase.COUNTDOWN and now >= self._deadline
 
@@ -195,7 +196,9 @@ class Game:
         if people is not None:
             self._lobby_people = left_to_right(people)
         count = len(self._lobby_people)
-        can_start = self._config.min_players <= count <= self._config.max_players
+        # `--debug`: solo lobby even when configured min_players > 1.
+        min_players = 1 if self._config.debug else self._config.min_players
+        can_start = min_players <= count <= self._config.max_players
 
         if confirm and can_start:
             self._player_count = count
@@ -215,7 +218,7 @@ class Game:
                 for index, person in enumerate(self._lobby_people)
             ),
             can_start=can_start,
-            min_players=self._config.min_players,
+            min_players=min_players,
             max_players=self._config.max_players,
         )
 
@@ -409,6 +412,24 @@ class Game:
         choices = [n for n in range(101) if n != final]
         return self._rng.choice(choices)
 
+    def debug_force_final(self) -> FinalScreen | None:
+        """Debug only: jump to FINAL standings. None if still in lobby."""
+        if self._phase is _Phase.LOBBY:
+            return None
+        seats = max(1, self._player_count, len(self._totals))
+        if len(self._totals) < seats:
+            self._totals = list(self._totals) + [0] * (seats - len(self._totals))
+        if len(self._round_scores) < seats:
+            self._round_scores = list(self._round_scores) + [
+                [] for _ in range(seats - len(self._round_scores))
+            ]
+        if self._totals and max(self._totals) == 0:
+            self._totals[0] = 1
+        self._phase = _Phase.FINAL
+        screen = self._final_screen()
+        self._emit(GameOver(standings=screen.standings))
+        return screen
+
     def _step_final(self, now: float, confirm: bool) -> Screen:
         if confirm:
             self._phase = _Phase.LOBBY
@@ -423,6 +444,11 @@ class Game:
             round_scores=tuple(tuple(scores) for scores in self._round_scores),
             total_rounds=self._config.rounds,
         )
+
+    @property
+    def roster_seed_x(self) -> tuple[float, ...]:
+        """Frozen L→R seat centres from match start (empty before confirm)."""
+        return tuple(self._roster_seed_x)
 
     # --- helpers -------------------------------------------------------------
 

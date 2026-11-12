@@ -66,7 +66,13 @@ class ReadyUpConfig:
     fist_hold_frames: int = 15  # ~0.5s at 30fps
     forget_frames: int = 30
     min_score: float = 0.5
+    # `--debug`: allow a single ready player even when min_players > 1 (solo testing).
     debug: bool = False
+
+    @property
+    def required_min(self) -> int:
+        """Players needed to start; debug floors this at 1."""
+        return 1 if self.debug else self.min_players
 
 
 @dataclass(frozen=True)
@@ -111,10 +117,10 @@ class ReadyUp:
     @property
     def can_start(self) -> bool:
         n = self.ready_count
-        return self.config.min_players <= n <= self.config.max_players
+        return self.config.required_min <= n <= self.config.max_players
 
     def force_start(self) -> Started | None:
-        """Debug escape: start if enough people are ready."""
+        """Debug escape: start if enough people are ready (solo OK when config.debug)."""
         if not self.can_start:
             return None
         return self._freeze()

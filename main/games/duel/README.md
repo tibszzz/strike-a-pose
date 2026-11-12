@@ -6,11 +6,13 @@ Two-player quick-draw. Stand side by side facing the camera. Left half of the sc
 python -m main duel
 ```
 
-For solo testing while developing, pass `--debug` so the empty half is an idle ghost:
+For solo testing while developing, pass `--debug` so ready-up accepts one player and the empty half is an idle ghost:
 
 ```sh
 python -m main duel --debug
 ```
+
+With `--debug`, after ready-up / gameplay has begun, `R` jumps straight to the final RESULTS card (shell `R` still resets while you are in ready-up).
 
 ## How to play
 
@@ -22,18 +24,19 @@ python -m main duel --debug
 - If nobody draws within 3 seconds, no one is hit. Double early draws skip the slow-mo and show the result (the round is replayed).
 - There are no ties: the faster draw always wins, and two draws on the very same camera frame are settled by a coin flip.
 - Each player has 3 hearts. Lose them all and the other player wins.
+- The final RESULTS card shows a **live winner PiP** (same body-follow crop as the side portraits) on the right, with a small winner tag above the feed; if the winner is missing from frame, it cover-fills from the full camera image.
 
 ## Keys
 
-Shared shell keys (`D` debug, `F` fullscreen, `Esc` menu, `Q` quit) plus:
+Shared shell keys (`D` overlay, `F` fullscreen, `Esc` menu, `Q` quit) plus:
 
 | Key | Action |
 |---|---|
-| `R` | Reset the match |
+| `R` | Reset the match (ready-up / non-debug). With `--debug` after play starts: skip to final RESULTS |
+| `Space` | `--debug` only: force-start ready-up when eligible |
 
 ## Customising
 
 - **Settings:** copy `.env.example` to `.env` and change lives, timings, pose thresholds, camera, animation speed. Anything left out keeps its default; command-line flags beat `.env`.
 - **Messages:** edit the pools on `content.Duel` in `main/content.py` (`shot_messages`, `win_messages`, `early_messages`).
-- **Win pictures:** any PNG in `assets/sprites/cowboys/` can appear on the win screen.
 - **Sounds:** drop `ready.wav`, `steady.wav`, `bang.wav`, `early.wav`, or `match_over.wav` into `assets/sounds/` to replace the built-in synthesized sounds. Slow-mo replay stays silent (no hit cue). See `assets/sounds/README.md`.

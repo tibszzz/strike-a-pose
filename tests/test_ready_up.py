@@ -81,6 +81,17 @@ def test_cannot_start_below_min_ready():
     assert ready.update(people, [hand_at(CLOSED_FIST, 100)]) is None
 
 
+def test_debug_allows_solo_when_min_players_is_two():
+    ready = ReadyUp(1000, cfg(min_players=2, max_players=2, debug=True))
+    assert ready.config.required_min == 1
+    p = person(200, "solo")
+    hold_thumb(ready, [p], THUMB_UP, 200)
+    assert ready.can_start
+    started = ready.force_start()
+    assert started is not None
+    assert started.roster[0].tag == "solo"
+
+
 def test_closed_fist_from_ready_player_starts_and_freezes_ltr_roster():
     ready = ReadyUp(1000, cfg(min_players=2, max_players=4))
     a, b = person(300, "right"), person(100, "left")

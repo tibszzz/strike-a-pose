@@ -45,19 +45,12 @@ HOLD_RING = (176, 138, 62)
 HIGHLIGHT = (246, 206, 92)
 VIDEO_SHADE = (24, 20, 12, 120)
 
-# Player colors that read on paper (P1 red, P2 blue, P3 green, P4 orange).
+# Player colors that read on paper (P1 red, P2 blue, P3 yellow, P4 green).
 PLAYER_INK: tuple[Rgb, ...] = (
     (214, 72, 56),
     (52, 112, 204),
+    (210, 160, 40),
     (58, 150, 72),
-    (226, 150, 34),
-)
-# Dodgeball's in-game labels run blue, red, green, yellow; keep its results in step.
-PLAYER_INK_DODGEBALL: tuple[Rgb, ...] = (
-    (52, 112, 204),
-    (214, 72, 56),
-    (58, 150, 72),
-    (226, 150, 34),
 )
 HEART = (210, 58, 50)
 

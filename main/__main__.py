@@ -65,11 +65,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--debug",
         action="store_true",
-        help="keyboard menu nav; strike solo lobby; duel solo vs idle ghost",
+        help="keyboard menu nav; solo play for all games; duel idle ghost opponent",
     )
     args = parser.parse_args(argv)
 
-    strike_config = Config(min_players=1, debug=True) if args.debug else Config()
+    # debug=True: ReadyUp / strike lobby accept one player; duel fills the empty half.
+    strike_config = Config(debug=True) if args.debug else Config()
     duel_config = from_env(DuelConfig)
     dodgeball_config = DodgeballConfig(debug=True) if args.debug else DodgeballConfig()
     if args.debug:

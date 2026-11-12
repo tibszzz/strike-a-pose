@@ -243,11 +243,12 @@ BRAND = Theme(
     danger=(255, 80, 80),
     success=(100, 255, 100),
     warning=(255, 165, 0),
+    # Shared seat colors across games: P1 red, P2 blue, P3 yellow, P4 green.
     player=(
         (255, 95, 95),
         (70, 175, 255),
-        (110, 230, 110),
         (255, 215, 70),
+        (110, 230, 110),
     ),
     font=FONT,
 )
@@ -280,16 +281,11 @@ STRIKE = BRAND.with_overrides(
     ink=(255, 255, 255),
     muted=(175, 175, 175),
     accent=(246, 174, 45),  # #f6ae2d
-    player=(
-        (255, 95, 95),
-        (70, 175, 255),
-        (110, 230, 110),
-        (255, 215, 70),
-    ),
     font=ASSETS / "fonts" / "PatrickHand-Regular.ttf",
 )
 
 # Dodgeball: pygame RGB values as shipped today (accent was the strike BGR tuple used as RGB).
+# Player seat colors inherit BRAND (P1 red / P2 blue / P3 yellow / P4 green).
 DODGEBALL = BRAND.with_overrides(
     bg=(0, 0, 0),
     ink=(255, 255, 255),
@@ -298,12 +294,6 @@ DODGEBALL = BRAND.with_overrides(
     danger=(255, 80, 80),
     success=(100, 255, 100),
     warning=(255, 255, 100),
-    player=(
-        (80, 170, 255),
-        (255, 80, 80),
-        (100, 255, 100),
-        (255, 215, 70),
-    ),
     ball_fast=(255, 80, 80),
     ball_medium=(255, 165, 0),
     ball_slow=(255, 255, 100),

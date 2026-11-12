@@ -122,3 +122,129 @@ def test_replay_screen_cover_blits():
     # BGR (30,90,180) stores as RGB (180,90,30); center should not be the white page.
     center = canvas.get_at((SIZE[0] // 2, SIZE[1] // 2))
     assert center[0] > 100 and center[:3] != (245, 245, 240)
+
+
+def _results_game(now: float = 10.0) -> DuelGame:
+    game = DuelGame(
+        SIZE,
+        config=DuelConfig(
+            debug=True,
+            lives=1,
+            round_result_time=0.5,
+            match_result_min_time=0.5,
+        ),
+    )
+    game._needs_ready_up = False
+    game.now = now
+    game.duel.debug_force_match_over(now, winner=0)
+    game.win_msg = "test win"
+    game.win_img = game._pick_cowboy()
+    return game
+
+
+def _art_box(game: DuelGame) -> pygame.Rect:
+    """Mirror `_draw_results_body` art_box layout without drawing."""
+    from main.end_screen.draw import CARD
+    from main.ui.paper import Frame
+
+    f = Frame(game.w, game.h)
+    card = f.rect(*CARD)
+    rect = pygame.Rect(
+        card.x + f.px(44), card.y + f.px(62), card.width - f.px(88), card.height - f.px(92)
+    )
+    # headline + rows approximate: art sits on the right ~40% after lives column
+    top = rect.y + f.px(64) + f.px(30)
+    rows_rect = pygame.Rect(rect.x, top, min(int(rect.width * 0.6), f.px(660)), min(f.px(150), rect.bottom - top))
+    return pygame.Rect(rows_rect.right + f.px(40), rect.y, rect.right - rows_rect.right - f.px(40), rect.height)
+
+
+def test_results_art_box_shows_live_winner_crop():
+    pygame.init()
+    game = _results_game()
+    canvas = pygame.Surface(SIZE)
+    image = np.zeros((SIZE[1], SIZE[0], 3), np.uint8)
+    image[:] = (10, 10, 10)
+    # Bright BGR magenta in P1 box → RGB (255, 0, 255) after convert
+    image[40:300, 40:180] = (255, 0, 255)
+    p1 = _person((40, 40, 180, 300))
+    frame = PoseFrame(image, game.now, (p1, None), [p1])
+    game.draw(canvas, frame)
+    art = _art_box(game)
+    sample = canvas.get_at((art.centerx, art.centery))
+    assert sample[0] > 200 and sample[2] > 200 and sample[1] < 80
+
+
+def test_results_art_box_shows_feed_when_winner_missing():
+    pygame.init()
+    game = _results_game()
+    canvas = pygame.Surface(SIZE)
+    image = np.full((SIZE[1], SIZE[0], 3), (255, 0, 255), np.uint8)  # solid magenta BGR
+    frame = PoseFrame(image, game.now, (None, None), [])
+    game.draw(canvas, frame)
+    art = _art_box(game)
+    sample = canvas.get_at((art.centerx, art.centery))
+    # full-frame cover, not a PNG fallback
+    assert sample[0] > 200 and sample[2] > 200 and sample[1] < 40
+
+
+def test_results_art_box_draws_winner_label():
+    pygame.init()
+    game = _results_game()
+    canvas = pygame.Surface(SIZE)
+    image = np.zeros((SIZE[1], SIZE[0], 3), np.uint8)
+    image[:] = (10, 10, 10)
+    p1 = _person((40, 40, 180, 300))
+    frame = PoseFrame(image, game.now, (p1, None), [p1])
+    game.draw(canvas, frame)
+    art = _art_box(game)
+    # Smaller winner tag sits above the camera feed in P1 ink (red).
+    ink = paper.player_ink(1)
+    tag_band = art.top + game.winner_tag_face.get_height() + 8
+    found = False
+    for y in range(art.top, min(tag_band, art.bottom)):
+        for x in range(art.left + 8, art.right - 8, 4):
+            sample = canvas.get_at((x, y))[:3]
+            if all(abs(sample[i] - ink[i]) < 40 for i in range(3)):
+                found = True
+                break
+        if found:
+            break
+    assert found
+
+
+def test_debug_skip_to_results_after_gameplay():
+    pygame.init()
+    game = DuelGame(SIZE, config=DuelConfig(debug=True, lives=3))
+    assert game.debug_skip_to_results() is False  # still in ready-up
+    game._needs_ready_up = False
+    game.now = 5.0
+    game.duel.request_start(5.0)
+    assert game.duel.phase != Phase.MATCH_OVER
+    assert game.debug_skip_to_results() is True
+    assert game.duel.phase == Phase.MATCH_OVER
+    assert game.duel.match_winner is not None
+    assert game.duel.can_restart(game.now)
+    assert game.win_msg
+
+
+def test_debug_ready_up_allows_solo_force_start():
+    """`--debug` duel ready-up starts with one thumbs-up (ghost fills P2)."""
+    from main.ready_up.logic import THUMB_UP
+
+    pygame.init()
+    game = DuelGame(SIZE, config=DuelConfig(debug=True, lives=3))
+    assert game._ready.config.min_players == 2
+    assert game._ready.config.required_min == 1
+    p1 = _person((40, 40, 180, 300))
+
+    class _Hand:
+        label = THUMB_UP
+        score = 0.9
+        center = (110.0, 120.0)
+
+    for _ in range(12):
+        game._ready.update([p1], [_Hand()])
+    assert game._ready.can_start
+    started = game._ready.force_start()
+    assert started is not None
+    assert len(started.roster) == 1

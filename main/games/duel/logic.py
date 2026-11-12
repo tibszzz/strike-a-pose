@@ -211,6 +211,23 @@ class Duel:
         out[missing[0]] = PoseState.NEUTRAL
         return (out[0], out[1])
 
+    def debug_force_match_over(self, now: float, winner: int = 0) -> None:
+        """Debug only: jump to MATCH_OVER past the final-round flash, ready to restart."""
+        winner = 0 if winner not in (0, 1) else winner
+        self.scores = [0, 0]
+        self.scores[winner] = self.config.lives
+        self.match_winner = winner
+        self.last_result = RoundResult(
+            winner=winner,
+            reason="hit",
+            reaction_ms=(100.0, 200.0) if winner == 0 else (200.0, 100.0),
+            early=(False, False),
+        )
+        self._match_over_pending = False
+        self._clear_round()
+        past = self.config.round_result_time + self.config.match_result_min_time
+        self._enter(Phase.MATCH_OVER, now - past)
+
     def _enter(self, phase: Phase, now: float | None) -> None:
         self.phase = phase
         self.phase_start = now if now is not None else 0.0

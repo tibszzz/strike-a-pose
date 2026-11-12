@@ -6,17 +6,20 @@ Party game for 2 to 4 players on one webcam. Each round shows a stick-figure pos
 python -m main strike
 ```
 
-For solo testing while developing, pass `--debug` so the lobby accepts one person:
+For solo testing while developing, pass `--debug` so ready-up / lobby accept one person:
 
 ```sh
 python -m main strike --debug
 ```
+
+With `--debug`, after ready-up / gameplay has begun, `R` jumps to the final RESULTS card (shell `R` still resets in ready-up).
 
 ## How to play
 
 - Stand far enough back that everyone's whole body is in frame. Players are numbered left to right as they appear on screen.
 - The screen is a mirror: if the figure's raised arm is on the left of the screen, raise the arm you see on the left of your own image.
 - After scores lock, the next round starts on a timer. `Esc` returns to the menu; `Q` quits.
+- The final RESULTS card shows a live winner camera crop on the right (~25% width) with a `P#` tag above the feed; seats rematch from match-start positions.
 - People in the background are ignored: the snapshot scores the tallest figures in frame, as many as started the game.
 - If the snapshot finds fewer people than started the game, the round is replayed with the same pose.
 

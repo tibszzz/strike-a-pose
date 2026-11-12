@@ -12,7 +12,8 @@ Background rules:
   if the game defines it); overlay mode (D) swaps in the live camera with
   skeletons on top (duel).
 
-Keys: D overlay, R reset, F toggle fullscreen, Q quit app.
+Keys: D overlay, R reset (or `--debug` skip-to-results after play starts),
+F toggle fullscreen, Q quit app.
 Starts fullscreen by default; pass fullscreen=False / --windowed for a window.
 Esc leaves a playable game for the menu; on the splash or menu Esc quits.
 Picking a game on the menu opens its how-to-play page (`make_how_to`) first;
@@ -51,7 +52,7 @@ from .settings.paths import ASSETS
 
 MENU_MUSIC = ASSETS / "sounds" / "game_loop.mp3"
 
-PLAYER_COLORS = [(80, 170, 255), (255, 120, 80)]
+PLAYER_COLORS = list(styles.BRAND.player[:2])  # P1 red, P2 blue
 
 KEY_TO_COMMAND = {
     pygame.K_UP: MenuCommand.MOVE_UP,
@@ -245,7 +246,13 @@ def run(
                     elif event.key == pygame.K_d:
                         overlay = not overlay
                     elif event.key == pygame.K_r:
-                        game.reset()
+                        skipped = (
+                            debug
+                            and hasattr(game, "debug_skip_to_results")
+                            and game.debug_skip_to_results()
+                        )
+                        if not skipped:
+                            game.reset()
                     elif event.key == pygame.K_f:
                         fullscreen = not fullscreen
                         screen = (
