@@ -142,7 +142,7 @@ class MenuGame:
                 progress=self._thumb.progress if locked else 0.0,
             )
 
-        # Gesture hints stacked bottom-left (softer ink); brand title bottom-right.
+        # Gesture hints stacked bottom-left in black Sharpie boxes; brand title bottom-right.
         widgets.draw_hint_stack(
             canvas,
             f,
@@ -150,7 +150,6 @@ class MenuGame:
                 Hint(widgets.PALM_ICON, hints.hover_heading),
                 Hint(widgets.FIST_ICON, hints.select_heading),
             ),
-            alpha=190,
         )
         widgets.draw_title_strip(
             canvas,

@@ -8,8 +8,9 @@ so menu → StartGame reuses warm instances. Direct CLI launch skips preload.
 
 Background rules:
 - If the game defines `render_camera`, that image is always used (dodgeball).
-- Else the canvas is filled with `background`; overlay mode (D) swaps in the live
-  camera with skeletons on top (duel).
+- Else the canvas is filled with `background` (or painted by `draw_background`,
+  if the game defines it); overlay mode (D) swaps in the live camera with
+  skeletons on top (duel).
 
 Keys: D overlay, R reset, F toggle fullscreen, Q quit app.
 Starts fullscreen by default; pass fullscreen=False / --windowed for a window.
@@ -290,6 +291,8 @@ def run(
                 _blit_bgr(canvas, game.render_camera(frame.image), size)
             elif overlay:
                 _blit_bgr(canvas, frame.image, size)
+            elif hasattr(game, "draw_background"):
+                game.draw_background(canvas)
             else:
                 canvas.fill(game.background)
             game.draw(canvas, frame)

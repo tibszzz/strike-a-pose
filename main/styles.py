@@ -17,6 +17,7 @@ import numpy as np
 import pygame
 
 from main.settings.paths import ASSETS
+from main.ui import paper
 
 Rgb = tuple[int, int, int]
 Rgba = tuple[int, int, int, int]
@@ -255,15 +256,19 @@ SHELL = BRAND.with_overrides(
     overlay=(0, 0, 0, 140),
 )
 
-# Duel: white page, black ink (today's look as a delta).
+# Duel: the menu's sketch-paper sheet, marker ink, paper player colors.
 DUEL = BRAND.with_overrides(
-    bg=(255, 255, 255),
-    panel=(255, 255, 255),
-    ink=(0, 0, 0),
-    muted=(140, 140, 140),
-    hint=(140, 140, 140),
-    on_accent=(255, 255, 255),
-    accent=(0, 0, 0),
+    bg=(239, 234, 219),  # main.ui.sketch.SKETCH_PAPER
+    panel=(239, 234, 219),
+    ink=paper.INK,
+    muted=paper.INK_SOFT,
+    hint=paper.INK_FAINT,
+    shadow=paper.INK_FAINT,
+    shot_bg=paper.PLAYER_INK[0],
+    on_accent=(239, 234, 219),
+    accent=paper.INK,
+    player=paper.PLAYER_INK,
+    font=paper.HAND_FONT,
 )
 
 # Strike: dark warm bg + orange accent. Stored RGB; OpenCV uses bgr().

@@ -1,6 +1,7 @@
 """Wild West Duel: pygame view + sounds on top of the pure Duel rules.
 
-Look follows refrences/: white page, pixel font, hearts for lives. Side portrait
+Look matches the menu / how-to / results pages: sketch-paper sheet, marker +
+hand-lettered type, hand-drawn hearts for lives. Side portrait
 PiPs show each player's body so they can check framing; after a hit, a slow-mo
 camera replay fills the screen before the result. Debug mode (D) still puts the
 full camera image behind the same UI.
@@ -31,12 +32,12 @@ from main.pose import Person, PoseFrame, PoseState, classify
 from main.ready_up import (
     ReadyUp,
     ReadyUpConfig,
-    draw_player_label,
     draw_ready_up,
-    head_anchor,
     match_roster_by_seeds,
 )
 from main.settings import ASSETS, DuelConfig, GestureConfig, Messages, ViewConfig, from_env
+from main.ui import paper, sketch
+from main.ui.paper import HEART, INK, INK_FAINT, INK_SOFT, Frame, PaperStyle
 
 from .float_path import FloatPath, ease_out, fade
 from .logic import Duel, Phase
@@ -108,16 +109,19 @@ class DuelGame:
         self.recorder = ReplayRecorder(scale=self.view.replay_scale)
         self.playback: ReplayPlayback | None = None
 
-        self._fonts: dict[tuple[int, bool], pygame.font.Font] = {}
-        self.sz_main = theme.duel_main_px(self.h)
-        self.sz_label = theme.duel_label_px(self.h)
-        self.sz_shot = theme.duel_shot_px(self.h)
-        self.sz_title = theme.duel_title_px(self.h)
-        self.sz_msg = theme.duel_msg_px(self.h)
-
-        heart = int(0.057 * self.h)
-        self.heart_alive = pygame.transform.scale(_load_png(SPRITES / "heart-alive.png"), (heart, heart))
-        self.heart_dead = pygame.transform.scale(_load_png(SPRITES / "heart-dead.png"), (heart, heart))
+        # Type + sizes in the menu's 1552x873 design space (see `paper.Frame`).
+        self.frame = Frame(self.w, self.h)
+        f = self.frame
+        self.cue_face = paper.marker(f, 140)  # READY / STEADY / BANG!
+        self.headline_face = paper.marker(f, 92)  # NOBODY FIRED, BOTH TOO EARLY
+        self.shout_face = paper.marker(f, 58)  # GET READY, shot taunt, missing names
+        self.replay_face = paper.marker(f, 54)
+        self.tag_face = paper.hand(f, 38)  # Player 1 / Player 2 tags
+        self.body_face = paper.hand(f, 42)  # reaction times, WAITING FOR
+        self.note_face = paper.hand(f, 34)  # floaters, lower your gun, preview WAITING
+        self.early_face = paper.marker(f, 46)  # "too early" taunts drifting up
+        self.heart_px = f.px(50)
+        self._wash: pygame.Surface | None = None
         self.cowboys = sorted((SPRITES / "cowboys").glob("*.png"))
 
         synth = {
@@ -175,6 +179,10 @@ class DuelGame:
         )
 
     # -- Game protocol ----------------------------------------------------------------
+
+    def draw_background(self, canvas: pygame.Surface) -> None:
+        """The menu's sketch-paper sheet (shell calls this instead of a flat fill)."""
+        sketch.draw_sketch_backdrop(canvas)
 
     def reset(self) -> None:
         self.duel.reset()
@@ -296,7 +304,7 @@ class DuelGame:
             elif name == "hit":
                 self.shot_msg = self.shot_msgs.pick()
                 self._begin_playback()
-            elif name in ("tie", "timeout", "void"):
+            elif name in ("timeout", "void"):
                 self._clear_replay()
             elif name == "match_over":
                 self.win_msg = self.win_msgs.pick()
@@ -362,6 +370,9 @@ class DuelGame:
         elif d.phase == Phase.WAIT_START:
             self._draw_header(canvas)
             self._draw_waiting(canvas)
+        elif d.phase == Phase.INTRO:
+            self._draw_header(canvas)
+            self._draw_intro(canvas)
         else:
             self._draw_header(canvas)
             if d.phase in (Phase.READY, Phase.STEADY, Phase.BANG):
@@ -370,21 +381,8 @@ class DuelGame:
                     Phase.STEADY: copy.phase["steady"],
                     Phase.BANG: copy.phase["bang"],
                 }[d.phase]
-                self._text(canvas, word, self.sz_main, (self.w / 2, self.h / 2), bold=True, shadow=True)
-            for i, person in enumerate(self._slot_people):
-                if person is None:
-                    continue
-                nose = None
-                if float(person.conf[0]) >= 0.3:
-                    nose = (float(person.xy[0][0]), float(person.xy[0][1]))
-                anchor = head_anchor(person.box, nose)
-                draw_player_label(
-                    canvas,
-                    f"P{i + 1}",
-                    anchor,
-                    theme.player[i % len(theme.player)],
-                    face=theme.font,
-                )
+                color = HEART if d.phase == Phase.BANG else INK
+                paper.text(canvas, word, self.cue_face, color, (self.w / 2, self.h / 2), "center", max_width=self._mid_width())
         self._draw_floaters(canvas)
 
     # -- screens ----------------------------------------------------------------------
@@ -411,25 +409,13 @@ class DuelGame:
         else:
             rgb, reaction_ms, _ = self.playback.sample(elapsed)
             self._blit_cover(canvas, rgb)
-        label_x = 0.14 * self.w
-        self._text(
-            canvas,
-            copy.replay_label,
-            self.sz_label,
-            (label_x, 0.08 * self.h),
-            color=theme.bg,
-            bold=True,
-            shadow=True,
-        )
-        self._text(
-            canvas,
-            f"{reaction_ms:.0f} ms",
-            self.sz_label,
-            (label_x, 0.14 * self.h),
-            color=theme.bg,
-            bold=True,
-            shadow=True,
-        )
+        # Torn-paper note taped over the video, like the menu's title strip.
+        f = self.frame
+        note = f.rect(70, 56, 330, 206)
+        paper.draw_paper(canvas, note, f, PaperStyle(torn="tblr", jag=6), seed=73)
+        paper.draw_tape(canvas, (note.centerx, note.y + f.px(4)), f, width=110, seed=73)
+        paper.text(canvas, copy.replay_label, self.replay_face, INK, (note.centerx, note.y + f.px(84)), "midbottom")
+        paper.text(canvas, f"{reaction_ms:.0f} ms", self.body_face, INK_SOFT, (note.centerx, note.y + f.px(88)), "midtop")
 
     def _blit_cover(self, canvas: pygame.Surface, rgb: np.ndarray) -> None:
         h, w = rgb.shape[:2]
@@ -452,8 +438,7 @@ class DuelGame:
                 self._draw_preview_placeholder(canvas, rect)
             else:
                 self._blit_preview_crop(canvas, frame.image, box, rect)
-            border = max(2, self.h // 240)
-            pygame.draw.rect(canvas, theme.ink, rect, border)
+            paper.draw_marker_box(canvas, rect, self.frame, INK, seed=80 + i)
 
     def _preview_rect(self, i: int) -> pygame.Rect:
         pw = int(self.view.preview_width * self.w)
@@ -468,15 +453,8 @@ class DuelGame:
         return rect
 
     def _draw_preview_placeholder(self, canvas: pygame.Surface, rect: pygame.Rect) -> None:
-        canvas.fill(theme.hint, rect)
-        self._text(
-            canvas,
-            copy.preview_waiting,
-            self.sz_label,
-            rect.center,
-            color=theme.bg,
-            bold=True,
-        )
+        canvas.fill(INK_FAINT, rect)
+        paper.text(canvas, copy.preview_waiting, self.note_face, theme.bg, rect.center, "center")
 
     def _blit_preview_crop(
         self,
@@ -496,66 +474,71 @@ class DuelGame:
         canvas.blit(pygame.transform.smoothscale(surf, dest.size), dest)
 
     def _draw_header(self, canvas):
-        heart_w = self.heart_alive.get_width()
-        gap = int(0.079 * self.h)
+        """Colored player tag + hand-drawn hearts (same as the results page) per side."""
+        gap = self.heart_px + self.frame.px(14)
         lives = self.duel.config.lives
         for i in (0, 1):
-            cx = self._side_x(i)
-            self._text(canvas, copy.player_names[i], self.sz_label, (cx, 0.09 * self.h))
+            cx = round(self._side_x(i))
+            paper.draw_tag(
+                canvas, copy.player_names[i], self.tag_face, paper.player_ink(i + 1), (cx, round(0.09 * self.h)), "center"
+            )
             left = self.duel.lives_left(i)
             x0 = cx - gap * (lives - 1) / 2
             for k in range(lives):
-                img = self.heart_alive if k < left else self.heart_dead
-                canvas.blit(img, (int(x0 + k * gap - heart_w / 2), int(0.18 * self.h - heart_w / 2)))
+                paper.draw_heart(canvas, (round(x0 + k * gap), round(0.18 * self.h)), self.heart_px, filled=k < left)
 
     def _draw_waiting(self, canvas):
         d = self.duel
         missing = [copy.player_names[i].upper() for i in (0, 1) if d.missing[i]]
+        mid = self.w / 2
         if missing:
-            self._text(canvas, copy.waiting_for, self.sz_msg, (self.w / 2, 0.44 * self.h))
-            self._text(canvas, " & ".join(missing), self.sz_shot, (self.w / 2, 0.52 * self.h), bold=True)
+            paper.text(canvas, copy.waiting_for, self.body_face, INK_SOFT, (mid, 0.44 * self.h), "center")
+            paper.text(canvas, " & ".join(missing), self.shout_face, INK, (mid, 0.52 * self.h), "center", max_width=self._mid_width())
         else:
-            self._text(canvas, copy.get_ready, self.sz_shot, (self.w / 2, 0.47 * self.h), bold=True, shadow=True)
+            paper.text(canvas, copy.get_ready, self.shout_face, INK, (mid, 0.47 * self.h), "center", max_width=self._mid_width())
             self._progress(canvas, d.start_progress(self.now), 0.56 * self.h)
         for i, state in enumerate(self.states):
             if state == PoseState.DRAWN:
-                self._text(
-                    canvas,
-                    copy.lower_gun,
-                    self.sz_label,
-                    (self._side_x(i), 0.877 * self.h),
-                    color=theme.hint,
-                )
+                paper.text(canvas, copy.lower_gun, self.note_face, INK_SOFT, (self._side_x(i), 0.877 * self.h), "center")
+
+    def _draw_intro(self, canvas):
+        """GET READY while the start fist comes down (no visible countdown)."""
+        mid = self.w / 2
+        paper.text(canvas, copy.get_ready, self.shout_face, INK, (mid, 0.47 * self.h), "center", max_width=self._mid_width())
+        paper.text(canvas, copy.lower_guns, self.note_face, INK_SOFT, (mid, 0.56 * self.h), "center", max_width=self._mid_width())
 
     def _draw_result(self, canvas):
         r = self.duel.last_result
         if r is not None and r.reason == "hit":
             loser = 1 - r.winner
-            canvas.fill(theme.shot_bg, pygame.Rect(0 if loser == 0 else self.w // 2, 0, self.w - self.w // 2, self.h))
+            self._shade_half(canvas, loser)
         self._draw_header(canvas)
         if r is None:
             return
         if r.reason == "hit":
-            self._text(
+            paper.text(
                 canvas,
                 self.shot_msg.upper(),
-                self.sz_shot,
-                (self._side_x(1 - r.winner), self.h / 2),
-                color=theme.bg,
-                bold=True,
-                max_width=0.44 * self.w,
+                self.shout_face,
+                theme.bg,
+                (self._half_center(1 - r.winner), self.h / 2),
+                "center",
+                max_width=self.w // 2 - self.frame.px(80),
             )
         else:
             headline = copy.result[r.reason]
-            self._text(canvas, headline, self.sz_main * 2 // 3, (self.w / 2, self.h / 2), bold=True, shadow=True)
+            paper.text(canvas, headline, self.headline_face, INK, (self.w / 2, self.h / 2), "center", max_width=self._mid_width())
         for i in (0, 1):
+            on_red = r.reason == "hit" and i == 1 - r.winner
             if r.early[i]:
-                text = copy.too_early
+                text, color = copy.too_early, HEART
             elif r.reaction_ms[i] is not None:
-                text = f"{r.reaction_ms[i]:.0f} ms"
+                text, color = f"{r.reaction_ms[i]:.0f} ms", INK
             else:
-                text = "-"
-            self._text(canvas, text, self.sz_label, (self._side_x(i), 0.905 * self.h))
+                text, color = "-", INK_SOFT
+            if on_red:
+                color = theme.bg  # paper-colored ink on the red wash
+            paper.text(canvas, text, self.body_face, color, (self._side_x(i), 0.905 * self.h), "center")
 
     def _draw_results_body(self, canvas: pygame.Surface, rect: pygame.Rect, frame) -> None:
         """Winner + taunt, hearts left per gunslinger, and the draw illustration."""
@@ -587,52 +570,50 @@ class DuelGame:
             alive.append(f)
             alpha = int(255 * fade(t, self.view.early_fade_start))
             x, y = f.path.at(ease_out(t))
-            # keep the whole text inside its player's half, even where the path hugs the edge
-            half_w = self._font(self.sz_label, False).size(f.text)[0] / 2
+            # keep the whole text on its player's side column (screen edge to the inner
+            # edge of their preview), clear of the READY / STEADY cue in the middle
+            half_w = self.early_face.size(f.text)[0] / 2
             margin = 0.02 * self.w
-            lo, hi = (0, self.w / 2) if f.path.player == 0 else (self.w / 2, self.w)
+            if f.path.player == 0:
+                lo, hi = 0, self._preview_rect(0).right + margin
+            else:
+                lo, hi = self._preview_rect(1).left - margin, self.w
             x = min(max(x, lo + margin + half_w), hi - margin - half_w)
-            self._text(canvas, f.text, self.sz_label, (x, y), alpha=alpha)
+            paper.text(canvas, f.text, self.early_face, HEART, (x, y), "center", alpha=alpha)
         self.floaters = alive
 
     # -- helpers ----------------------------------------------------------------------
 
     def _side_x(self, i: int) -> float:
+        """Centre line of player `i`'s side: the middle of their preview window."""
+        return float(self._preview_rect(i).centerx)
+
+    def _half_center(self, i: int) -> float:
+        """Middle of player `i`'s half of the screen (where the red wash goes)."""
         return self.w * (0.25 if i == 0 else 0.75)
 
-    def _font(self, size: int, bold: bool) -> pygame.font.Font:
-        key = (size, bold)
-        if key not in self._fonts:
-            font = styles.load_font(theme.font, size)
-            font.bold = bold
-            self._fonts[key] = font
-        return self._fonts[key]
+    def _mid_width(self) -> int:
+        """Room for centre text between the two preview windows."""
+        return max(1, self._preview_rect(1).left - self._preview_rect(0).right - self.frame.px(40))
 
-    def _text(self, canvas, text, size, center, color=None, bold=False, shadow=False, alpha=255, max_width=None):
-        if color is None:
-            color = theme.ink
-        font = self._font(size, bold)
-        if max_width is not None and font.size(text)[0] > max_width:  # shrink to fit
-            size = max(8, int(size * max_width / font.size(text)[0]))
-            font = self._font(size, bold)
-        surf = font.render(text, True, color)
-        rect = surf.get_rect(center=(int(center[0]), int(center[1])))
-        if shadow:
-            off = max(2, size // 22)
-            shade = font.render(text, True, theme.shadow)
-            shade.set_alpha(alpha)
-            canvas.blit(shade, rect.move(off, off))
-        surf.set_alpha(alpha)
-        canvas.blit(surf, rect)
+    def _shade_half(self, canvas: pygame.Surface, side: int) -> None:
+        """Red marker wash over the shot player's half (paper grain shows through)."""
+        size = (self.w - self.w // 2, self.h)
+        if self._wash is None or self._wash.get_size() != size:
+            self._wash = pygame.Surface(size, pygame.SRCALPHA)
+            self._wash.fill((*theme.shot_bg, 238))
+        canvas.blit(self._wash, (0 if side == 0 else self.w // 2, 0))
 
     def _progress(self, canvas, frac, cy):
-        bw, bh = int(self.w * 0.3), int(self.h * 0.03)
-        border = max(2, self.h // 240)
-        rect = pygame.Rect(0, 0, bw, bh)
-        rect.center = (self.w // 2, int(cy))
-        pygame.draw.rect(canvas, theme.bg, rect)
-        pygame.draw.rect(canvas, theme.ink, (rect.x, rect.y, int(bw * frac), bh))
-        pygame.draw.rect(canvas, theme.ink, rect, border)
+        """Rounded hold bar like the note buttons' fist-hold progress."""
+        bar = pygame.Rect(0, 0, int(self.w * 0.3), self.frame.px(16))
+        bar.center = (self.w // 2, int(cy))
+        radius = bar.height // 2
+        pygame.draw.rect(canvas, INK_FAINT, bar, border_radius=radius)
+        if frac > 0:
+            fill = bar.copy()
+            fill.width = max(bar.height, round(bar.width * min(1.0, frac)))
+            pygame.draw.rect(canvas, paper.HOLD_RING, fill, border_radius=radius)
 
     def _pick_cowboy(self) -> pygame.Surface | None:
         if not self.cowboys:
