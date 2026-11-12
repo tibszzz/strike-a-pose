@@ -138,12 +138,18 @@ def text(
     anchor: str = "topleft",
     max_width: int | None = None,
     condense: float = 1.0,
+    alpha: int = 255,
 ) -> pygame.Rect:
     """Blit `value` with `anchor` (any pygame.Rect attribute) at `pos`.
 
-    `condense` < 1 squeezes glyphs horizontally; `max_width` shrinks to fit.
+    `condense` < 1 squeezes glyphs horizontally; `max_width` shrinks to fit;
+    `alpha` < 255 fades the glyphs.
     """
     glyphs = face.render(value, True, color)
+    if alpha < 255:
+        # Scale per-pixel alpha (surface alpha on SRCALPHA can render black on some displays).
+        glyphs = glyphs.convert_alpha() if pygame.display.get_surface() is not None else glyphs
+        glyphs.fill((255, 255, 255, max(0, alpha)), special_flags=pygame.BLEND_RGBA_MULT)
     if condense != 1.0:
         glyphs = pygame.transform.smoothscale(
             glyphs, (max(1, round(glyphs.get_width() * condense)), glyphs.get_height())

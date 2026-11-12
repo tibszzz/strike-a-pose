@@ -26,7 +26,7 @@ class DuelConfig:
 
 @dataclass(frozen=True)
 class ViewConfig:
-    early_float_time: float = 2.0  # seconds for "too early" to drift up the path and vanish
+    early_float_time: float = 3.2  # seconds for "too early" to drift up the path and vanish
     early_fade_start: float = 0.5  # fraction of the trip after which it starts fading
     # Side camera PiPs: body framing windows under the name/hearts band.
     preview_width: float = 0.20  # fraction of canvas width

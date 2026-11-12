@@ -10,6 +10,7 @@ import pygame
 from main.games.duel.game import DuelGame
 from main.games.duel.logic import DuelConfig, Phase
 from main.pose import Person, PoseFrame, PoseState
+from main.ui import paper
 
 from test_duel_logic import FixedRng
 
@@ -87,10 +88,10 @@ def test_preview_placeholder_when_missing():
     game._needs_ready_up = False
     game.now = 0.0
     game.draw(canvas, _frame((None, None)))
-    # inset from border/label: placeholder fill is theme.hint, not the camera RGB
+    # inset from border/label: placeholder fill is faint paper ink, not the camera RGB
     rect = game._preview_rect(0)
-    sample = canvas.get_at((rect.left + 8, rect.top + 8))
-    assert sample[:3] == (140, 140, 140)
+    sample = canvas.get_at((rect.left + 12, rect.top + 12))
+    assert sample[:3] == paper.INK_FAINT
 
 
 def test_replay_screen_cover_blits():

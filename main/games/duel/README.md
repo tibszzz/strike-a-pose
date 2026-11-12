@@ -1,6 +1,6 @@
 # Wild West Duel
 
-Two-player quick-draw. Stand side by side facing the camera. Left half of the screen is Player 1, right half is Player 2. Portrait windows on each side show your body so you can check framing; the center stays the white duel page for the cues.
+Two-player quick-draw. Stand side by side facing the camera. Left half of the screen is Player 1, right half is Player 2. Portrait windows on each side show your body so you can check framing; the center stays the sketch-paper page (same look as the menu) for the cues.
 
 ```sh
 python -m main duel
