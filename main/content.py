@@ -103,6 +103,7 @@ class Duel:
     replay_label = "REPLAY"
     get_ready = "GET READY, PARTNERS"
     lower_gun = "lower your gun"
+    lower_guns = "hands down, wait for READY"
     lower_guns_again = "lower your guns to play again"
     too_early = "too early"
     phase = {
@@ -111,7 +112,6 @@ class Duel:
         "bang": "BANG!",
     }
     result = {
-        "tie": "DEAD EVEN",
         "timeout": "NOBODY FIRED",
         "void": "BOTH TOO EARLY",
     }
@@ -123,7 +123,7 @@ class Duel:
         "On BANG, draw: point either arm straight out sideways at shoulder height",
         "Fastest draw shoots the other player, who loses a heart",
         "Draw before BANG and you're too early: you can't shoot that round",
-        "Nobody draws within {draw_timeout} seconds, or it's too close to call: no one is hit",
+        "Nobody draws within {draw_timeout} seconds: no one is hit",
         "Everyone has {lives} hearts. Lose them all and your opponent wins",
     )
     early_messages = (

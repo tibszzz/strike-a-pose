@@ -12,10 +12,10 @@ def test_gesture_nav_hold_default_is_half_second():
 def test_from_env_overrides_only_set_fields(monkeypatch):
     monkeypatch.setenv("LIVES", "5")
     monkeypatch.setenv("DRAW_TIMEOUT", "2.25")
-    monkeypatch.setenv("TIE_WINDOW", "")  # blank = default
+    monkeypatch.setenv("SETTLE_TIME", "")  # blank = default
     cfg = from_env(DuelConfig)
     assert cfg.lives == 5 and cfg.draw_timeout == 2.25
-    assert cfg.tie_window == DuelConfig().tie_window
+    assert cfg.settle_time == DuelConfig().settle_time
 
 
 def test_from_env_gesture_config(monkeypatch):

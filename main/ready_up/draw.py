@@ -63,6 +63,7 @@ def draw_ready_up(
             Hint(widgets.FIST_BADGE, copy.start_heading),
         ),
         dim=() if ready.can_start else (1,),
+        backing=170,  # over live camera: see-through wash so the ink reads
     )
 
 

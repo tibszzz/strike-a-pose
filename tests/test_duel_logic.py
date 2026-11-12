@@ -22,6 +22,7 @@ class Sim:
     """Drives a Duel at 30 fps with scripted pose states."""
 
     def __init__(self, bang_delay=2.0, **cfg):
+        cfg.setdefault("start_delay", 0.0)
         self.duel = Duel(DuelConfig(**cfg), FixedRng(bang_delay))
         self.t = 0.0
         self.events = []
@@ -140,14 +141,7 @@ def test_faster_draw_wins_point_and_reaction_time():
     assert s.duel.phase == Phase.ROUND_OVER
 
 
-def test_hit_skips_replay_for_tie_and_timeout():
-    s = Sim()
-    s.to_bang()
-    s.step(H, H, frames=6)
-    s.step(D, D, frames=5)
-    assert s.duel.last_result.reason == "tie"
-    assert s.duel.phase == Phase.ROUND_OVER
-
+def test_timeout_skips_replay():
     s = Sim()
     s.to_bang()
     s.step(H, H, frames=int(3.0 / DT) + 2)
@@ -155,22 +149,29 @@ def test_hit_skips_replay_for_tie_and_timeout():
     assert s.duel.phase == Phase.ROUND_OVER
 
 
-def test_simultaneous_draw_is_tie():
-    s = Sim()
-    s.to_bang()
-    s.step(H, H, frames=6)
-    s.step(D, D, frames=5)
-    assert s.duel.last_result.reason == "tie"
-    assert s.duel.scores == [0, 0]
+def test_same_frame_draw_is_never_a_tie():
+    winners = set()
+    for seed in range(20):
+        s = Sim()
+        s.duel.rng.seed(seed)
+        s.to_bang()
+        s.step(H, H, frames=6)
+        s.step(D, D, frames=5)
+        r = s.duel.last_result
+        assert r.reason == "hit" and r.winner in (0, 1)
+        assert sum(s.duel.scores) == 1
+        assert s.duel.phase == Phase.REPLAY
+        winners.add(r.winner)
+    assert winners == {0, 1}  # coin flip, not a fixed side
 
 
-def test_one_frame_apart_is_tie_two_frames_is_not():
+def test_one_frame_faster_wins():
     s = Sim()
     s.to_bang()
     s.step(H, H, frames=6)
     s.step(D, H)
     s.step(D, D, frames=5)
-    assert s.duel.last_result.reason == "tie"
+    assert s.duel.last_result.winner == 0
 
     s = Sim()
     s.to_bang()
@@ -312,3 +313,34 @@ def test_replay_duration_uses_speed_and_freeze():
     first = min(t for t in s.duel.draw_time if t is not None)
     expected = (first - bang) / 0.25 + 1.0
     assert s.duel.replay_until - s.duel.phase_start == pytest.approx(expected, abs=DT)
+
+
+def test_start_delay_ignores_poses_then_starts():
+    """The ready-up fist (arm still up) during the countdown is not an early draw."""
+    s = Sim(start_delay=5.0)
+    s.request_start()
+    assert s.duel.phase == Phase.INTRO
+    assert ("ready", None) not in s.events
+    s.step(D, D, frames=int(4.9 / DT))  # arms up the whole countdown
+    assert s.duel.phase == Phase.INTRO
+    assert s.duel.intro_left(s.t) > 0
+    s.step(H, H, frames=6)
+    assert s.duel.phase == Phase.READY
+    assert ("ready", None) in s.events
+    assert ("early", 0) not in s.events and ("early", 1) not in s.events
+    assert s.duel.early == [False, False]
+
+
+def test_start_delay_also_applies_to_rematch():
+    s = Sim(start_delay=5.0, lives=1, round_result_time=0.1, match_result_min_time=0.1)
+    s.request_start()
+    s.step(H, H, frames=int(5.0 / DT) + 2)
+    s.run_until(Phase.BANG, H, H)
+    s.step(H, H, frames=6)
+    s.step(D, H, frames=5)
+    s.finish_replay()
+    s.run_until(Phase.MATCH_OVER, H, H)
+    s.step(H, H, frames=10)
+    assert s.duel.can_restart(s.t)
+    s.request_start()
+    assert s.duel.phase == Phase.INTRO

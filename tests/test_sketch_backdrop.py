@@ -91,7 +91,7 @@ def test_keypoint_jitter_is_smoothed_between_frames():
     assert 0 < dx < 6  # moved toward the new spot, but not all the way
 
 
-def test_faded_hint_bar_is_paper_not_black():
+def test_faded_hint_bar_is_see_through_not_black():
     from main.ui import paper, widgets
     from main.ui.paper import Frame
     from main.ui.widgets import Hint
@@ -104,4 +104,26 @@ def test_faded_hint_bar_is_paper_not_black():
     widgets.draw_hint_bar(surface, frame, rect, hints, scale=0.68, alpha=150)
     px = pygame.surfarray.array3d(surface)[rect.x + 4 : rect.right - 4, rect.y + 8 : rect.bottom - 8]
     assert (px.sum(axis=2) < 150).mean() < 0.02  # almost no near-black pixels
-    assert abs(px.reshape(-1, 3).mean(axis=0) - np.array(paper.PAPER)).max() < 30
+    # Sharpie outline only: the backdrop (white here) shows through, no paper fill.
+    assert abs(px.reshape(-1, 3).mean(axis=0) - np.array((255, 255, 255))).max() < 30
+
+
+def test_hint_stack_is_see_through_with_optional_backing():
+    from main.ui import widgets
+    from main.ui.paper import Frame
+    from main.ui.sketch import SKETCH_PAPER
+    from main.ui.widgets import Hint
+
+    frame = Frame(640, 480)
+    hints = (Hint(None, "Point"),)
+    black = np.array((0, 0, 0))
+    for backing in (0, 170):
+        surface = pygame.Surface((640, 480))
+        surface.fill((0, 0, 0))  # stand-in for a dark camera frame
+        (rect,) = widgets.draw_hint_stack(surface, frame, hints, backing=backing)
+        px = pygame.surfarray.array3d(surface)[rect.right - 12, rect.centery].astype(int)
+        if backing == 0:
+            assert abs(px - black).max() < 10  # clear: the backdrop shows through
+        else:
+            mixed = np.array(SKETCH_PAPER) * 170 / 255
+            assert abs(px - mixed).max() < 12  # translucent wash, not solid paper
