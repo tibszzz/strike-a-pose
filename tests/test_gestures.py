@@ -101,7 +101,7 @@ def test_raised_hand_wrist_is_raised():
     assert not is_wrist_raised(p, "left")
 
 
-def test_wrist_between_elbow_and_hip_counts_as_raised():
-    # Above hip even if still below the elbow.
+def test_wrist_between_elbow_and_hip_is_not_raised():
+    # Hands-on-hips / waist: above hip but still below the elbow.
     p = person({KP.R_ELBOW: (250, 200), KP.R_WRIST: (250, 280)})
-    assert is_wrist_raised(p, "right")
+    assert not is_wrist_raised(p, "right")
