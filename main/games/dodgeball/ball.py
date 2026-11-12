@@ -4,30 +4,10 @@ import random
 import pygame
 
 from main import styles
-from main.settings import ASSETS
-
+from . import sketches
 from .collision import build_body, point_in_polygon, point_segment_distance, swept_circle_hits
 
 ORANGE = styles.DODGEBALL.ball_medium
-
-# Sprite per pace (set by the game from the ball's speed each frame).
-_SPRITES = {
-    "slow": ASSETS / "sprites" / "slow.png",
-    "medium": ASSETS / "sprites" / "medium.png",
-    "fast": ASSETS / "sprites" / "fast.png",
-}
-_sprite_cache: dict[tuple[str, int], pygame.Surface] = {}
-
-
-def _sprite(pace: str, size: int) -> pygame.Surface:
-    key = (pace, size)
-    if key not in _sprite_cache:
-        img = pygame.image.load(str(_SPRITES[pace]))
-        if pygame.display.get_surface() is not None:
-            img = img.convert_alpha()
-        _sprite_cache[key] = pygame.transform.smoothscale(img, (size, size))
-    return _sprite_cache[key]
-
 
 class Ball:
   """Ball that bounces around the screen randomly."""
@@ -53,7 +33,8 @@ class Ball:
       self.vy = 0.0
       self.reset_velocity()
       self.color = color if color is not None else ORANGE
-      self.pace = "medium"  # "slow" | "medium" | "fast": picks the sprite
+      self.pace = "medium"  # "slow" | "medium" | "fast": picks the sketch colour
+      self.spin = 0.0  # degrees; the seams turn as the ball travels
   
   def reset_velocity(self) -> None:
       """Give the ball a random initial velocity."""
@@ -67,6 +48,10 @@ class Ball:
       self.prev_x, self.prev_y = self.x, self.y
       self.x += self.vx
       self.y += self.vy
+      # Spin with travel, in the direction it's heading sideways (kept slow so it
+      # never strobes at top speed).
+      travel = math.hypot(self.vx, self.vy)
+      self.spin = (self.spin - math.copysign(1.0, self.vx or 1.0) * math.degrees(travel / max(1.0, self.radius)) * 0.2) % 360
       
       # Clamp speed
       speed = math.sqrt(self.vx**2 + self.vy**2)
@@ -149,6 +134,6 @@ class Ball:
       return point_segment_distance(point, line_p1, line_p2)
 
   def draw(self, canvas: pygame.Surface) -> None:
-      """Draw the ball as the sprite for its current pace."""
-      sprite = _sprite(self.pace, int(self.radius) * 2 + 8)
-      canvas.blit(sprite, sprite.get_rect(center=(int(self.x), int(self.y))))
+      """Draw the hand-drawn ball for its current pace, with speed lines when quick."""
+      size = int(self.radius) * 2 + 16  # room for the marker outline around the ball
+      sketches.draw_ball(canvas, (self.x, self.y), size, self.pace, self.spin, (self.vx, self.vy))

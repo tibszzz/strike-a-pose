@@ -49,7 +49,7 @@ class HowToPlay:
         "dodgeball": (
             "Dodgeball",
             (
-                ("Join in", "Thumbs up to play, down to sit out."),
+                ("Join in", "Thumbs up to play."),
                 ("Dodge!", "Lean, duck or step aside."),
                 ("Stay in view", "{lives} lives. Last one wins."),
             ),

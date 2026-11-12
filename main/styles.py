@@ -307,4 +307,5 @@ DODGEBALL = BRAND.with_overrides(
     ball_fast=(255, 80, 80),
     ball_medium=(255, 165, 0),
     ball_slow=(255, 255, 100),
+    font=paper.HAND_FONT,
 )
