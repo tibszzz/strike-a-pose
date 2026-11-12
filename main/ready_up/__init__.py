@@ -4,7 +4,6 @@ from .draw import draw_ready_up
 from .labels import draw_checkmark, draw_player_label, head_anchor
 from .logic import (
     CLOSED_FIST,
-    THUMB_DOWN,
     THUMB_UP,
     Candidate,
     ReadyUp,
@@ -16,7 +15,6 @@ from .logic import (
 
 __all__ = [
     "CLOSED_FIST",
-    "THUMB_DOWN",
     "THUMB_UP",
     "Candidate",
     "ReadyUp",
