@@ -56,6 +56,11 @@ def play_round(game, started_at, strike):
     return game.step(snapshot_time, frame=FRAME, people=strike(countdown.target))
 
 
+def _results_idle_at(game, snapshot_at: float) -> float:
+    cfg = game._config
+    return snapshot_at + cfg.results_hold_s + cfg.results_reveal_s
+
+
 def advance_results(game, snapshot_at, player_count=None, confirm=True):
     """Wait out the results score reveal, then optionally confirm.
 
@@ -65,7 +70,7 @@ def advance_results(game, snapshot_at, player_count=None, confirm=True):
     screen = game.step(snapshot_at)
     assert isinstance(screen, ResultsScreen)
     assert not screen.idle
-    idle_at = snapshot_at + game._config.results_reveal_s
+    idle_at = _results_idle_at(game, snapshot_at)
     screen = game.step(idle_at)
     assert isinstance(screen, ResultsScreen)
     assert screen.idle
@@ -337,10 +342,10 @@ def test_snapshot_fires_once_at_5_seconds():
     assert isinstance(later, ResultsScreen)
     assert later.snapshot is results.snapshot
     assert not later.idle
-    idle = game.step(5.0 + game._config.results_reveal_s)
+    idle = game.step(_results_idle_at(game, 5.0))
     assert isinstance(idle, ResultsScreen)
     assert idle.idle
-    assert game.step(7.0).snapshot is results.snapshot
+    assert game.step(8.0).snapshot is results.snapshot
     assert len(of_type(events, SnapshotTaken)) == 1
     assert len(of_type(events, RoundScored)) == 1
 
@@ -364,20 +369,20 @@ def test_results_stay_busy_until_reveal_locks_then_accept_confirm():
     )
     assert not results.idle
     assert len(results.players) == 2
-    reveal_s = game._config.results_reveal_s
+    idle_at = _results_idle_at(game, COUNTDOWN)
 
-    still_busy = game.step(COUNTDOWN + reveal_s - 0.01, confirm=True)
+    still_busy = game.step(idle_at - 0.01, confirm=True)
     assert isinstance(still_busy, ResultsScreen)
     assert not still_busy.idle
     assert still_busy.snapshot is results.snapshot
 
     # Lock frame ignores confirm (no skip / no same-frame advance).
-    idle = game.step(COUNTDOWN + reveal_s, confirm=True)
+    idle = game.step(idle_at, confirm=True)
     assert isinstance(idle, ResultsScreen)
     assert idle.idle
     assert idle.display_scores == tuple(p.round_score for p in idle.players)
 
-    final = game.step(COUNTDOWN + reveal_s + 0.01, confirm=True)
+    final = game.step(idle_at + 0.01, confirm=True)
     assert isinstance(final, FinalScreen)
 
 
@@ -616,8 +621,29 @@ def test_dodgeball_countdown_reuses_strike_timer_look():
 # --- results score reveal ----------------------------------------------------
 
 
+def test_results_hold_before_scramble_then_drumroll_ticks():
+    game, events = new_game(results_hold_s=0.5, results_reveal_s=2.0, results_reveal_hz=10.0)
+    start_game(game)
+    results = play_round(game, 0.0, everyone_perfect(2))
+    assert isinstance(results, ResultsScreen)
+    assert results.holding
+    assert of_type(events, ScoreRevealTick) == []
+
+    still_holding = game.step(COUNTDOWN + 0.49)
+    assert isinstance(still_holding, ResultsScreen)
+    assert still_holding.holding
+    assert of_type(events, ScoreRevealTick) == []
+
+    revealing = game.step(COUNTDOWN + 0.5)
+    assert isinstance(revealing, ResultsScreen)
+    assert not revealing.holding
+    assert len(of_type(events, ScoreRevealTick)) == 1
+
+
 def test_results_scramble_excludes_finals_until_lock():
-    game, events = new_game(results_reveal_s=2.0, results_reveal_hz=10.0)
+    game, events = new_game(
+        results_hold_s=0.0, results_reveal_s=2.0, results_reveal_hz=10.0
+    )
     start_game(game)
     results = play_round(game, 0.0, everyone_perfect(2))
     assert isinstance(results, ResultsScreen)
@@ -638,7 +664,7 @@ def test_results_scramble_excludes_finals_until_lock():
     for shown, final in zip(mid.display_scores, finals, strict=True):
         assert shown != final
 
-    locked = game.step(COUNTDOWN + game._config.results_reveal_s)
+    locked = game.step(_results_idle_at(game, COUNTDOWN))
     assert isinstance(locked, ResultsScreen)
     assert locked.idle
     assert locked.display_scores == finals
@@ -646,7 +672,9 @@ def test_results_scramble_excludes_finals_until_lock():
 
 
 def test_results_reveal_emits_ticks_at_flash_rate():
-    game, events = new_game(results_reveal_s=0.5, results_reveal_hz=10.0)
+    game, events = new_game(
+        results_hold_s=0.0, results_reveal_s=0.5, results_reveal_hz=10.0
+    )
     start_game(game)
     play_round(game, 0.0, everyone_perfect(2))
     # Snapshot already emitted flash 0; step each new 0.1s flash boundary.

@@ -502,6 +502,21 @@ def _compose_results(screen: ResultsScreen) -> np.ndarray:
     ):
         color = player_color(player.player)
         draw_skeleton(canvas, player.joints, transform, color)
+        if screen.holding:
+            # Post-snapshot beat: skeletons only; scores wait for the drumroll.
+            head_x, head_y = _head_anchor_xy(player.joints, player.box, transform)
+            _, label_y = _results_score_stack_baselines(head_y)
+            draw_text(
+                canvas,
+                player_name(player.player),
+                head_x,
+                label_y,
+                PLAYER_LABEL_SCALE,
+                color,
+                "center",
+                outline=True,
+            )
+            continue
         _draw_results_player_stack(
             canvas,
             player.player,

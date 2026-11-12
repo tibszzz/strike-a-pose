@@ -70,6 +70,7 @@ class ResultsScreen:
     players: tuple[PlayerResult, ...]
     display_scores: tuple[int, ...]  # parallel to players; scrambled until lock
     idle: bool  # True once the score reveal locks and thumbs-up can advance
+    holding: bool = False  # True during the post-snapshot beat before scramble
 
 
 @dataclass(frozen=True)

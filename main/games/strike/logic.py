@@ -302,16 +302,16 @@ class Game:
 
         self._phase = _Phase.RESULTS
         self._results_at = now
-        self._last_reveal_flash = 0
-        display_scores = self._roll_display_scores(scored)
+        self._last_reveal_flash = -1
         self._results = ResultsScreen(
             round_number=self._round_number,
             total_rounds=self._config.rounds,
             target=self._target,
             snapshot=_copy_snapshot(frame),
             players=scored,
-            display_scores=display_scores,
+            display_scores=tuple(0 for _ in scored),
             idle=False,
+            holding=True,
         )
         self._emit(
             RoundScored(
@@ -320,7 +320,8 @@ class Game:
                 totals=tuple(self._totals),
             )
         )
-        self._emit(ScoreRevealTick(scores=display_scores))
+        # Score scramble / drumroll wait for results_hold_s; kick off if hold is 0.
+        self._advance_score_reveal(now)
         return self._results
 
     # --- results, final ------------------------------------------------------
@@ -343,23 +344,32 @@ class Game:
     def _advance_score_reveal(self, now: float) -> None:
         assert self._results is not None
         elapsed = now - self._results_at
-        if elapsed >= self._config.results_reveal_s:
+        hold = self._config.results_hold_s
+        if elapsed < hold:
+            return
+        reveal_elapsed = elapsed - hold
+        if reveal_elapsed >= self._config.results_reveal_s:
             finals = tuple(player.round_score for player in self._results.players)
             self._results = replace(
-                self._results, display_scores=finals, idle=True
+                self._results,
+                display_scores=finals,
+                idle=True,
+                holding=False,
             )
             self._emit(ScoreRevealLocked(scores=finals))
             return
 
         # Epsilon keeps exact 1/hz boundaries from flooring down (e.g. 0.1*10).
         flash_index = math.floor(
-            elapsed * self._config.results_reveal_hz + 1e-9
+            reveal_elapsed * self._config.results_reveal_hz + 1e-9
         )
         if flash_index == self._last_reveal_flash:
             return
         self._last_reveal_flash = flash_index
         display_scores = self._roll_display_scores(self._results.players)
-        self._results = replace(self._results, display_scores=display_scores)
+        self._results = replace(
+            self._results, display_scores=display_scores, holding=False
+        )
         self._emit(ScoreRevealTick(scores=display_scores))
 
     def _roll_display_scores(self, players: Sequence[PlayerResult]) -> tuple[int, ...]:
