@@ -203,7 +203,7 @@ class Dodgeball:
     restarting = "Game restarting..."
     out_label = "OUT"
     ready_how_to = (
-        "Thumbs up to ready · thumbs down to cancel",
+        "Thumbs up to ready · leave the frame to cancel",
         "Hold a closed fist when enough players are ready to start",
         "Dodge the ball on the live feed — each hit costs a life",
         "Last player standing wins (solo: survive as long as you can)",

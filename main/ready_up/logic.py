@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Iterable, Protocol, Sequence
 
 THUMB_UP = "Thumb_Up"
-THUMB_DOWN = "Thumb_Down"
 CLOSED_FIST = "Closed_Fist"
 
 
@@ -38,6 +37,7 @@ class Candidate:
     ready: bool = False
     gesture: str | None = None
     hold_frames: int = 0
+    hold_miss: int = 0  # consecutive frames without the held thumb (grace budget)
     fist_hold_frames: int = 0
     missing: int = 0
     id: int = field(default=0)
@@ -61,6 +61,8 @@ class ReadyUpConfig:
     how_to_lines: tuple[str, ...]
     pose_stills: tuple[Path, ...] = ()
     hold_frames: int = 8
+    # Tolerate detector flicker so a one-frame Thumb_Up dropout does not wipe hold.
+    hold_grace_frames: int = 6  # ~0.2s at 30fps (matches shell hold_grace_s)
     fist_hold_frames: int = 15  # ~0.5s at 30fps
     forget_frames: int = 30
     min_score: float = 0.5
@@ -122,7 +124,7 @@ class ReadyUp:
         people: Sequence[_Person],
         hands: Iterable[_Hand] = (),
     ) -> Started | None:
-        """Track people, apply thumb ready toggles and fist-to-start. Once per start."""
+        """Track people, apply thumbs-up ready and fist-to-start. Once per start."""
         if self.started is not None:
             return None
         self._track(people)
@@ -130,21 +132,29 @@ class ReadyUp:
         thumbs, fists = self._gestures_by_candidate(hands)
         for c in self.candidates:
             if not c.visible:
-                c.gesture, c.hold_frames = None, 0
+                c.gesture, c.hold_frames, c.hold_miss = None, 0, 0
                 c.fist_hold_frames = 0
                 c.ready = False
                 continue
             label = thumbs.get(c.id)
-            if label is None or label != c.gesture:
-                c.gesture, c.hold_frames = label, (1 if label else 0)
+            if label is None:
+                if c.gesture is not None and c.hold_frames > 0:
+                    c.hold_miss += 1
+                    if c.hold_miss > self.config.hold_grace_frames:
+                        c.gesture, c.hold_frames, c.hold_miss = None, 0, 0
+                else:
+                    c.gesture, c.hold_frames, c.hold_miss = None, 0, 0
+            elif label != c.gesture:
+                c.gesture, c.hold_frames, c.hold_miss = label, 1, 0
             else:
                 c.hold_frames += 1
+                c.hold_miss = 0
             if (
                 c in self.eligible
-                and c.gesture
+                and c.gesture == THUMB_UP
                 and c.hold_frames >= self.config.hold_frames
             ):
-                self._apply_thumb(c, c.gesture)
+                c.ready = True
 
             if c in self.eligible and c.ready and c.id in fists:
                 c.fist_hold_frames += 1
@@ -163,12 +173,6 @@ class ReadyUp:
         )
         self.started = Started(roster=roster)
         return self.started
-
-    def _apply_thumb(self, c: Candidate, label: str) -> None:
-        if label == THUMB_UP:
-            c.ready = True
-        elif label == THUMB_DOWN:
-            c.ready = False
 
     def _enforce_eligibility(self) -> None:
         eligible_ids = {c.id for c in self.eligible}
@@ -228,23 +232,43 @@ class ReadyUp:
     def hold_progress(self, c: Candidate, label: str) -> float | None:
         """0..1 progress of the hold `label` is driving for `c`, or None if it does nothing.
 
-        Thumbs up (not yet ready) / thumbs down (ready) fill toward toggling ready;
-        a closed fist from a ready player fills toward starting the match.
+        Thumbs up (not yet ready) fills toward ready; a closed fist from a ready
+        player fills toward starting the match when the lobby can start.
         """
         if c not in self.eligible:
             return None
         cfg = self.config
-        if (label == THUMB_UP and not c.ready) or (label == THUMB_DOWN and c.ready):
-            held = c.hold_frames if c.gesture == label else 0
+        if label == THUMB_UP and not c.ready:
+            held = c.hold_frames if c.gesture == THUMB_UP else 0
             return min(1.0, held / max(1, cfg.hold_frames))
         if label == CLOSED_FIST and c.ready and self.can_start:
             return min(1.0, c.fist_hold_frames / max(1, cfg.fist_hold_frames))
         return None
 
+    def actionable_holds(
+        self, hands: Iterable[_Hand]
+    ) -> list[tuple[tuple[float, float], str, float]]:
+        """Per-hand fist badges to draw: (center, label, progress).
+
+        Every Closed_Fist on a ready player when the lobby can start. Thumbs-up
+        ready has no hold badge (P-marker colour is the ready signal).
+        """
+        out: list[tuple[tuple[float, float], str, float]] = []
+        for hand in hands:
+            if hand.score < self.config.min_score or hand.label != CLOSED_FIST:
+                continue
+            owner = self.hand_owner(hand)
+            if owner is None:
+                continue
+            progress = self.hold_progress(owner, CLOSED_FIST)
+            if progress is not None:
+                out.append((hand.center, CLOSED_FIST, progress))
+        return out
+
     def _gestures_by_candidate(
         self, hands: Iterable[_Hand]
     ) -> tuple[dict[int, str], set[int]]:
-        """Thumb label per candidate, and which candidate ids show Closed_Fist."""
+        """Thumb_Up label per candidate, and which candidate ids show Closed_Fist."""
         best_thumb: dict[int, tuple[float, str]] = {}
         fists: set[int] = set()
         for hand in hands:
@@ -253,7 +277,7 @@ class ReadyUp:
             owner = self.hand_owner(hand)
             if owner is None:
                 continue
-            if hand.label in (THUMB_UP, THUMB_DOWN):
+            if hand.label == THUMB_UP:
                 if owner.id not in best_thumb or hand.score > best_thumb[owner.id][0]:
                     best_thumb[owner.id] = (hand.score, hand.label)
             elif hand.label == CLOSED_FIST:

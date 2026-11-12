@@ -4,7 +4,8 @@ Live camera (drawn by the game) with a FIFA-style marker over each player:
 "P1" above a down-pointing triangle, grey while waiting and filled with the
 player's color once they give a thumbs up. Two stacked torn-paper hints
 bottom-left: "Thumbs up to join" and "Fist to start" (faded until enough
-players are ready).
+players are ready). Actionable fist holds draw a menu-style paper badge + ring
+at the hand.
 """
 
 from __future__ import annotations
@@ -23,7 +24,6 @@ copy = content.ReadyUp
 
 WAITING = (226, 218, 196)  # paper-ish grey for not-yet-ready markers
 
-
 def draw_ready_up(
     canvas: pygame.Surface,
     ready: ReadyUp,
@@ -33,7 +33,8 @@ def draw_ready_up(
 ) -> None:
     """Full-bleed camera assumed already on canvas; draw player markers + stacked hints.
 
-    "Fist to start" stays faded until enough players are ready.
+    "Fist to start" stays faded until enough players are ready. Fist hold badges
+    use `snap.hands` when present.
     """
     w, h = canvas.get_size()
     frame = Frame(w, h)
@@ -65,6 +66,10 @@ def draw_ready_up(
         dim=() if ready.can_start else (1,),
         backing=170,  # over live camera: see-through wash so the ink reads
     )
+
+    hands = getattr(snap, "hands", ()) if snap is not None else ()
+    for center, _label, progress in ready.actionable_holds(hands):
+        widgets.draw_hold_badge(canvas, frame, widgets.FIST_ICON, progress, at=center)
 
 
 def draw_player_marker(
@@ -105,4 +110,3 @@ def draw_player_marker(
         width=max(2, frame.px(3)),
         alpha=alpha,
     )
-

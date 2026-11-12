@@ -311,32 +311,19 @@ def draw_step_card(
     paper.text(surface, sub, paper.hand(frame, 27), INK_SOFT, (rect.centerx, caption_y + frame.px(4)), "midtop", max_width=rect.width - frame.px(30))
 
 
-# --- pointer cursor ----------------------------------------------------------------
+# --- pointer cursor / hold badge --------------------------------------------------
 
 
-def draw_cursor(
+def draw_hold_badge(
     surface: pygame.Surface,
     frame: Frame,
-    snap: object | None,
+    icon: Path,
     progress: float,
     *,
-    at: tuple[float, float] | None,
+    at: tuple[float, float],
 ) -> None:
-    """Open palm: white hand icon at `at`. Fist (or a hold in progress): paper badge + hold ring.
-
-    `at` is the page's smoothed cursor (`main.nav.cursor.HandCursor`); None draws nothing.
-    """
-    point = at
-    if point is None:
-        return
-    label = getattr(snap, "label", None)
-    x, y = round(point[0]), round(point[1])
-    if label != "Closed_Fist" and progress <= 0:
-        box = pygame.Rect(0, 0, frame.px(62), frame.px(66))
-        box.center = (x, y)
-        paper.blit_art(surface, PALM_CURSOR, box)
-        return
-
+    """Paper disc + clockwise hold ring + centre glyph (menu cursor / ready-up hands)."""
+    x, y = round(at[0]), round(at[1])
     r = frame.px(46)
     shadow = pygame.Surface((r * 2 + 8, r * 2 + 8), pygame.SRCALPHA)
     pygame.draw.circle(shadow, (0, 0, 0, 90), (r + 6, r + 7), r)
@@ -352,6 +339,30 @@ def draw_cursor(
         start = end - math.tau * min(1.0, progress)
         arc = pygame.Rect(x - r, y - r, r * 2, r * 2)
         pygame.draw.arc(surface, paper.HOLD_RING, arc, start, end, ring_w)
-    icon = pygame.Rect(0, 0, round(r * 1.15), round(r * 1.15))
-    icon.center = (x, y)
-    paper.blit_art(surface, FIST_ICON, icon)
+    glyph = pygame.Rect(0, 0, round(r * 1.15), round(r * 1.15))
+    glyph.center = (x, y)
+    paper.blit_art(surface, icon, glyph)
+
+
+def draw_cursor(
+    surface: pygame.Surface,
+    frame: Frame,
+    snap: object | None,
+    progress: float,
+    *,
+    at: tuple[float, float] | None,
+) -> None:
+    """Open palm: white hand icon at `at`. Fist (or a hold in progress): paper badge + hold ring.
+
+    `at` is the page's smoothed cursor (`main.nav.cursor.HandCursor`); None draws nothing.
+    """
+    if at is None:
+        return
+    label = getattr(snap, "label", None)
+    if label != "Closed_Fist" and progress <= 0:
+        box = pygame.Rect(0, 0, frame.px(62), frame.px(66))
+        box.center = (round(at[0]), round(at[1]))
+        paper.blit_art(surface, PALM_CURSOR, box)
+        return
+    draw_hold_badge(surface, frame, FIST_ICON, progress, at=at)
+

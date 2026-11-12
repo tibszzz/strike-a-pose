@@ -97,7 +97,8 @@ Nothing is selected when a page opens, so a fist does nothing until you hover.
 
 On a game's ready-up screen, each player gets a "P1"/"P2"… triangle above
 their head: grey while waiting, filled with their colour after a thumbs up
-(thumbs down sits out). Any ready player holds a fist to start. Two stacked hints
+(leave the frame to cancel). Any ready player holds a fist to start. While a
+fist hold counts, a paper badge + ring appears on that hand. Two stacked hints
 bottom-left read "Thumbs up to join" and "Fist to start"; the second stays
 faded until enough players are ready.
 

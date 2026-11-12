@@ -6,7 +6,6 @@ from dataclasses import dataclass
 
 from main.ready_up.logic import (
     CLOSED_FIST,
-    THUMB_DOWN,
     THUMB_UP,
     ReadyUp,
     ReadyUpConfig,
@@ -65,13 +64,13 @@ def test_leftmost_max_are_eligible_extras_ignored():
     assert [c.center_x for c in ready.eligible] == [100.0, 300.0]
 
 
-def test_thumb_up_then_down_toggles_ready():
+def test_thumb_up_sets_ready_and_thumb_down_is_ignored():
     ready = ReadyUp(1000, cfg(min_players=1, max_players=2))
     p = person(200, "solo")
     hold_thumb(ready, [p], THUMB_UP, 200)
     assert ready.ready_count == 1
-    hold_thumb(ready, [p], THUMB_DOWN, 200)
-    assert ready.ready_count == 0
+    hold_thumb(ready, [p], "Thumb_Down", 200)
+    assert ready.ready_count == 1
 
 
 def test_cannot_start_below_min_ready():
@@ -149,7 +148,48 @@ def test_hold_progress_fills_toward_ready_then_stops_counting():
     hold_thumb(ready, [p], THUMB_UP, 200, frames=3)
     assert c.ready
     assert ready.hold_progress(c, THUMB_UP) is None  # already ready: nothing to fill
-    assert ready.hold_progress(c, THUMB_DOWN) == 0.0  # would un-ready
+    assert ready.hold_progress(c, "Thumb_Down") is None
+
+
+def test_actionable_holds_lists_fist_only_at_hand_centers():
+    ready = ReadyUp(1000, cfg(min_players=1, max_players=2, hold_frames=4, fist_hold_frames=4))
+    p = person(200)
+    thumb = hand_at(THUMB_UP, 200, 180)
+    ready.update([p], [thumb])
+    assert ready.actionable_holds([thumb]) == []
+    hold_thumb(ready, [p], THUMB_UP, 200, frames=3)
+    fist = hand_at(CLOSED_FIST, 210, 190)
+    ready.update([p], [fist])
+    assert ready.actionable_holds([fist]) == [((210.0, 190.0), CLOSED_FIST, 0.25)]
+
+
+
+def test_thumb_hold_survives_brief_detector_dropout():
+    """One-frame Thumb_Up miss must not wipe a nearly complete ready hold."""
+    ready = ReadyUp(
+        1000, cfg(min_players=1, max_players=2, hold_frames=10, hold_grace_frames=2)
+    )
+    p = person(200)
+    hold_thumb(ready, [p], THUMB_UP, 200, frames=8)
+    c = ready.candidates[0]
+    assert c.hold_frames == 8 and not c.ready
+    ready.update([p], [])  # detector dropout
+    assert c.gesture == THUMB_UP and c.hold_frames == 8 and c.hold_miss == 1
+    hold_thumb(ready, [p], THUMB_UP, 200, frames=2)
+    assert c.ready
+
+
+def test_thumb_hold_resets_after_grace_exhausted():
+    ready = ReadyUp(
+        1000, cfg(min_players=1, max_players=2, hold_frames=10, hold_grace_frames=1)
+    )
+    p = person(200)
+    hold_thumb(ready, [p], THUMB_UP, 200, frames=5)
+    c = ready.candidates[0]
+    ready.update([p], [])
+    assert c.hold_frames == 5
+    ready.update([p], [])  # grace exhausted
+    assert c.gesture is None and c.hold_frames == 0
 
 
 def test_hold_progress_for_fist_only_when_start_is_possible():
@@ -189,6 +229,39 @@ def test_fist_hint_is_faded_until_enough_players_are_ready(monkeypatch):
     assert calls == [(1,), ()]
 
 
+def test_draw_ready_up_draws_hold_badge_for_actionable_fist(monkeypatch):
+    import pygame
+
+    from main.ready_up import draw as ready_draw
+    from main.styles import SHELL
+
+    badges = []
+    monkeypatch.setattr(
+        ready_draw.widgets,
+        "draw_hold_badge",
+        lambda *a, **kw: badges.append((a[2], a[3], kw["at"])),
+    )
+    monkeypatch.setattr(ready_draw.widgets, "draw_hint_stack", lambda *a, **kw: None)
+    canvas = pygame.Surface((640, 480))
+    ready = ReadyUp(1000, cfg(min_players=1, max_players=2, fist_hold_frames=4))
+    p = person(200)
+    hold_thumb(ready, [p], THUMB_UP, 200)
+    fist = hand_at(CLOSED_FIST, 210, 190)
+    ready.update([p], [fist])
+
+    @dataclass
+    class Snap:
+        hands: tuple
+
+    ready_draw.draw_ready_up(canvas, ready, theme=SHELL, snap=Snap(hands=(fist,)))
+    assert badges == [(ready_draw.widgets.FIST_ICON, 0.25, (210.0, 190.0))]
+
+    badges.clear()
+    thumb = hand_at(THUMB_UP, 200, 180)
+    ready_draw.draw_ready_up(canvas, ready, theme=SHELL, snap=Snap(hands=(thumb,)))
+    assert badges == []
+
+
 def test_draw_ready_up_smoke_with_ready_and_waiting_players():
     import os
 
@@ -204,3 +277,4 @@ def test_draw_ready_up_smoke_with_ready_and_waiting_players():
     ready.update(people, [])
     hold_thumb(ready, people, THUMB_UP, 150)
     draw_ready_up(pygame.Surface((640, 480)), ready, theme=STRIKE)
+

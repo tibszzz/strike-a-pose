@@ -10,10 +10,10 @@ python -m main dodgeball
 
 1. **Rules screen**: the rules are shown over the live camera. Press **SPACE**.
 2. **Who's playing?**: everyone in front of the camera holds up a hand:
-   - 👍 **thumbs up** to play (up to 3 players). Your box gets a colour and a P1/P2/P3 label.
-   - 👎 **thumbs down** to sit out. You're marked OUT and ignored during the game, even if you stay in frame.
-   - Hold the gesture for about a third of a second; a ring fills up while it counts.
-3. Press **SPACE** to start with everyone who gave a thumbs up.
+   - **Thumbs up** to play (up to `max_players`). Your P-marker fills with colour.
+   - Leave the frame to cancel ready.
+   - When enough players are ready, any ready player holds a **fist** to start; a paper badge + ring fills on that hand while it counts.
+3. Debug **SPACE** can force-start when enough are ready.
 
 Gestures are read by MediaPipe's gesture recognizer (`assets/models/gesture_recognizer.task`), only on the "Who's playing?" screen. Each hand counts for the person whose box it is in.
 
