@@ -183,12 +183,24 @@ def art(path: Path, max_w: int, max_h: int) -> pygame.Surface | None:
     return surf
 
 
+_faded: dict[tuple[str, int, int, int], pygame.Surface] = {}
+
+
 def blit_art(
-    surface: pygame.Surface, path: Path, box: pygame.Rect, anchor: str = "center"
+    surface: pygame.Surface, path: Path, box: pygame.Rect, anchor: str = "center", alpha: int = 255
 ) -> pygame.Rect | None:
+    """Blit art fitted into `box`. `alpha` < 255 fades it (per-pixel alpha scaled, cached)."""
     img = art(path, box.width, box.height)
     if img is None:
         return None
+    if alpha < 255:
+        key = (str(path), box.width, box.height, alpha)
+        faded = _faded.get(key)
+        if faded is None:
+            faded = img.convert_alpha() if pygame.display.get_surface() is not None else img.copy()
+            faded.fill((255, 255, 255, alpha), special_flags=pygame.BLEND_RGBA_MULT)
+            _faded[key] = faded
+        img = faded
     rect = img.get_rect(**{anchor: getattr(box, anchor)})
     surface.blit(img, rect)
     return rect
@@ -459,7 +471,8 @@ def outlined_text(
                 out.blit(shade, (w + dx, w + dy))
     out.blit(glyphs, (w, w))
     if alpha < 255:
-        out.set_alpha(alpha)
+        # Scale per-pixel alpha (surface alpha on SRCALPHA can render black on some displays).
+        out.fill((255, 255, 255, alpha), special_flags=pygame.BLEND_RGBA_MULT)
     rect = out.get_rect(**{anchor: (round(pos[0]), round(pos[1]))})
     surface.blit(out, rect)
     return rect

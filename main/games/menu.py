@@ -1,8 +1,9 @@
 """In-process game picker. Implements the shared Game protocol.
 
-Live camera behind a row of notebook-page buttons across the top (one per
-game, then Quit), the brand title bottom-right and faint gesture hints
-bottom-left. Hovering a note (index fingertip) selects it and the selection
+Sketchbook backdrop (players drawn as marker stick figures from the pose
+model, no live video) behind a row of notebook-page buttons across the top
+(one per game, then Quit), the brand title bottom-right and faint gesture hints
+bottom-left. Hovering a note (smoothed palm cursor) selects it and the selection
 sticks after the hand moves away; Closed_Fist held anywhere presses the
 selected note. While a Closed_Fist hold is in
 progress, selection does not switch and a different hand's Closed_Fist is
@@ -28,13 +29,14 @@ from main.nav import (
     Nav,
     QuitApp,
     StartGame,
+    ReleaseGate,
     ThumbHoldTracker,
-    effective_label,
     load_gesture_nav_config,
+    nav_cursor,
 )
 from main.nav.hand_geometry import NAV_GESTURE_HANDS
 from main.pose import PoseFrame
-from main.ui import paper, widgets
+from main.ui import paper, sketch, widgets
 from main.ui.paper import Frame
 from main.ui.widgets import INDEX_FINGERTIP, Hint
 
@@ -71,14 +73,16 @@ class MenuGame:
         self._frame: PoseFrame | None = None
         self.gesture_snapshot: GestureSnapshot | None = None
         cfg = load_gesture_nav_config()
-        self._min_score = cfg.min_score
         self._thumb = ThumbHoldTracker(
             hold_s=cfg.thumb_hold_s,
             min_score=cfg.min_score,
             label="Closed_Fist",
+            grace_s=cfg.hold_grace_s,
         )
-        self._release_first = release_first
-        self._released = not release_first
+        self._release = ReleaseGate(
+            required=release_first, open_s=cfg.release_open_s, min_score=cfg.min_score
+        )
+        self.cursor = nav_cursor(size, config=cfg)
         self._hard_lock: int | None = None
         self._hover: int | None = None
 
@@ -86,8 +90,9 @@ class MenuGame:
         self._pending = None
         self._hard_lock = None
         self._hover = None
-        self._released = not self._release_first
+        self._release.reset()
         self._thumb.reset()
+        self.cursor.reset()
 
     def tile_rects(self) -> list[pygame.Rect]:
         return widgets.note_row_rects(self.frame, self._labels)
@@ -95,13 +100,12 @@ class MenuGame:
     def update(self, frame: PoseFrame) -> None:
         self._frame = frame
         snap = self.gesture_snapshot
-        if not self._released and effective_label(snap, self._min_score) != "Closed_Fist":
-            self._released = True
-        tip = widgets.pointer(snap)
+        released = self._release.update(snap, frame.timestamp)
+        tip = self.cursor.update(snap, frame.timestamp, frame.people)
         rects = self.tile_rects()
 
         self._hover = None
-        if tip is not None:
+        if tip is not None and self.cursor.tracking:
             for i, rect in enumerate(rects):
                 if rect.collidepoint(tip):
                     self._hover = i
@@ -116,17 +120,14 @@ class MenuGame:
             snap,
             frame.timestamp,
             frame_size=(self.w, self.h),
-            armed=self._hard_lock is not None and self._released,
+            armed=self._hard_lock is not None and released,
         ):
             assert self._hard_lock is not None
             self._pending = self._nav_for(self._hard_lock)
 
-    def render_camera(self, image):
-        return image
-
     def draw(self, canvas: pygame.Surface, frame: PoseFrame) -> None:
         f = self.frame
-        paper.shade_video(canvas)
+        sketch.draw_sketch_backdrop(canvas, frame)
 
         for i, (label, rect) in enumerate(zip(self._labels, self.tile_rects())):
             locked = i == self._hard_lock
@@ -166,7 +167,9 @@ class MenuGame:
         )
 
         # Pointer last so it sits above the notes.
-        widgets.draw_cursor(canvas, f, self.gesture_snapshot, self._thumb.progress)
+        widgets.draw_cursor(
+            canvas, f, self.gesture_snapshot, self._thumb.progress, at=self.cursor.position
+        )
 
     def handle_command(self, command: MenuCommand) -> None:
         n = len(self._labels)

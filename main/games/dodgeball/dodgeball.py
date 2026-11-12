@@ -356,7 +356,7 @@ class DodgeballGame:
             return
 
         if self.game_over:
-            choice = self._end.update(self.gesture_snapshot, frame.timestamp)
+            choice = self._end.update(self.gesture_snapshot, frame.timestamp, frame.people)
             if choice is not None:
                 self._apply_end_choice(choice)
             return
@@ -571,6 +571,7 @@ class DodgeballGame:
                 snap=self.gesture_snapshot,
                 title=content.Results.dodgeball_title,
                 body=self._draw_results_body,
+                pose=frame,
             )
             return
 
