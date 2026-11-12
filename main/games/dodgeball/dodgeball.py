@@ -30,7 +30,7 @@ from main.pose.library import left_to_right
 from main.ready_up import ReadyUp, ReadyUpConfig, draw_ready_up
 from main.settings import ASSETS, DodgeballConfig
 from main.ui import paper
-from main.ui.paper import INK_FAINT, MARKER_FONT, PLAYER_INK_DODGEBALL, Frame
+from main.ui.paper import INK_FAINT, MARKER_FONT, Frame
 
 from . import sketches
 from .ball import Ball
@@ -495,7 +495,7 @@ class DodgeballGame:
                 )
                 for i, lives in enumerate(self.lives)
             ],
-            palette=PLAYER_INK_DODGEBALL,
+            palette=paper.PLAYER_INK,
         )
         art_box = pygame.Rect(rows_rect.right + frame.px(40), rect.y, rect.right - rows_rect.right - frame.px(40), rect.height)
         draw_card_art(canvas, ASSETS / "ui" / "how_to_play" / "dodgeball" / "step_2.png", art_box)
@@ -541,7 +541,7 @@ class DodgeballGame:
         for i in range(self.player_count):
             cy = top + i * row_h
             hearts_left = right - hearts_w
-            tag_color = paper.player_ink(i + 1, PLAYER_INK_DODGEBALL) if self.lives[i] > 0 else INK_FAINT
+            tag_color = paper.player_ink(i + 1) if self.lives[i] > 0 else INK_FAINT
             paper.draw_tag(
                 canvas, f"P{i + 1}", self._tag_face, tag_color, (hearts_left - f.px(16), cy), "midright"
             )

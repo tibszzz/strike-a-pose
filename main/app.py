@@ -49,7 +49,7 @@ from .nav import (
 from .pose import SKELETON, PoseFrame
 from .pose.tracker import PoseTracker
 
-PLAYER_COLORS = [(80, 170, 255), (255, 120, 80)]
+PLAYER_COLORS = list(styles.BRAND.player[:2])  # P1 red, P2 blue
 
 KEY_TO_COMMAND = {
     pygame.K_UP: MenuCommand.MOVE_UP,
