@@ -9,12 +9,14 @@ from dataclasses import dataclass
 class DuelConfig:
     lives: int = 3  # hits a player can take; the last one loses the match
     start_hold: float = 1.0  # both visible and not drawing this long to start a round
+    # Countdown after ready-up / rematch before READY. Poses are ignored meanwhile, so the
+    # fist that started the match can't count as an early draw.
+    start_delay: float = 5.0
     ready_to_steady: float = 1.5
     bang_delay_min: float = 1.5  # STEADY -> BANG, uniform random
     bang_delay_max: float = 5.0
     draw_timeout: float = 3.0  # after BANG, no valid draw in this time -> no point
-    tie_window: float = 0.034  # draws this close (about 1 frame at 30 fps) are a tie
-    settle_time: float = 0.15  # after first draw, wait this long for a possible tie
+    settle_time: float = 0.15  # after first draw, wait this long for the other draw to land
     draw_confirm_frames: int = 2
     round_result_time: float = 3.0  # how long the round result is shown
     match_result_min_time: float = 3.0  # winner screen shown at least this long (after the round result)

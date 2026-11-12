@@ -1,9 +1,11 @@
 """Pure duel rules. No camera, no pygame: feed it (timestamp, pose states) per frame.
 
 Round flow:
-  WAIT_START -> (shell ready-up on first entry, or idle hold between rounds) -> READY
+  ready-up / rematch -> INTRO (`start_delay` countdown, poses ignored) -> READY
+  WAIT_START -> (idle hold between rounds) -> READY
   -> STEADY -> BANG -> (hit) REPLAY -> ROUND_OVER -> WAIT_START ...
-  Non-hits (tie / timeout / void) skip REPLAY and go straight to ROUND_OVER.
+  Non-hits (timeout / void) skip REPLAY and go straight to ROUND_OVER. There are no
+  ties: the earlier draw always wins, and draws on the very same frame are a coin flip.
   The hit that takes a player's last life goes REPLAY -> MATCH_OVER, which first shows
   that round's result for `round_result_time`, then the winner. Rematch is owned by the
   shell end-screen (Replay -> ready-up again); `request_start` still clears MATCH_OVER.
@@ -31,6 +33,7 @@ __all__ = [
 
 
 class Phase(Enum):
+    INTRO = "intro"
     WAIT_START = "wait_start"
     READY = "ready"
     STEADY = "steady"
@@ -43,7 +46,7 @@ class Phase(Enum):
 @dataclass(frozen=True)
 class RoundResult:
     winner: int | None
-    reason: str  # "hit" | "tie" | "timeout" | "void"
+    reason: str  # "hit" | "timeout" | "void"
     reaction_ms: tuple[float | None, float | None]
     early: tuple[bool, bool]
 
@@ -118,8 +121,20 @@ class Duel:
             self._match_over_pending = False
         elif self.phase != Phase.WAIT_START:
             return events
+        if self.config.start_delay > 0:
+            # Count down first: the fist that confirmed ready-up is still coming down.
+            self._clear_round()
+            self._idle_since = None
+            self._enter(Phase.INTRO, now)
+            return events
         self._start_round(now, events)
         return events
+
+    def intro_left(self, now: float) -> float:
+        """Seconds left on the pre-match countdown (0 outside INTRO)."""
+        if self.phase != Phase.INTRO:
+            return 0.0
+        return max(0.0, self.config.start_delay - (now - self.phase_start))
 
     # -- per-frame update -------------------------------------------------------------
 
@@ -130,7 +145,12 @@ class Duel:
         present = not any(self.missing)
         cfg = self.config
 
-        if self.phase == Phase.WAIT_START:
+        if self.phase == Phase.INTRO:
+            # Poses are ignored here (no draw tracking, no abort): just wait out the clock.
+            if self.intro_left(now) <= 0:
+                self._start_round(now, events)
+
+        elif self.phase == Phase.WAIT_START:
             # Between rounds (and after abort): both idle for start_hold begins READY.
             # First match entry is gated by the shell ReadyUp, which never calls update
             # until request_start.
@@ -238,14 +258,16 @@ class Duel:
         if drawn:
             first = min(self.draw_time[i] for i in drawn)
             if len(drawn) == len(eligible) or now - first >= cfg.settle_time:
-                if len(drawn) == 2 and abs(self.draw_time[0] - self.draw_time[1]) <= cfg.tie_window:
-                    self._finish(now, None, "tie", events)
-                else:
-                    winner = min(drawn, key=lambda i: self.draw_time[i])
-                    self._finish(now, winner, "hit", events)
+                self._finish(now, self._fastest(drawn), "hit", events)
                 return
         if now - self.bang_time >= cfg.draw_timeout:
             self._finish(now, None, "timeout", events)
+
+    def _fastest(self, drawn: list[int]) -> int:
+        """Earliest draw wins; the same frame (identical timestamps) is a coin flip, never a tie."""
+        if len(drawn) == 2 and self.draw_time[0] == self.draw_time[1]:
+            return 0 if self.rng.random() < 0.5 else 1
+        return min(drawn, key=lambda i: self.draw_time[i])
 
     def _finish(self, now: float, winner: int | None, reason: str, events: list[Event]) -> None:
         reaction = tuple(

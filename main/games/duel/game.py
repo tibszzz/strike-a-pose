@@ -113,7 +113,7 @@ class DuelGame:
         self.frame = Frame(self.w, self.h)
         f = self.frame
         self.cue_face = paper.marker(f, 140)  # READY / STEADY / BANG!
-        self.headline_face = paper.marker(f, 92)  # DEAD EVEN, NOBODY FIRED…
+        self.headline_face = paper.marker(f, 92)  # NOBODY FIRED, BOTH TOO EARLY
         self.shout_face = paper.marker(f, 58)  # GET READY, shot taunt, missing names
         self.replay_face = paper.marker(f, 54)
         self.tag_face = paper.hand(f, 38)  # Player 1 / Player 2 tags
@@ -304,7 +304,7 @@ class DuelGame:
             elif name == "hit":
                 self.shot_msg = self.shot_msgs.pick()
                 self._begin_playback()
-            elif name in ("tie", "timeout", "void"):
+            elif name in ("timeout", "void"):
                 self._clear_replay()
             elif name == "match_over":
                 self.win_msg = self.win_msgs.pick()
@@ -370,6 +370,9 @@ class DuelGame:
         elif d.phase == Phase.WAIT_START:
             self._draw_header(canvas)
             self._draw_waiting(canvas)
+        elif d.phase == Phase.INTRO:
+            self._draw_header(canvas)
+            self._draw_intro(canvas)
         else:
             self._draw_header(canvas)
             if d.phase in (Phase.READY, Phase.STEADY, Phase.BANG):
@@ -498,6 +501,12 @@ class DuelGame:
             if state == PoseState.DRAWN:
                 paper.text(canvas, copy.lower_gun, self.note_face, INK_SOFT, (self._side_x(i), 0.877 * self.h), "center")
 
+    def _draw_intro(self, canvas):
+        """GET READY while the start fist comes down (no visible countdown)."""
+        mid = self.w / 2
+        paper.text(canvas, copy.get_ready, self.shout_face, INK, (mid, 0.47 * self.h), "center", max_width=self._mid_width())
+        paper.text(canvas, copy.lower_guns, self.note_face, INK_SOFT, (mid, 0.56 * self.h), "center", max_width=self._mid_width())
+
     def _draw_result(self, canvas):
         r = self.duel.last_result
         if r is not None and r.reason == "hit":
@@ -512,9 +521,9 @@ class DuelGame:
                 self.shot_msg.upper(),
                 self.shout_face,
                 theme.bg,
-                (self._side_x(1 - r.winner), self.h / 2),
+                (self._half_center(1 - r.winner), self.h / 2),
                 "center",
-                max_width=self._half_width(1 - r.winner),
+                max_width=self.w // 2 - self.frame.px(80),
             )
         else:
             headline = copy.result[r.reason]
@@ -579,11 +588,9 @@ class DuelGame:
         """Centre line of player `i`'s side: the middle of their preview window."""
         return float(self._preview_rect(i).centerx)
 
-    def _half_width(self, i: int) -> int:
-        """Widest text centred on `_side_x(i)` that stays inside that player's half."""
-        cx = self._side_x(i)
-        lo, hi = (0, self.w / 2) if i == 0 else (self.w / 2, self.w)
-        return max(1, round(2 * min(cx - lo, hi - cx)) - self.frame.px(40))
+    def _half_center(self, i: int) -> float:
+        """Middle of player `i`'s half of the screen (where the red wash goes)."""
+        return self.w * (0.25 if i == 0 else 0.75)
 
     def _mid_width(self) -> int:
         """Room for centre text between the two preview windows."""
