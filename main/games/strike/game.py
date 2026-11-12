@@ -268,11 +268,15 @@ COUNTDOWN_TARGET_HEIGHT = 130
 COUNTDOWN_TARGET_WIDTH = 200
 COUNTDOWN_HOLD_SECONDS = 1.5
 COUNTDOWN_EASE_SECONDS = 0.5
-TIMER_OPACITY = 0.65
-TIMER_CENTER_SCALE = 16.0
-TIMER_VISIBLE_AT_SECONDS = 3
-TIMER_BLINK_SECONDS = 0.06
-TIMER_FADE_SECONDS = 0.28
+# Big-digit countdown look lives in main.countdown (Dodgeball reuses it).
+from main.countdown import (  # noqa: E402
+    TIMER_BLINK_SECONDS,
+    TIMER_CENTER_SCALE,
+    TIMER_FADE_SECONDS,
+    TIMER_OPACITY,
+    TIMER_VISIBLE_AT_SECONDS,
+    timer_opacity as _countdown_timer_opacity,
+)
 
 
 def _header(canvas: np.ndarray, text: str, *, show_esc: bool = True) -> None:
@@ -331,18 +335,6 @@ def _countdown_timer_style(seconds_left: int) -> tuple[int, int, float]:
         _baseline_for_vertical_center(text, CANVAS_HEIGHT // 2, TIMER_CENTER_SCALE),
         TIMER_CENTER_SCALE,
     )
-
-
-def _countdown_timer_opacity(seconds_left: int, digit_age: float) -> float | None:
-    """Hide until 3s; each new digit blinks off briefly then fades in."""
-    if seconds_left > TIMER_VISIBLE_AT_SECONDS or seconds_left <= 0:
-        return None
-    if digit_age < TIMER_BLINK_SECONDS:
-        return 0.0
-    fade_t = (digit_age - TIMER_BLINK_SECONDS) / TIMER_FADE_SECONDS
-    if fade_t >= 1.0:
-        return TIMER_OPACITY
-    return TIMER_OPACITY * _ease_out(max(0.0, min(1.0, fade_t)))
 
 
 def _draw_translucent_text(

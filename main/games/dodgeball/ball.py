@@ -6,6 +6,8 @@ import pygame
 from main import styles
 from main.settings import ASSETS
 
+from .collision import build_body, point_in_polygon, point_segment_distance, swept_circle_hits
+
 ORANGE = styles.DODGEBALL.ball_medium
 
 # Sprite per pace (set by the game from the ball's speed each frame).
@@ -41,6 +43,9 @@ class Ball:
   ):
       self.x = x
       self.y = y
+      # Where the ball was before the last move: collisions sweep prev -> current.
+      self.prev_x = x
+      self.prev_y = y
       self.radius = radius
       self.max_speed = max_speed
       self.elasticity = elasticity
@@ -59,6 +64,7 @@ class Ball:
   
   def move(self) -> None:
       """Update ball position."""
+      self.prev_x, self.prev_y = self.x, self.y
       self.x += self.vx
       self.y += self.vy
       
@@ -114,84 +120,34 @@ class Ball:
       return hit_wall
   
   def check_collision(self, person) -> tuple[bool, list | None]:
-      """Check if ball collides with person's body shape (keypoints polygon).
-      
+      """Does the ball touch this person's body (head, torso, limbs)?
+
+      Uses only confident keypoints and sweeps the ball from last frame's
+      position, so a fast ball cannot pass through a thin limb between frames.
+
       Returns:
-          Tuple of (collision: bool, body_polygon_points: list | None)
+          (collision, body points): the confident keypoints, whose centre the
+          game uses to bounce the ball away; None when nobody was given.
       """
       if person is None:
           return False, None
-      
-      # Get all keypoints from the person
-      keypoints = person.xy
-      
-      # Create a polygon from the keypoints for more accurate collision
-      # Use all 17 COCO keypoints to form the body shape
-      body_polygon = []
-      for i in range(len(keypoints)):
-          x, y = float(keypoints[i, 0]), float(keypoints[i, 1])
-          body_polygon.append((x, y))
-      
-      # Check if ball center is inside the polygon
-      if self._point_in_polygon((self.x, self.y), body_polygon):
-          return True, body_polygon
-      
-      # Also check if ball is close to any edge of the polygon
-      # This gives a little buffer space
-      for i in range(len(body_polygon)):
-          p1 = body_polygon[i]
-          p2 = body_polygon[(i + 1) % len(body_polygon)]
-          if self._point_to_line_distance((self.x, self.y), p1, p2) < self.radius:
-              return True, body_polygon
-      
-      return False, body_polygon
-  
+      body = build_body(person.xy, getattr(person, "conf", None), tuple(person.box))
+      hit = swept_circle_hits((self.prev_x, self.prev_y), (self.x, self.y), self.radius, body)
+      return hit, list(body.points)
+
   def _point_in_polygon(self, point: tuple[float, float], polygon: list[tuple[float, float]]) -> bool:
-      """Check if a point is inside a polygon using ray casting algorithm."""
-      x, y = point
-      n = len(polygon)
-      inside = False
-      p1x, p1y = polygon[0]
-      for i in range(n + 1):
-          p2x, p2y = polygon[i % n]
-          if y > min(p1y, p2y):
-              if y <= max(p1y, p2y):
-                  if x <= max(p1x, p2x):
-                      if p1y != p2y:
-                          xinters = (y - p1y) * (p2x - p1x) / (p2y - p1y) + p1x
-                      if p1x == p2x or x <= xinters:
-                          inside = not inside
-          p1x, p1y = p2x, p2y
-      return inside
-  
-  def _point_to_line_distance(self, point: tuple[float, float], line_p1: tuple[float, float], line_p2: tuple[float, float]) -> float:
-      """Calculate distance from point to line segment."""
-      x, y = point
-      x1, y1 = line_p1
-      x2, y2 = line_p2
-      
-      # Calculate the line equation: ax + by + c = 0
-      a = y2 - y1
-      b = x1 - x2
-      c = x2 * y1 - x1 * y2
-      
-      # Distance from point to infinite line
-      distance = abs(a * x + b * y + c) / math.sqrt(a * a + b * b)
-      
-      # Check if the closest point on the line is within the segment
-      # Project point onto line
-      dot = ((x - x1) * (x2 - x1) + (y - y1) * (y2 - y1)) / ((x2 - x1) ** 2 + (y2 - y1) ** 2)
-      
-      if dot < 0:
-          # Closest to p1
-          return math.sqrt((x - x1) ** 2 + (y - y1) ** 2)
-      elif dot > 1:
-          # Closest to p2
-          return math.sqrt((x - x2) ** 2 + (y - y2) ** 2)
-      else:
-          # Closest to line segment
-          return distance
-  
+      """Check if a point is inside a polygon (even-odd ray cast)."""
+      return point_in_polygon(point, polygon)
+
+  def _point_to_line_distance(
+      self,
+      point: tuple[float, float],
+      line_p1: tuple[float, float],
+      line_p2: tuple[float, float],
+  ) -> float:
+      """Distance from a point to a line segment (safe when both ends coincide)."""
+      return point_segment_distance(point, line_p1, line_p2)
+
   def draw(self, canvas: pygame.Surface) -> None:
       """Draw the ball as the sprite for its current pace."""
       sprite = _sprite(self.pace, int(self.radius) * 2 + 8)

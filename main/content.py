@@ -159,7 +159,7 @@ class Dodgeball:
         "Dodge the ball bouncing around the live feed",
         "Everyone starts with {lives} lives (hearts, top-right)",
         "Ball touches your body: lose a life and the round pauses",
-        "Press R to resume. No lives left and you're out",
+        "The game restarts by itself after a hit. No lives left and you're out",
         "Leave the screen for {offscreen_seconds} seconds: lose a life",
         "Last player standing wins. Solo: survive as long as you can",
         "NOTE: Red ball = fast, orange = medium, yellow = slow",

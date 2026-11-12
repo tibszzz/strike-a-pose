@@ -8,6 +8,8 @@ import random
 import pygame
 
 from main import audio, content, styles
+from main.countdown import TIMER_VISIBLE_AT_SECONDS, draw_countdown_digit
+from main.games.strike.screens import CountdownTick
 from main.end_screen import EndChoice, EndScreen, draw_end_screen
 from main.nav import MenuCommand, StartGame
 from main.nav.hand_geometry import NAV_GESTURE_HANDS
@@ -34,6 +36,8 @@ PLAYER_COLORS = list(theme.player)
 MIN_PLAYERS = _cfg.min_players
 MAX_PLAYERS = _cfg.max_players
 FPS = _cfg.fps
+COUNTDOWN_SECONDS = 3  # before the ball launches at match start
+HIT_RESTART_SECONDS = 5  # after a hit the round restarts by itself (3, 2, 1 shown)
 LIVES = _cfg.lives
 OFFSCREEN_SECONDS = int(_cfg.offscreen_seconds)
 OFFSCREEN_FRAMES = _cfg.offscreen_frames
@@ -155,6 +159,8 @@ class DodgeballGame:
         self.paused = False
         self.hit_registered: list[bool] = []
         self.countdown = 0
+        self._countdown_total = COUNTDOWN_SECONDS
+        self._last_tick: int | None = None
 
         self.hit_message = ""
         self.hit_message_timer = 0
@@ -208,26 +214,50 @@ class DodgeballGame:
         self._begin_round(tick=False)
         self.hit_message = copy.get_ready
 
-    def _begin_round(self, tick: bool = True) -> None:
-        if tick:
-            audio.play(self.sounds["tick"])  # "5" of the restart countdown
+    def _begin_round(self, seconds: int = COUNTDOWN_SECONDS, tick: bool = True) -> None:
+        """New ball, then a `seconds` countdown before it launches."""
         self.paused = False
-        self.countdown = 5 * FPS
+        self.countdown = seconds * FPS
+        self._countdown_total = seconds
+        # tick=False: the caller's own sound stands in for the first digit.
+        self._last_tick = None if tick else self._countdown_digit()[0]
+        self._emit_countdown_tick()
         self.hit_registered = [False] * self.player_count
         self.missing_frames = [0] * self.player_count
         self.hit_message_timer = 0
         self._start_ball()
 
+    def _countdown_digit(self) -> tuple[int, float]:
+        """(seconds_left, digit_age), computed exactly like Strike's round countdown."""
+        remaining = self.countdown / FPS
+        # Capped so rounding can never show one more than the countdown length.
+        seconds_left = min(math.ceil(remaining), math.ceil(self._countdown_total))
+        return seconds_left, max(0.0, seconds_left - remaining)
+
+    def _emit_countdown_tick(self) -> None:
+        """Strike's CountdownTick: once per new digit; audible for the shown 3, 2, 1."""
+        if self.countdown <= 0:
+            return
+        seconds_left, _ = self._countdown_digit()
+        if seconds_left == self._last_tick:
+            return
+        self._last_tick = seconds_left
+        self._on_countdown_tick(CountdownTick(seconds_left=seconds_left))
+
+    def _on_countdown_tick(self, tick: CountdownTick) -> None:
+        if tick.seconds_left <= TIMER_VISIBLE_AT_SECONDS:
+            audio.play(self.sounds["tick"])
+
     def reset(self) -> None:
-        """R key: clear ready-up choices, rematch into ready-up, or resume mid-match."""
+        """R key: clear ready-up choices, or rematch into ready-up after game over.
+
+        Mid-match it does nothing: after a hit the round restarts by itself.
+        """
         if self.in_lobby:
             self.ready_up.reset()
             return
         if self.game_over:
             self._enter_ready_up()
-            return
-        self.hit_message = copy.restarting
-        self._begin_round()
 
     def _enter_ready_up(self) -> None:
         self.in_lobby = True
@@ -332,8 +362,8 @@ class DodgeballGame:
             self.countdown -= 1
             if self.countdown == 0:
                 audio.play(self.sounds["go"])  # ball launches next frame
-            elif self.countdown % FPS == 0:
-                audio.play(self.sounds["tick"])  # 4, 3, 2, 1
+            else:
+                self._emit_countdown_tick()
             return
 
         self.ball.move()
@@ -355,31 +385,6 @@ class DodgeballGame:
                     self._lose_life(player_idx, "HIT!")
                     audio.play(self.sounds["hit"])
                     self.hit_registered[player_idx] = True
-
-                    if body_polygon:
-                        polygon_center_x = sum(p[0] for p in body_polygon) / len(body_polygon)
-                        polygon_center_y = sum(p[1] for p in body_polygon) / len(body_polygon)
-                    else:
-                        polygon_center_x = self.w / 2
-                        polygon_center_y = self.h / 2
-
-                    dx = self.ball.x - polygon_center_x
-                    dy = self.ball.y - polygon_center_y
-                    dist = math.sqrt(dx * dx + dy * dy)
-
-                    if dist < 1:
-                        angle = random.uniform(0, 2 * math.pi)
-                        self.ball.vx = math.cos(angle) * 15
-                        self.ball.vy = math.sin(angle) * 15
-                        self.ball.x = polygon_center_x + math.cos(angle) * (self.ball.radius + 30)
-                        self.ball.y = polygon_center_y + math.sin(angle) * (self.ball.radius + 30)
-                    else:
-                        self.ball.vx = (dx / dist) * 15
-                        self.ball.vy = (dy / dist) * 15
-                        push_dist = self.ball.radius + 30
-                        self.ball.x = polygon_center_x + (dx / dist) * push_dist
-                        self.ball.y = polygon_center_y + (dy / dist) * push_dist
-
                     break
 
         if not self.paused:
@@ -398,8 +403,12 @@ class DodgeballGame:
         was_over = self.game_over
         self.hit_message = self._hit_message(player_idx, reason)
         self.hit_message_timer = 0
+        if not self.game_over:
+            # Fresh ball and an automatic restart; the hit message stays up meanwhile.
+            self._begin_round(seconds=HIT_RESTART_SECONDS)
+            return
         self.paused = True
-        if self.game_over and not was_over:
+        if not was_over:
             alive = [i for i, lives in enumerate(self.lives) if lives > 0]
             has_winner = self.player_count > 1 and len(alive) == 1
             # Sting first; a winner then gets the fanfare queued right after it.
@@ -430,8 +439,8 @@ class DodgeballGame:
             winner = f"P{alive[0] + 1} WINS!" if alive else "Nobody wins!"
             return winner
         if self.lives[player_idx] == 0:
-            return f"{name} is OUT! Press R to resume"
-        return f"{name} {reason} Press R to resume"
+            return f"{name} is OUT!"
+        return f"{name} {reason}"
 
     def handle_key(self, key: int) -> None:
         if not self.in_lobby:
@@ -525,7 +534,8 @@ class DodgeballGame:
                 canvas,
                 self.hit_message,
                 self.w // 2,
-                self.h // 2 - 100 if not self.game_over else int(self.h * 0.22),
+                # Above the big countdown digit while it shows; else just above centre.
+                int(self.h * 0.22) if self.game_over or self.countdown > 0 else self.h // 2 - 100,
                 scale=1.4,
                 color=RED,
                 align="center",
@@ -543,17 +553,9 @@ class DodgeballGame:
             return
 
         if self.countdown > 0:
-            countdown_sec = (self.countdown + 29) // 30
-            draw_text(
-                canvas,
-                f"Starting in {countdown_sec}...",
-                self.w // 2,
-                self.h // 2,
-                scale=1.5,
-                color=YELLOW,
-                align="center",
-                outline=True,
-            )
+            # Strike's round timer: same digit maths, font, size, blink and fade.
+            seconds_left, digit_age = self._countdown_digit()
+            draw_countdown_digit(canvas, seconds_left, digit_age, face=styles.STRIKE.font)
 
         self._draw_lives(canvas)
 

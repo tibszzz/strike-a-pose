@@ -1,0 +1,114 @@
+"""Dodgeball's pre-launch countdown: 3 seconds, Strike's digit look."""
+
+from __future__ import annotations
+
+import numpy as np
+import pytest
+
+pytest.importorskip("pygame")
+
+from main.games.dodgeball import dodgeball as d
+from main.pose import PoseFrame
+
+
+def _frame() -> PoseFrame:
+    return PoseFrame(np.zeros((480, 640, 3), np.uint8), 0.0, (None, None), [])
+
+
+def _record_sounds(monkeypatch, game) -> list[str]:
+    played: list[str] = []
+    names = {id(s): n for n, s in game.sounds.items()}
+    monkeypatch.setattr(d.audio, "play", lambda s: played.append(names.get(id(s), "?")))
+    return played
+
+
+def _run_countdown(game) -> int:
+    frames = 0
+    while game.countdown > 0:
+        game.update(_frame())
+        frames += 1
+    return frames
+
+
+def test_match_start_countdown_is_three_seconds(monkeypatch):
+    game = d.DodgeballGame((640, 480))
+    played = _record_sounds(monkeypatch, game)
+    game.start(1)
+    assert game.countdown == 3 * d.FPS
+    assert _run_countdown(game) == 3 * d.FPS
+    assert played == ["match_start", "tick", "tick", "go"]  # jingle stands in for "3"
+
+
+def test_hit_restarts_by_itself_after_five_seconds(monkeypatch):
+    game = d.DodgeballGame((640, 480))
+    game.start(1)
+    _run_countdown(game)
+    played = _record_sounds(monkeypatch, game)
+
+    game._lose_life(0, "HIT!")
+
+    assert not game.paused  # no waiting for R or a gesture
+    assert game.countdown == 5 * d.FPS
+    assert game.hit_message == "P1 HIT!"
+    assert _run_countdown(game) == 5 * d.FPS
+    assert played == ["tick", "tick", "tick", "go"]  # only the visible 3, 2, 1
+    assert game.lives == [d.LIVES - 1]
+
+
+def test_r_does_nothing_mid_match():
+    game = d.DodgeballGame((640, 480))
+    game.start(1)
+    _run_countdown(game)
+    game._lose_life(0, "HIT!")
+    before = game.countdown
+    game.reset()
+    assert game.countdown == before and not game.in_lobby
+
+
+def test_last_life_still_ends_the_match_and_waits_there():
+    game = d.DodgeballGame((640, 480))
+    game.start(1)
+    _run_countdown(game)
+    game.lives = [1]
+    game._lose_life(0, "HIT!")
+    assert game.game_over and game.paused
+    assert game.countdown == 0
+
+
+def test_countdown_draws_the_shared_digit(monkeypatch):
+    calls = []
+    monkeypatch.setattr(d, "draw_countdown_digit", lambda canvas, n, age, **kw: calls.append((n, round(age, 3), kw)))
+    import pygame
+
+    game = d.DodgeballGame((640, 480))
+    game.start(1)
+    game.countdown = int(2.5 * d.FPS)
+    game.draw(pygame.Surface((640, 480)), _frame())
+    assert calls and calls[0][0] == 3
+    assert calls[0][1] == pytest.approx(0.5, abs=0.05)
+    assert calls[0][2]["face"] == d.styles.STRIKE.font
+
+
+def test_countdown_emits_strike_countdown_ticks_once_per_digit(monkeypatch):
+    from main.games.strike.screens import CountdownTick
+
+    game = d.DodgeballGame((640, 480))
+    game.start(1)
+    _run_countdown(game)
+    ticks: list[CountdownTick] = []
+    monkeypatch.setattr(game, "_on_countdown_tick", ticks.append)
+
+    game._lose_life(0, "HIT!")  # 5-second automatic restart
+    _run_countdown(game)
+
+    assert ticks == [CountdownTick(seconds_left=n) for n in (5, 4, 3, 2, 1)]
+
+
+def test_countdown_digit_matches_strike_maths():
+    game = d.DodgeballGame((640, 480))
+    game.start(1)
+    game.countdown = 3 * d.FPS
+    assert game._countdown_digit() == (3, 0.0)  # never shows "4"
+    game.countdown = int(2.5 * d.FPS)
+    seconds_left, age = game._countdown_digit()
+    assert seconds_left == 3 and age == pytest.approx(0.5)

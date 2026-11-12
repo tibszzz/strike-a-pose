@@ -590,3 +590,11 @@ def test_too_few_poses_for_the_rounds_is_refused():
     poses = load_library(Config().poses_dir)[:4]
     with pytest.raises(ValueError, match="5 different poses"):
         Game(Config(), poses)
+
+
+def test_dodgeball_countdown_reuses_strike_timer_look():
+    import main.countdown as shared
+    from main.games.strike import game as strike_view
+
+    assert strike_view._countdown_timer_opacity is shared.timer_opacity
+    assert strike_view.TIMER_CENTER_SCALE == shared.TIMER_CENTER_SCALE == 16.0
