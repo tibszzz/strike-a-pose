@@ -76,3 +76,17 @@ def test_thumb_hold_ignores_other_hand_until_release():
 
     assert tracker.update(near, 2.4, frame_size=(640, 480)) is False
     assert tracker.update(near, 2.9, frame_size=(640, 480)) is True
+
+
+def test_release_gate_needs_the_hand_open_for_a_moment():
+    from main.nav import GestureSnapshot, ReleaseGate
+
+    fist = GestureSnapshot(label="Closed_Fist", score=1.0)
+    gate = ReleaseGate(required=True, open_s=0.12)
+    assert not gate.update(fist, 1.0)
+    assert not gate.update(None, 1.05)  # one-frame flicker
+    assert not gate.update(fist, 1.1)
+    assert not gate.update(None, 1.2)
+    assert gate.update(None, 1.35)
+    assert gate.update(fist, 1.4)  # stays released
+    assert ReleaseGate(required=False).released

@@ -240,7 +240,7 @@ class StrikeGame:
             return
 
         if self._in_end_screen():
-            choice = self._end.update(self.gesture_snapshot, frame.timestamp)
+            choice = self._end.update(self.gesture_snapshot, frame.timestamp, frame.people)
             if choice is not None:
                 self._apply_end_choice(choice)
             return
@@ -302,6 +302,7 @@ class StrikeGame:
                 snap=self.gesture_snapshot,
                 title=content.Results.strike_title,
                 body=self._draw_final_body,
+                pose=frame,
             )
 
     def _draw_final_body(self, canvas: pygame.Surface, rect: pygame.Rect, frame) -> None:

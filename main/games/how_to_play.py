@@ -6,12 +6,11 @@ selects it (the selection sticks after the cursor leaves); Closed_Fist held
 anywhere then presses it. Nothing is selected when the page opens, so a fist
 does nothing until a button has been hovered.
 
-The cursor is mouse-like: it starts parked at the centre of the screen and
-follows the hand's *movement* (not its absolute spot), re-anchoring whenever
-the hand is lost. A fist carried over from the menu pick therefore can't land
-on a button, and must open once before any new hold counts. Pushing the
-cursor against a screen edge drags its offset, so the hand never runs out of
-room.
+The cursor maps the hand exactly like the main menu's (`main.nav.cursor.
+HandCursor`: palm centre, body-sized reach zone, smoothed), so it carries on
+from where it was on the menu instead of jumping. The fist that picked the
+game can't press anything here: the hand must open (`ReleaseGate`) before a
+new hold counts.
 
 Art lives in `assets/ui/how_to_play/<game id>/step_{1,2,3}.png` + `info.png`;
 swap the files to restyle without code changes.
@@ -30,13 +29,14 @@ from main.nav import (
     MenuCommand,
     Nav,
     StartGame,
+    ReleaseGate,
     ThumbHoldTracker,
-    effective_label,
     load_gesture_nav_config,
+    nav_cursor,
 )
 from main.nav.hand_geometry import NAV_GESTURE_HANDS
 from main.pose import PoseFrame
-from main.ui import paper, widgets
+from main.ui import paper, sketch, widgets
 from main.ui.paper import UI, Frame
 from main.ui.widgets import Hint
 
@@ -102,16 +102,18 @@ class HowToPlayGame:
         self.title = self.guide.title
         self.gesture_snapshot: GestureSnapshot | None = None
         cfg = load_gesture_nav_config()
-        self._min_score = cfg.min_score
         self._thumb = ThumbHoldTracker(
-            hold_s=cfg.thumb_hold_s, min_score=cfg.min_score, label="Closed_Fist"
+            hold_s=cfg.thumb_hold_s,
+            min_score=cfg.min_score,
+            label="Closed_Fist",
+            grace_s=cfg.hold_grace_s,
         )
-        self._release_first = release_first
-        self._released = not release_first
-        self._lock: int | None = None  # button under the cursor
+        self._release = ReleaseGate(
+            required=release_first, open_s=cfg.release_open_s, min_score=cfg.min_score
+        )
+        self._lock: int | None = None  # selected button (sticky)
         self._pending: Nav | None = None
-        self._cursor: tuple[float, float] = (self.w / 2, self.h / 2)
-        self._offset: tuple[float, float] | None = None  # cursor - fingertip
+        self.pointer = nav_cursor(size, config=cfg)  # same mapping as the menu: no jump
 
     # -- layout ----------------------------------------------------------------
 
@@ -124,29 +126,27 @@ class HowToPlayGame:
         return [f.rect(964, 84, 1232, 188), f.rect(1254, 90, 1428, 184)]
 
     @property
-    def cursor(self) -> tuple[float, float]:
-        return self._cursor
+    def cursor(self) -> tuple[float, float] | None:
+        """Cursor in canvas px, or None while no hand is around."""
+        return self.pointer.position
 
     # -- Game protocol -----------------------------------------------------------
 
     def reset(self) -> None:
         self._thumb.reset()
-        self._released = not self._release_first
+        self._release.reset()
         self._lock = None
         self._pending = None
-        self._cursor = (self.w / 2, self.h / 2)
-        self._offset = None
+        self.pointer.reset()
 
     def update(self, frame: PoseFrame) -> None:
         snap = self.gesture_snapshot
-        if not self._released and effective_label(snap, self._min_score) != "Closed_Fist":
-            self._released = True
-
-        hand = self._track_cursor(snap)
-        if hand and not self._thumb.active:
+        released = self._release.update(snap, frame.timestamp)
+        cursor = self.pointer.update(snap, frame.timestamp, frame.people)
+        if cursor is not None and self.pointer.tracking and not self._thumb.active:
             # Hover selects; the selection sticks when the cursor leaves the button.
             for i, rect in enumerate(self.button_rects()):
-                if rect.collidepoint(self._cursor) and self._lock != i:
+                if rect.collidepoint(cursor) and self._lock != i:
                     self._lock = i
                     self._thumb.reset()
                     break
@@ -155,14 +155,14 @@ class HowToPlayGame:
             snap,
             frame.timestamp,
             frame_size=(self.w, self.h),
-            armed=self._released and self._lock is not None,
+            armed=released and self._lock is not None,
         ):
             assert self._lock is not None
             self._confirm(self._lock)
 
     def draw(self, canvas: pygame.Surface, frame: PoseFrame) -> None:
         f = self.frame
-        paper.draw_backdrop(canvas)
+        sketch.draw_sketch_backdrop(canvas, frame)
         widgets.draw_title_strip(canvas, f, self.guide.title, seed=sum(map(ord, self.game_id)))
 
         art_dir = ART / self.game_id
@@ -191,7 +191,7 @@ class HowToPlayGame:
                 progress=self._thumb.progress if self._lock == idx else 0.0,
             )
 
-        widgets.draw_cursor(canvas, f, self.gesture_snapshot, self._thumb.progress, at=self._cursor)
+        widgets.draw_cursor(canvas, f, self.gesture_snapshot, self._thumb.progress, at=self.cursor)
 
     def handle_command(self, command: MenuCommand) -> None:
         """Debug keyboard: arrows pick a button, Enter confirms (Let's go! if none), Back → menu."""
@@ -213,21 +213,6 @@ class HowToPlayGame:
         return [f"how-to {self.game_id} → {target}", f"gesture {label}"]
 
     # -- helpers -------------------------------------------------------------------
-
-    def _track_cursor(self, snap: GestureSnapshot | None) -> bool:
-        """Move the relative cursor with the fingertip. Returns True while a hand is seen."""
-        tip = widgets.pointer(snap)
-        if tip is None:
-            self._offset = None  # hand lost: next sighting re-anchors (like lifting a mouse)
-            return False
-        if self._offset is None:
-            self._offset = (self._cursor[0] - tip[0], self._cursor[1] - tip[1])
-        x = min(max(tip[0] + self._offset[0], 0.0), float(self.w - 1))
-        y = min(max(tip[1] + self._offset[1], 0.0), float(self.h - 1))
-        # Clamped at an edge → the offset follows, so the hand can always reach a button.
-        self._offset = (x - tip[0], y - tip[1])
-        self._cursor = (x, y)
-        return True
 
     def _confirm(self, idx: int) -> None:
         self._pending = StartGame(None) if idx == BACK else StartGame(self.game_id)

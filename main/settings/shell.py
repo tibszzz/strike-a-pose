@@ -32,6 +32,20 @@ class GestureNavConfig:
     raise_lift_frac: float = 0.08  # wrist must clear elbow by this × torso length
     raise_match_frac: float = 0.35  # max hand↔raised-wrist distance as × person-box height
     thumb_hold_s: float = 0.5  # seconds confirm gesture must be held on splash / menu
+    # Menu / how-to / results hand cursor (main.nav.cursor).
+    # Reach zone around the hand owner's shoulders, in torso lengths, mapped onto
+    # the screen — so reach is the same near or far from the camera.
+    reach_body: int = 1  # 0 = always use the fixed gains below
+    reach_half_w: float = 0.9  # left / right of the shoulders
+    reach_top: float = 1.1  # above the shoulder line (top of screen)
+    reach_bottom: float = 0.3  # below the shoulder line (bottom of screen)
+    cursor_gain: float = 1.3  # no body matched: menu + results offset from centre × gain
+    cursor_rel_gain: float = 1.8  # no body matched: how-to hand movement × gain
+    cursor_grace_s: float = 0.35  # keep the cursor through hand dropouts this short
+    cursor_min_cutoff: float = 1.0  # One-Euro Hz; lower = steadier when still
+    cursor_beta: float = 0.02  # One-Euro speed term; higher = less lag when moving
+    hold_grace_s: float = 0.2  # fist hold survives label flickers this short
+    release_open_s: float = 0.12  # a carried-in fist must open this long to count
 
 
 def load_gesture_nav_config() -> GestureNavConfig:

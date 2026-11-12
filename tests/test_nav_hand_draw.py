@@ -100,7 +100,7 @@ def test_menu_draw_passes_hold_progress_to_paper_cursor(monkeypatch):
     pygame.init()
     calls: list[tuple] = []
 
-    def fake_draw(surf, frame, snap, progress):
+    def fake_draw(surf, frame, snap, progress, *, at):
         calls.append((snap, progress))
 
     monkeypatch.setattr("main.ui.widgets.draw_cursor", fake_draw)
