@@ -14,6 +14,7 @@ import pygame
 
 from . import paper
 from .paper import DESIGN_H, DESIGN_W, INK, INK_SOFT, UI, Frame, PaperStyle
+from .sketch import SKETCH_PAPER
 
 ICONS = UI / "icons"
 PALM_ICON = ICONS / "palm.png"
@@ -172,19 +173,21 @@ def draw_hint_bar(
 ) -> None:
     """Bottom strip: [icon heading / sub] | [icon heading / sub].
 
-    `scale` shrinks icons + type; `alpha` < 255 fades the icons and text (the
-    paper stays solid so the backdrop doesn't show through).
+    Drawn as a Sharpie outline straight on the sketch sheet (no paper fill) so
+    it reads as information, not as another paper-note button. `scale` shrinks
+    icons + type; `alpha` < 255 fades the outline, icons and text.
     """
-    paper.draw_paper(surface, rect, frame, PaperStyle(torn="tb", jag=6), seed=seed)
-    if not hints:
-        return
-    # Fade by mixing ink toward the paper and scaling icon alpha, rather than
-    # blitting a translucent layer (surface alpha on a per-pixel-alpha layer
-    # renders as solid black on some display formats).
+    # Fade by mixing ink toward the sketch sheet and scaling icon alpha, rather
+    # than blitting a translucent layer (surface alpha on a per-pixel-alpha
+    # layer renders as solid black on some display formats).
     a = max(0, min(255, alpha))
 
     def ink(color: paper.Rgb) -> paper.Rgb:
-        return tuple(round(p + (c - p) * a / 255) for c, p in zip(color, paper.PAPER))  # type: ignore[return-value]
+        return _fade(color, a, SKETCH_PAPER)
+
+    paper.draw_marker_box(surface, rect, frame, ink(INK), seed=seed)
+    if not hints:
+        return
 
     slot_w = rect.width / len(hints)
     icon_box = frame.px(62 * scale)
@@ -223,13 +226,19 @@ def draw_hint_stack(
     alpha: int = 255,
     dim: Sequence[int] = (),
     seed: int = 21,
+    backing: int = 0,
 ) -> list[pygame.Rect]:
-    """Hints as separate torn-paper strips stacked upward from (left, bottom), design px.
+    """Hints stacked upward from (left, bottom), design px, each in a black Sharpie box.
 
+    No paper fill, so hints don't look like the paper-note buttons. `backing`
+    (0–255) lays a see-through sketch-paper wash inside each box so the ink
+    still reads over live camera (ready-up); 0 leaves it clear (menu).
     Icon + heading only (no sub line); every strip gets the widest strip's
     width so they line up. `dim` lists hint indexes drawn faded (e.g. "Fist to
     start" before enough players are ready). Returns the strip rects, top first.
     """
+    ground = SKETCH_PAPER
+    gap += 10  # outlines overshoot their corners; keep neighbours apart
     if not hints:
         return []
     face = paper.hand(frame, text_size)
@@ -242,23 +251,32 @@ def draw_hint_stack(
     for i in range(len(hints) - 1, -1, -1):
         hint = hints[i]
         rect = frame.rect(left, y - height, left + width, y)
-        paper.draw_paper(surface, rect, frame, PaperStyle(torn="tb", jag=5), seed=seed + i)
         a = alpha if i not in dim else round(alpha * 0.4)
+        if backing > 0:
+            _wash(surface, rect, ground, backing)
+        paper.draw_marker_box(surface, rect, frame, _fade(INK, a, ground), seed=seed + i)
         x = rect.x + frame.px(pad_x)
         if hint.icon is not None:
             box = pygame.Rect(x, rect.centery - frame.px(icon_size) // 2, frame.px(icon_size), frame.px(icon_size))
             paper.blit_art(surface, hint.icon, box, alpha=a)
             x = box.right + frame.px(icon_gap)
-        paper.text(surface, hint.heading, face, _fade(INK, a), (x, rect.centery + frame.px(2)), "midleft")
+        paper.text(surface, hint.heading, face, _fade(INK, a, ground), (x, rect.centery + frame.px(2)), "midleft")
         rects.insert(0, rect)
         y -= height + gap
     return rects
 
 
-def _fade(color: paper.Rgb, alpha: int) -> paper.Rgb:
-    """Ink mixed toward the paper color: `alpha` 255 = full ink, 0 = invisible on paper."""
+def _wash(surface: pygame.Surface, rect: pygame.Rect, color: paper.Rgb, alpha: int) -> None:
+    """See-through fill (per-pixel alpha: surface alpha can render black on some displays)."""
+    layer = pygame.Surface(rect.size, pygame.SRCALPHA)
+    layer.fill((*color, max(0, min(255, alpha))))
+    surface.blit(layer, rect.topleft)
+
+
+def _fade(color: paper.Rgb, alpha: int, ground: paper.Rgb = paper.PAPER) -> paper.Rgb:
+    """Ink mixed toward `ground`: `alpha` 255 = full ink, 0 = invisible on that ground."""
     a = max(0, min(255, alpha))
-    return tuple(round(p + (c - p) * a / 255) for c, p in zip(color, paper.PAPER))  # type: ignore[return-value]
+    return tuple(round(p + (c - p) * a / 255) for c, p in zip(color, ground))  # type: ignore[return-value]
 
 
 # --- how-to-play card -------------------------------------------------------------

@@ -17,6 +17,7 @@ from pathlib import Path
 
 import numpy as np
 import pygame
+import pygame.gfxdraw
 
 from main.settings.paths import ASSETS
 
@@ -447,6 +448,74 @@ def draw_scribble_underline(surface: pygame.Surface, x0: int, x1: int, y: int, w
     n = max(4, (x1 - x0) // 12)
     pts = [(x0 + (x1 - x0) * i / n, y + rng.uniform(-width * 0.35, width * 0.35)) for i in range(n + 1)]
     pygame.draw.lines(surface, (102, 84, 43), False, pts, width)
+
+
+_marker_boxes: dict[tuple, pygame.Surface] = {}
+
+
+def draw_marker_box(
+    surface: pygame.Surface,
+    rect: pygame.Rect,
+    frame: Frame,
+    color: Rgb = INK,
+    width: float = 3.5,
+    seed: int = 0,
+) -> None:
+    """Hand-drawn Sharpie outline around `rect`: no fill, no shadow.
+
+    Four separate wobbly strokes (`width` design px) that overshoot the corners a
+    little, like a box drawn quickly with a marker. Cached per size/style.
+    """
+    w, h = rect.size
+    stroke = max(2, frame.px(width))
+    over = frame.px(7)  # corner overshoot
+    wob = max(1.0, frame.px(2.2))
+    pad = over + stroke + round(wob) + 2
+    key = (w, h, round(frame.scale, 4), color, stroke, seed)
+    box = _marker_boxes.get(key)
+    if box is None:
+        rng = random.Random(seed)
+        box = pygame.Surface((w + pad * 2, h + pad * 2), pygame.SRCALPHA)
+        corners = [(pad, pad), (pad + w, pad), (pad + w, pad + h), (pad, pad + h)]
+        corners = [(x + rng.uniform(-wob, wob), y + rng.uniform(-wob, wob)) for x, y in corners]
+        for i in range(4):
+            (x0, y0), (x1, y1) = corners[i], corners[(i + 1) % 4]
+            length = math.hypot(x1 - x0, y1 - y0) or 1.0
+            ux, uy = (x1 - x0) / length, (y1 - y0) / length
+            start = rng.uniform(0.2, 1.0) * over
+            end = rng.uniform(0.2, 1.0) * over
+            a = (x0 - ux * start, y0 - uy * start)
+            b = (x1 + ux * end, y1 + uy * end)
+            # Gentle bow through the middle so edges aren't ruler-straight.
+            bow = rng.uniform(-wob, wob)
+            n = max(3, int(length / frame.px(18)))
+            pts = []
+            for k in range(n + 1):
+                t = k / n
+                off = bow * math.sin(math.pi * t) + rng.uniform(-wob, wob) * 0.25
+                pts.append((a[0] + (b[0] - a[0]) * t - uy * off, a[1] + (b[1] - a[1]) * t + ux * off))
+            _marker_stroke(box, pts, color, stroke)
+        _marker_boxes[key] = box
+        if len(_marker_boxes) > 128:
+            _marker_boxes.pop(next(iter(_marker_boxes)))
+    surface.blit(box, (rect.x - pad, rect.y - pad))
+
+
+def _marker_stroke(surface: pygame.Surface, pts: list[tuple[float, float]], color: Rgb, width: int) -> None:
+    """Antialiased even-width polyline with round caps (joins are shallow, so none)."""
+    r = width / 2
+    for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
+        length = math.hypot(x1 - x0, y1 - y0)
+        if length < 0.5:
+            continue
+        nx, ny = -(y1 - y0) / length * r, (x1 - x0) / length * r
+        quad = [(x0 + nx, y0 + ny), (x1 + nx, y1 + ny), (x1 - nx, y1 - ny), (x0 - nx, y0 - ny)]
+        pygame.gfxdraw.aapolygon(surface, quad, color)
+        pygame.gfxdraw.filled_polygon(surface, quad, color)
+    rr = max(1, round(r))
+    for x, y in (pts[0], pts[-1]):
+        pygame.gfxdraw.aacircle(surface, round(x), round(y), rr, color)
+        pygame.gfxdraw.filled_circle(surface, round(x), round(y), rr, color)
 
 
 def outlined_text(
