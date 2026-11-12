@@ -6,12 +6,7 @@ from __future__ import annotations
 class ReadyUp:
     how_to_play = "HOW TO PLAY"  # ReadyUpConfig.title (no longer drawn)
     join_heading = "Thumbs up to join"
-    join_sub = "Thumbs down to sit out."
-    step_in_sub = "Step in front of the camera."
     start_heading = "Fist to start"
-    need_one = "Need {min_players} player ready."
-    need_many = "Need {min_players} players ready."
-    can_start = "{ready} ready. Close your hand to play."
 
 
 class EndScreen:
@@ -21,14 +16,10 @@ class EndScreen:
 
 
 class Hints:
-    """Gesture hint strip shared by menu, how-to-play and results pages."""
+    """Gesture hints on the main menu."""
 
     hover_heading = "Open palm to hover"
-    hover_sub = "Move your hand over an option."
     select_heading = "Fist to select"
-    select_sub = "Close your hand to choose."
-    start_heading = "Fist to start"
-    start_sub = "Close your hand to play."
 
 
 class HowToPlay:
@@ -181,7 +172,6 @@ class Strike:
     col_player = "PLAYER"
     col_round = "ROUND"
     col_total = "TOTAL"
-    missing_retry = ("Everyone back in frame,", "then press SPACE", "to try this pose again.")
     capture_close = "SPACE or Q: close"
     lobby_ready = "{count} {label} in frame  -  press SPACE to start"
     lobby_need = "Need {min_players} to {max_players} players in frame"
@@ -192,7 +182,6 @@ class Strike:
     )
     round_of = "Round {round_number} of {total_rounds}"
     round_results = "Round {round_number} of {total_rounds}  -  results"
-    found_players = "Found {found} of {expected} players"
     saved_pose = "Saved: {name}"
     edit_title = "Edit pose: {name}"
     player_label = "P{player}"

@@ -132,6 +132,13 @@ def test_match_roster_by_seeds_none_when_short():
     assert match_roster_by_seeds([person(100)], [100.0, 400.0]) is None
 
 
+def test_match_roster_slots_partial_when_short():
+    from main.ready_up import match_roster_slots
+
+    slots = match_roster_slots([person(100, "a")], [100.0, 400.0])
+    assert [p.tag if p is not None else None for p in slots] == ["a", None]
+
+
 def test_hold_progress_fills_toward_ready_then_stops_counting():
     ready = ReadyUp(1000, cfg(min_players=1, max_players=2, hold_frames=4))
     p = person(200)
@@ -163,20 +170,23 @@ def test_hand_outside_everyone_has_no_owner():
 # --- ready-up page chrome --------------------------------------------------------
 
 
-def test_start_hint_reports_who_is_missing_then_invites_the_fist():
-    from main.ready_up.draw import _join_sub, _start_sub
+def test_fist_hint_is_faded_until_enough_players_are_ready(monkeypatch):
+    import pygame
 
+    from main.ready_up import draw as ready_draw
+    from main.styles import SHELL
+
+    calls = []
+    monkeypatch.setattr(ready_draw.widgets, "draw_hint_stack", lambda *a, **kw: calls.append(kw["dim"]))
+    canvas = pygame.Surface((640, 480))
     ready = ReadyUp(1000, cfg())
-    ready.update([], [])
-    assert _join_sub(ready) == "Step in front of the camera."
     people = [person(200), person(600)]
     ready.update(people, [])
-    assert _join_sub(ready) == "Thumbs down to sit out."
-    assert _start_sub(ready) == "Need 2 players ready."
+    ready_draw.draw_ready_up(canvas, ready, theme=SHELL)
     hold_thumb(ready, people, THUMB_UP, 200)
     hold_thumb(ready, people, THUMB_UP, 600)
-    assert _start_sub(ready) == "2 ready. Close your hand to play."
-    assert _start_sub(ReadyUp(1000, cfg(min_players=1))) == "Need 1 player ready."
+    ready_draw.draw_ready_up(canvas, ready, theme=SHELL)
+    assert calls == [(1,), ()]
 
 
 def test_draw_ready_up_smoke_with_ready_and_waiting_players():

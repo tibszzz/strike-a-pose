@@ -10,7 +10,7 @@ import pygame
 from main import audio, content, styles
 from main.countdown import TIMER_VISIBLE_AT_SECONDS
 from main.games.strike.game import draw_countdown_timer
-from main.games.strike.play import _load_countdown_sounds
+from main.games.strike.play import _load_sounds
 from main.games.strike.screens import CountdownTick
 from main import content, styles
 from main.end_screen import (
@@ -147,7 +147,7 @@ class DodgeballGame:
             name: audio.load_or(ASSETS / "sounds" / f"{name}.wav", make) for name, make in synth.items()
         }
         # Countdown tick: Strike's own sound, so both countdowns sound the same.
-        self.sounds["tick"] = _load_countdown_sounds()["tick"]
+        self.sounds["tick"] = _load_sounds()["tick"]
         self.config = config if config is not None else DodgeballConfig()
         self.debug = bool(self.config.debug)
 
@@ -356,7 +356,7 @@ class DodgeballGame:
             return
 
         if self.game_over:
-            choice = self._end.update(self.gesture_snapshot, frame.timestamp)
+            choice = self._end.update(self.gesture_snapshot, frame.timestamp, frame.people)
             if choice is not None:
                 self._apply_end_choice(choice)
             return
@@ -571,6 +571,7 @@ class DodgeballGame:
                 snap=self.gesture_snapshot,
                 title=content.Results.dodgeball_title,
                 body=self._draw_results_body,
+                pose=frame,
             )
             return
 
