@@ -146,6 +146,28 @@ def load_or(path: Path, fallback):
     return fallback()
 
 
+_music: Path | None = None
+
+
+def loop_music(path: Path | None, fade_ms: int = 600) -> None:
+    """Loop `path` on the mixer's music stream; `None` fades it out.
+
+    Safe to call every frame: does nothing if `path` is already the current track.
+    """
+    global _music
+    if path == _music or not pygame.mixer.get_init():
+        return
+    _music = path
+    if path is None:
+        pygame.mixer.music.fadeout(fade_ms)
+        return
+    try:
+        pygame.mixer.music.load(str(path))
+        pygame.mixer.music.play(loops=-1, fade_ms=fade_ms)
+    except (pygame.error, OSError) as exc:
+        print(f"could not play music {path}: {exc}")
+
+
 def play(sound: pygame.mixer.Sound | None) -> pygame.mixer.Channel | None:
     if sound is None:
         return None
