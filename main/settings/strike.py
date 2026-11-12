@@ -18,6 +18,8 @@ class StrikeConfig:
 
     rounds: int = 5
     countdown_seconds: float = 5.0
+    # Seconds after a round snapshot before thumbs-up / hand landmarks activate.
+    results_gesture_delay: float = 1.5
     min_players: int = 2
     max_players: int = 4
 

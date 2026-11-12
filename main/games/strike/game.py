@@ -15,6 +15,13 @@ import cv2
 import numpy as np
 
 from main import content, styles
+from main.nav.hand_geometry import (
+    HAND_CONNECTIONS,
+    hand_ring_radius,
+    palm_center,
+    primary_landmarks,
+    show_hold_ring,
+)
 from main.pose.library import BONES, HEAD_JOINT, Box, Joints, Point, Pose, midpoint
 from main.settings import CANVAS_HEIGHT, CANVAS_WIDTH
 
@@ -42,33 +49,6 @@ ACCENT = styles.bgr(theme.accent)
 PLAYER_COLORS = tuple(styles.bgr(c) for c in theme.player)
 HOLD_FILL = styles.bgr((85, 221, 224))  # #55dde0 progress arc
 HAND_TRACK = ACCENT  # #f6ae2d skeleton + ring track
-
-# MediaPipe 21-point hand topology (palm + fingers).
-HAND_CONNECTIONS: tuple[tuple[int, int], ...] = (
-    (0, 1),
-    (1, 2),
-    (2, 3),
-    (3, 4),
-    (0, 5),
-    (5, 6),
-    (6, 7),
-    (7, 8),
-    (5, 9),
-    (9, 10),
-    (10, 11),
-    (11, 12),
-    (9, 13),
-    (13, 14),
-    (14, 15),
-    (15, 16),
-    (13, 17),
-    (17, 18),
-    (18, 19),
-    (19, 20),
-    (0, 17),
-)
-# Wrist + finger MCPs — palm center for the hold ring.
-_PALM_LANDMARKS = (0, 5, 9, 13, 17)
 
 # Results score stack: large score over P#, anchored above the head.
 SCORE_SCALE = 1.6
@@ -587,21 +567,6 @@ def _draw_results_prompt(canvas: np.ndarray, *, final_round: bool) -> None:
     )
 
 
-def palm_center(landmarks: Sequence[tuple[float, float]]) -> tuple[float, float] | None:
-    """Palm midpoint from wrist + finger MCPs when present; else landmark centroid."""
-    if not landmarks:
-        return None
-    idxs = [i for i in _PALM_LANDMARKS if i < len(landmarks)]
-    pts = [landmarks[i] for i in idxs] if len(idxs) >= 2 else list(landmarks)
-    return (sum(p[0] for p in pts) / len(pts), sum(p[1] for p in pts) / len(pts))
-
-
-def hand_ring_radius(box: tuple[float, float, float, float]) -> float:
-    """Half the hand-box diagonal."""
-    x0, y0, x1, y1 = box
-    return 0.5 * math.hypot(x1 - x0, y1 - y0)
-
-
 def hand_owner_player(
     anchor: tuple[float, float],
     players: Sequence,
@@ -618,17 +583,6 @@ def hand_owner_player(
         players,
         key=lambda p: abs(ax - (p.box[0] + p.box[2]) / 2.0),
     ).player
-
-
-def _hand_anchor(hand: object) -> tuple[float, float] | None:
-    landmarks = getattr(hand, "landmarks", ()) or ()
-    if landmarks:
-        return float(landmarks[0][0]), float(landmarks[0][1])
-    box = getattr(hand, "box", None)
-    if box is None:
-        return None
-    x0, y0, x1, y1 = box
-    return ((x0 + x1) / 2.0, (y0 + y1) / 2.0)
 
 
 def draw_hand_skeleton(
@@ -691,7 +645,7 @@ def overlay_results_hold(
     frame_size: tuple[int, int] | None = None,
     players: Sequence = (),
 ) -> None:
-    """Prompt, raised-hand skeletons, and palm hold ring after compose."""
+    """Prompt, primary-hand skeleton, and palm hold ring after compose."""
     _draw_results_prompt(canvas, final_round=final_round)
     if snap is None or frame_size is None:
         return
@@ -700,20 +654,16 @@ def overlay_results_hold(
         return
     transform = fit(fw, fh, FULL_CANVAS)
 
-    hands = getattr(snap, "hands", ()) or ()
-    for hand in hands:
-        landmarks = getattr(hand, "landmarks", ()) or ()
-        if not landmarks:
-            continue
-        anchor = _hand_anchor(hand)
-        owner = hand_owner_player(anchor, players) if anchor is not None else None
+    # Single primary hand only (MediaPipe is configured for one hand on results).
+    primary = primary_landmarks(snap)
+    if primary:
+        wrist = primary[0]
+        owner = hand_owner_player(wrist, players)
         color = player_color(owner) if owner is not None else HAND_TRACK
-        draw_hand_skeleton(canvas, landmarks, transform, color)
+        draw_hand_skeleton(canvas, primary, transform, color)
 
-    primary = getattr(snap, "landmarks", ()) or ()
     box = getattr(snap, "hand_box", None)
-    holding = progress > 0 or getattr(snap, "label", None) == "Thumb_Up"
-    if primary and holding:
+    if primary and show_hold_ring(progress, getattr(snap, "label", None)):
         center = palm_center(primary)
         if center is not None:
             radius = hand_ring_radius(box) if box is not None else 40.0

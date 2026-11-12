@@ -157,11 +157,7 @@ class Theme:
     player: tuple[Rgb, ...]
     font: Path
     # Shell / shared chrome extras
-    hand_box: Rgb = (80, 220, 255)
     hover: Rgb = (220, 220, 220)
-    hold_track: Rgba = (255, 255, 255, 40)
-    hold_fill: Rgba = (85, 221, 224, 200)  # #55dde0
-    hold_fill_tile: Rgba = (85, 221, 224, 70)
     tile_fill: Rgba = (0, 0, 0, 120)
     # Duel extras
     shadow: Rgb = (190, 190, 190)

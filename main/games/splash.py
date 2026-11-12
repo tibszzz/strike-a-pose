@@ -14,6 +14,8 @@ from main.nav import (
     ThumbHoldTracker,
     load_gesture_nav_config,
 )
+from main.nav.hand_draw import draw_primary_hand_hold
+from main.nav.hand_geometry import NAV_GESTURE_HANDS
 from main.pose import PoseFrame
 
 theme = styles.BRAND  # full-bleed splash overlay (alpha 160)
@@ -24,6 +26,7 @@ class SplashGame:
     title = copy.brand
     is_splash = True
     wants_gestures = True
+    gesture_hands = NAV_GESTURE_HANDS
     background = theme.bg
 
     def __init__(self, size: tuple[int, int]) -> None:
@@ -59,14 +62,9 @@ class SplashGame:
         overlay.fill(theme.overlay)
         canvas.blit(overlay, (0, 0))
 
-        if snap is not None and snap.hand_box is not None:
-            x1, y1, x2, y2 = snap.hand_box
-            pygame.draw.rect(
-                canvas,
-                theme.hand_box,
-                pygame.Rect(int(x1), int(y1), int(x2 - x1), int(y2 - y1)),
-                width=3,
-            )
+        draw_primary_hand_hold(
+            canvas, snap, self._thumb.progress, color=theme.accent
+        )
 
         title = self._title_font.render(copy.brand, True, theme.ink)
         title_y = self.h // 2 - title.get_height()
@@ -75,19 +73,6 @@ class SplashGame:
         prompt = self._hint_font.render(copy.splash_prompt, True, theme.accent)
         prompt_y = title_y + title.get_height() + 16
         canvas.blit(prompt, (self.w // 2 - prompt.get_width() // 2, prompt_y))
-
-        bar_w = min(self.w // 3, 280)
-        bar_h = max(8, self.h // 80)
-        bar_x = self.w // 2 - bar_w // 2
-        bar_y = prompt_y + prompt.get_height() + 18
-        track = pygame.Surface((bar_w, bar_h), pygame.SRCALPHA)
-        track.fill(theme.hold_track)
-        canvas.blit(track, (bar_x, bar_y))
-        if self._thumb.progress > 0:
-            fill_w = max(1, int(bar_w * self._thumb.progress))
-            fill = pygame.Surface((fill_w, bar_h), pygame.SRCALPHA)
-            fill.fill(theme.hold_fill)
-            canvas.blit(fill, (bar_x, bar_y))
 
     def handle_command(self, command: MenuCommand) -> None:
         # Keyboard (--debug): Enter / arrows still advance instantly.

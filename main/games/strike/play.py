@@ -9,6 +9,7 @@ import pygame
 
 from main import content, styles
 from main.nav import GestureSnapshot, ThumbHoldTracker, load_gesture_nav_config
+from main.nav.hand_geometry import NAV_GESTURE_HANDS
 from main.pose import PoseFrame
 from main.pose.library import Pose, from_coco_person, load_library
 from main.settings import StrikeConfig
@@ -21,7 +22,7 @@ from .screens import LobbyScreen, ResultsScreen, Screen
 class StrikeGame:
     title = content.Strike.window_title
     background = styles.STRIKE.bg
-    gesture_hands = 2
+    gesture_hands = NAV_GESTURE_HANDS
 
     def __init__(
         self,
@@ -47,7 +48,7 @@ class StrikeGame:
 
     @property
     def wants_gestures(self) -> bool:
-        return isinstance(self._screen, ResultsScreen)
+        return isinstance(self._screen, ResultsScreen) and self._screen.idle
 
     def reset(self) -> None:
         library = load_library(self._config.poses_dir)

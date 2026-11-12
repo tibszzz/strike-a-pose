@@ -26,6 +26,8 @@ from main.nav import (
     effective_label,
     load_gesture_nav_config,
 )
+from main.nav.hand_draw import draw_primary_hand_hold
+from main.nav.hand_geometry import NAV_GESTURE_HANDS
 from main.pose import PoseFrame
 
 theme = styles.SHELL
@@ -39,6 +41,7 @@ class MenuGame:
     title = copy.brand
     is_menu = True
     wants_gestures = True
+    gesture_hands = NAV_GESTURE_HANDS
     background = theme.bg
 
     def __init__(self, size: tuple[int, int], entries: Sequence[GameEntry]) -> None:
@@ -121,15 +124,6 @@ class MenuGame:
         overlay.fill(theme.overlay)
         canvas.blit(overlay, (0, 0))
 
-        if snap is not None and snap.hand_box is not None:
-            x1, y1, x2, y2 = snap.hand_box
-            pygame.draw.rect(
-                canvas,
-                theme.hand_box,
-                pygame.Rect(int(x1), int(y1), int(x2 - x1), int(y2 - y1)),
-                width=3,
-            )
-
         title = self._title_font.render(copy.menu_title, True, theme.ink)
         canvas.blit(title, (self.w // 2 - title.get_width() // 2, self.h // 10))
 
@@ -154,16 +148,6 @@ class MenuGame:
 
             locked = i == self._hard_lock
             hovered = i == self._hover
-            if locked and self._thumb.progress > 0:
-                hold_surf = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
-                hold_h = max(1, int(rect.height * self._thumb.progress))
-                hold_surf.fill(theme.hold_fill_tile)
-                canvas.blit(
-                    hold_surf,
-                    (rect.left, rect.bottom - hold_h),
-                    area=pygame.Rect(0, rect.height - hold_h, rect.width, hold_h),
-                )
-
             if locked:
                 border_color = theme.accent
                 border_w = 5
@@ -187,6 +171,11 @@ class MenuGame:
                     rect.centery - label.get_height() // 2,
                 ),
             )
+
+        # Hand chrome last so the skeleton/ring sit above tiles and copy.
+        draw_primary_hand_hold(
+            canvas, snap, self._thumb.progress, color=theme.accent
+        )
 
     def handle_command(self, command: MenuCommand) -> None:
         n = len(self.entries)

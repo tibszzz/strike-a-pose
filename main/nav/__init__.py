@@ -16,6 +16,7 @@ from .gestures import (
     HandGesture,
     load_gesture_nav_config,
 )
+from .hand_geometry import NAV_GESTURE_HANDS
 from .thumb_hold import ThumbHoldTracker, effective_label, hand_anchor
 from .types import MenuCommand, Nav, QuitApp, StartGame
 
@@ -27,6 +28,7 @@ __all__ = [
     "HandGesture",
     "LABEL_TO_COMMAND",
     "MenuCommand",
+    "NAV_GESTURE_HANDS",
     "Nav",
     "QuitApp",
     "StartGame",
