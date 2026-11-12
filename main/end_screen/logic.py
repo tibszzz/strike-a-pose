@@ -1,6 +1,6 @@
 """Two-button Play again / Menu chooser: tip hard-lock + Closed_Fist confirm.
 
-Mirrors MenuGame interaction: hovering a button (smoothed palm cursor) selects it
+Mirrors MenuGame interaction: hovering a button (index fingertip) selects it
 and the selection sticks; Closed_Fist held anywhere presses the selection. While a fist hold is
 in progress, selection does not switch.
 """
@@ -12,16 +12,10 @@ from enum import Enum, auto
 
 import pygame
 
-from main.nav import (
-    GestureSnapshot,
-    MenuCommand,
-    ThumbHoldTracker,
-    load_gesture_nav_config,
-    nav_cursor,
-)
+from main.nav import GestureSnapshot, MenuCommand, ThumbHoldTracker, load_gesture_nav_config
 from main.ui.paper import Frame
 
-# MediaPipe hand landmark index for index fingertip (kept for importers).
+# MediaPipe hand landmark index for index fingertip.
 INDEX_FINGERTIP = 8
 
 
@@ -49,9 +43,7 @@ class EndScreen:
             hold_s=cfg.hold_s if cfg.hold_s is not None else nav.thumb_hold_s,
             min_score=cfg.min_score if cfg.min_score is not None else nav.min_score,
             label="Closed_Fist",
-            grace_s=nav.hold_grace_s,
         )
-        self.cursor = nav_cursor(size, config=nav)
         self._hard_lock: int | None = None
         self._hover: int | None = None
         self._choice: EndChoice | None = None
@@ -77,7 +69,6 @@ class EndScreen:
         self._hover = None
         self._choice = None
         self._thumb.reset()
-        self.cursor.reset()
 
     def tile_rects(self) -> list[pygame.Rect]:
         """Play again / Menu note buttons, top-right beside the title."""
@@ -88,17 +79,13 @@ class EndScreen:
         self,
         snap: GestureSnapshot | None,
         timestamp: float,
-        people: object = None,
     ) -> EndChoice | None:
-        """Advance selection; return a choice once when fist hold completes.
-
-        `people` (PoseFrame.people) lets the cursor scale its reach to the player's body.
-        """
-        tip = self.cursor.update(snap, timestamp, people)
+        """Advance selection; return a choice once when fist hold completes."""
+        tip = _index_tip(snap)
         rects = self.tile_rects()
 
         self._hover = None
-        if tip is not None and self.cursor.tracking:
+        if tip is not None:
             for i, rect in enumerate(rects):
                 if rect.collidepoint(tip):
                     self._hover = i
@@ -140,3 +127,8 @@ class EndScreen:
             self._hard_lock = index
             self._thumb.reset()
 
+
+def _index_tip(snap: GestureSnapshot | None) -> tuple[float, float] | None:
+    if snap is None or len(snap.landmarks) <= INDEX_FINGERTIP:
+        return None
+    return snap.landmarks[INDEX_FINGERTIP]

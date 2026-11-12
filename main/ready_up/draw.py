@@ -2,9 +2,8 @@
 
 Live camera (drawn by the game) with a FIFA-style marker over each player:
 "P1" above a down-pointing triangle, grey while waiting and filled with the
-player's color once they give a thumbs up. Two stacked torn-paper hints
-bottom-left: "Thumbs up to join" and "Fist to start" (faded until enough
-players are ready).
+player's color once they give a thumbs up. A torn-paper hint strip
+bottom-left explains thumbs up to join / fist to start, with live status.
 """
 
 from __future__ import annotations
@@ -29,11 +28,12 @@ def draw_ready_up(
     ready: ReadyUp,
     *,
     theme: Theme,
+    status: str | None = None,
     snap: object | None = None,
 ) -> None:
-    """Full-bleed camera assumed already on canvas; draw player markers + stacked hints.
+    """Full-bleed camera assumed already on canvas; draw player markers + hint strip.
 
-    "Fist to start" stays faded until enough players are ready.
+    `status` replaces the fist hint's live sub-line when given.
     """
     w, h = canvas.get_size()
     frame = Frame(w, h)
@@ -55,14 +55,16 @@ def draw_ready_up(
             ready=cand.ready,
         )
 
-    widgets.draw_hint_stack(
+    widgets.draw_hint_bar(
         canvas,
         frame,
+        frame.rect(50, 742, 800, 846),
         (
-            Hint(widgets.THUMB_UP_ICON, copy.join_heading),
-            Hint(widgets.FIST_BADGE, copy.start_heading),
+            Hint(widgets.THUMB_UP_ICON, copy.join_heading, _join_sub(ready)),
+            Hint(widgets.FIST_BADGE, copy.start_heading, status or _start_sub(ready)),
         ),
-        dim=() if ready.can_start else (1,),
+        scale=0.85,
+        alpha=235,
     )
 
 
@@ -105,3 +107,14 @@ def draw_player_marker(
         alpha=alpha,
     )
 
+
+def _join_sub(ready: ReadyUp) -> str:
+    return copy.join_sub if ready.eligible else copy.step_in_sub
+
+
+def _start_sub(ready: ReadyUp) -> str:
+    cfg = ready.config
+    if ready.can_start:
+        return copy.can_start.format(ready=ready.ready_count)
+    template = copy.need_one if cfg.min_players == 1 else copy.need_many
+    return template.format(min_players=cfg.min_players)

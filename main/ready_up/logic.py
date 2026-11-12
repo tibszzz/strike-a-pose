@@ -287,16 +287,18 @@ def _contains(
     return x1 - mx <= x <= x2 + mx and y1 - my <= y <= y2 + my
 
 
-def match_roster_slots(
+def match_roster_by_seeds(
     people: Sequence[_Person], seeds_x: Sequence[float]
-) -> list[_Person | None]:
-    """Map detections onto a frozen L→R roster by nearest centre x.
+) -> list[_Person] | None:
+    """Map current detections onto a frozen L→R roster by nearest centre x.
 
-    Unfilled seats stay None when fewer people than seeds are available.
+    Returns None when fewer people than seeds are available.
     """
     n = len(seeds_x)
     if n == 0:
         return []
+    if len(people) < n:
+        return None
     pairs = sorted(
         (abs(seeds_x[s] - p.center_x), s, i)
         for s in range(n)
@@ -313,17 +315,6 @@ def match_roster_slots(
         slots[s] = people[i]
         if len(used_s) == n:
             break
-    return slots
-
-
-def match_roster_by_seeds(
-    people: Sequence[_Person], seeds_x: Sequence[float]
-) -> list[_Person] | None:
-    """Map current detections onto a frozen L→R roster by nearest centre x.
-
-    Returns None when fewer people than seeds are available.
-    """
-    slots = match_roster_slots(people, seeds_x)
-    if any(person is None for person in slots):
+    if any(p is None for p in slots):
         return None
-    return [person for person in slots if person is not None]
+    return [p for p in slots if p is not None]  # type: ignore[misc]

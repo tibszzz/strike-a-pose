@@ -11,7 +11,6 @@ from .logic import (
     ReadyUpConfig,
     Started,
     match_roster_by_seeds,
-    match_roster_slots,
 )
 
 __all__ = [
@@ -27,5 +26,4 @@ __all__ = [
     "draw_ready_up",
     "head_anchor",
     "match_roster_by_seeds",
-    "match_roster_slots",
 ]

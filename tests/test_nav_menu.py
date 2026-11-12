@@ -15,7 +15,6 @@ from main.nav import GestureSnapshot, MenuCommand, QuitApp, StartGame
 from main.pose import PoseFrame, assign_players
 from main.pose.library import JOINT_NAMES, from_coco_person
 
-from cursor_util import landmarks_on
 from test_gestures import person
 
 
@@ -30,8 +29,10 @@ def _landmarks_at(
     count: int = 21,
     wrist: tuple[float, float] | None = None,
 ) -> tuple[tuple[float, float], ...]:
-    """Landmarks whose palm puts the menu cursor on screen point (x, y)."""
-    return landmarks_on(x, y, count=count, wrist=wrist)
+    pts = [(0.0, 0.0)] * count
+    pts[0] = wrist if wrist is not None else (x, y)
+    pts[INDEX_FINGERTIP] = (x, y)
+    return tuple(pts)
 
 
 def _entries() -> tuple[GameEntry, GameEntry, GameEntry]:
@@ -96,11 +97,12 @@ def test_menu_back_emits_quit_app():
     assert menu.poll_nav() == QuitApp()
 
 
-def test_menu_wants_gestures_without_live_camera():
+def test_menu_wants_gestures_and_passthrough_camera():
     pygame.init()
     menu = MenuGame((640, 480), _entries()[:1])
     assert menu.wants_gestures is True
-    assert not hasattr(menu, "render_camera")  # sketch backdrop instead of video
+    image = np.zeros((480, 640, 3), np.uint8)
+    assert menu.render_camera(image) is image
 
 
 def test_menu_tip_over_tile_selects_without_gesture():
@@ -182,37 +184,16 @@ def test_menu_closed_fist_hold_resets_if_released_early():
     menu.update(_frame(timestamp=1.3))  # 0.3s into hold — not enough
     assert menu.poll_nav() is None
 
-    # Open longer than the flicker grace (0.2s) → the hold starts over.
     menu.gesture_snapshot = GestureSnapshot(label=None, score=0.0, landmarks=_landmarks_at(*tip))
     menu.update(_frame(timestamp=1.35))
-    menu.update(_frame(timestamp=1.6))
-    assert menu._thumb.progress == 0.0
 
     menu.gesture_snapshot = GestureSnapshot(
         label="Closed_Fist", score=1.0, landmarks=_landmarks_at(*tip)
     )
-    menu.update(_frame(timestamp=1.7))
-    menu.update(_frame(timestamp=2.1))  # 0.4s — still not enough
-    assert menu.poll_nav() is None
-    menu.update(_frame(timestamp=2.2))  # 0.5s of continuous hold
-    assert menu.poll_nav() == StartGame("duel")
-
-
-def test_menu_closed_fist_hold_survives_a_one_frame_flicker():
-    pygame.init()
-    menu = MenuGame((640, 480), _entries())
-    menu.handle_command(MenuCommand.MOVE_DOWN)
-    tip = menu.tile_rects()[0].center
-    fist = GestureSnapshot(label="Closed_Fist", score=1.0, landmarks=_landmarks_at(*tip))
-    menu.gesture_snapshot = fist
-    menu.update(_frame(timestamp=1.0))
-    menu.update(_frame(timestamp=1.3))
-    menu.gesture_snapshot = None  # detector drops the hand for a frame
-    menu.update(_frame(timestamp=1.35))
-    assert menu._thumb.progress == pytest.approx(0.6, rel=1e-3)  # frozen, not reset
-    menu.gesture_snapshot = fist
     menu.update(_frame(timestamp=1.4))
-    menu.update(_frame(timestamp=1.6))
+    menu.update(_frame(timestamp=1.8))  # 0.4s — still not enough
+    assert menu.poll_nav() is None
+    menu.update(_frame(timestamp=1.9))  # 0.5s of continuous hold
     assert menu.poll_nav() == StartGame("duel")
 
 
@@ -322,20 +303,11 @@ def test_menu_release_first_ignores_a_fist_carried_in_from_another_page():
     menu.update(_frame(timestamp=2.0))
     assert menu.poll_nav() is None
 
-    # A one-frame flicker on the still-closed fist doesn't count as opening.
-    menu.gesture_snapshot = None
-    menu.update(_frame(timestamp=2.05))
-    menu.gesture_snapshot = fist
-    menu.update(_frame(timestamp=2.1))
-    menu.update(_frame(timestamp=2.8))
-    assert menu.poll_nav() is None
-
     menu.gesture_snapshot = GestureSnapshot(label=None, score=0.0, landmarks=_landmarks_at(*tip))
-    menu.update(_frame(timestamp=2.9))
-    menu.update(_frame(timestamp=3.05))  # open for 0.15s → released
+    menu.update(_frame(timestamp=2.1))
     menu.gesture_snapshot = fist
-    menu.update(_frame(timestamp=3.1))
-    menu.update(_frame(timestamp=3.7))
+    menu.update(_frame(timestamp=2.2))
+    menu.update(_frame(timestamp=2.8))
     assert menu.poll_nav() == StartGame("duel")
 
 

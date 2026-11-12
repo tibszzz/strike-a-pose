@@ -22,13 +22,11 @@ class ThumbHoldTracker:
     label: str = "Thumb_Up"
     match_min_px: float = 80.0
     match_frac: float = 0.15  # of min(frame w, h)
-    grace_s: float = 0.0  # tolerate the label dropping for this long (detector flicker)
 
     _t0: float | None = field(default=None, init=False, repr=False)
     _progress: float = field(default=0.0, init=False, repr=False)
     _fired: bool = field(default=False, init=False, repr=False)
     _hand_anchor: tuple[float, float] | None = field(default=None, init=False, repr=False)
-    _last_match: float | None = field(default=None, init=False, repr=False)
 
     @property
     def progress(self) -> float:
@@ -48,7 +46,6 @@ class ThumbHoldTracker:
         self._progress = 0.0
         self._fired = False
         self._hand_anchor = None
-        self._last_match = None
 
     def hold_status(self) -> str | None:
         if self.active and not self.fired:
@@ -66,18 +63,7 @@ class ThumbHoldTracker:
     ) -> bool:
         """Advance or reset the hold. Returns True once when the hold completes."""
         label = effective_label(snap, self.min_score)
-        if not armed:
-            self.reset()
-            return False
-        if label != self.label:
-            if (
-                self._t0 is not None
-                and self._last_match is not None
-                and timestamp - self._last_match <= self.grace_s
-            ):
-                # Brief flicker: freeze progress instead of starting over.
-                self._t0 = timestamp - self._progress * self.hold_s
-                return False
+        if label != self.label or not armed:
             self.reset()
             return False
 
@@ -97,7 +83,6 @@ class ThumbHoldTracker:
 
         if hand is not None:
             self._hand_anchor = hand
-        self._last_match = timestamp
         if self._t0 is None:
             self._t0 = timestamp
         held = timestamp - self._t0
@@ -106,46 +91,6 @@ class ThumbHoldTracker:
             self._fired = True
             return True
         return False
-
-
-@dataclass
-class ReleaseGate:
-    """A fist carried in from the previous page must open before a new hold counts.
-
-    The hand has to show something other than `label` for `open_s` in a row, so a
-    one-frame detector flicker on a still-closed fist doesn't count as opening.
-    """
-
-    required: bool = True
-    open_s: float = 0.12
-    min_score: float = 0.5
-    label: str = "Closed_Fist"
-
-    _released: bool = field(default=False, init=False, repr=False)
-    _open_since: float | None = field(default=None, init=False, repr=False)
-
-    def __post_init__(self) -> None:
-        self.reset()
-
-    @property
-    def released(self) -> bool:
-        return self._released
-
-    def reset(self) -> None:
-        self._released = not self.required
-        self._open_since = None
-
-    def update(self, snap: GestureSnapshot | None, timestamp: float) -> bool:
-        if self._released:
-            return True
-        if effective_label(snap, self.min_score) == self.label:
-            self._open_since = None
-            return False
-        if self._open_since is None:
-            self._open_since = timestamp
-        if timestamp - self._open_since >= self.open_s:
-            self._released = True
-        return self._released
 
 
 def effective_label(snap: GestureSnapshot | None, min_score: float) -> str | None:

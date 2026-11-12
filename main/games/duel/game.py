@@ -221,7 +221,7 @@ class DuelGame:
             return
 
         if self._in_end_screen():
-            choice = self._end.update(self.gesture_snapshot, frame.timestamp, frame.people)
+            choice = self._end.update(self.gesture_snapshot, frame.timestamp)
             if choice is not None:
                 self._apply_end_choice(choice)
             return
@@ -352,7 +352,6 @@ class DuelGame:
                 title=content.Results.duel_title,
                 body=self._draw_results_body,
                 active=self._in_end_screen(),
-                pose=frame,
             )
             return
 

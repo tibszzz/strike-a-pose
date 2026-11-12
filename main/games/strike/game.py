@@ -22,9 +22,8 @@ from main.nav.hand_geometry import (
     primary_landmarks,
     show_hold_ring,
 )
-from main.pose.library import BONES, HEAD_JOINT, Box, Joints, Point, midpoint
+from main.pose.library import BONES, HEAD_JOINT, Box, Joints, Point, Pose, midpoint
 from main.settings import CANVAS_HEIGHT, CANVAS_WIDTH
-from main.ui.paper import Frame, PaperStyle, paper_surface
 
 from .screens import (
     Action,
@@ -32,6 +31,7 @@ from .screens import (
     FinalScreen,
     LobbyScreen,
     ResultsScreen,
+    RetryScreen,
     Screen,
 )
 
@@ -49,11 +49,6 @@ ACCENT = styles.bgr(theme.accent)
 PLAYER_COLORS = tuple(styles.bgr(c) for c in theme.player)
 HOLD_FILL = styles.bgr((85, 221, 224))  # #55dde0 progress arc
 HAND_TRACK = ACCENT  # #f6ae2d skeleton + ring track
-# Target stick figures sit on menu paper; black ink for contrast.
-POSE_INK = styles.bgr((0, 0, 0))
-POSE_PAPER_STYLE = PaperStyle(torn="tblr", jag=6)
-POSE_PAPER_SEED = 41
-POSE_PAPER_FRAME = Frame(CANVAS_WIDTH, CANVAS_HEIGHT)
 
 # Results score stack: large score over P#, anchored above the head.
 SCORE_SCALE = 4.0
@@ -142,17 +137,6 @@ def draw_text(
 def fill(canvas: np.ndarray, rect: Rect, color: tuple[int, int, int]) -> None:
     left, top, width, height = rect
     canvas[top : top + height, left : left + width] = color
-
-
-def draw_pose_paper(
-    canvas: np.ndarray, rect: Rect, *, seed: int = POSE_PAPER_SEED
-) -> None:
-    """Torn menu paper behind a target pose (BGR canvas)."""
-    left, top, width, height = rect
-    sheet, (dx, dy) = paper_surface(
-        (width, height), POSE_PAPER_FRAME, POSE_PAPER_STYLE, seed
-    )
-    styles.blit_rgba_to_bgr(canvas, sheet, left + dx, top + dy)
 
 
 def draw_frame(canvas: np.ndarray, frame: np.ndarray, rect: Rect) -> Transform:
@@ -266,10 +250,16 @@ def compose(screen: Screen, frame: np.ndarray) -> np.ndarray:
         return _compose_lobby(screen, frame)
     if isinstance(screen, CountdownScreen):
         return _compose_countdown(screen, frame)
+    if isinstance(screen, RetryScreen):
+        return _compose_retry(screen)
     if isinstance(screen, ResultsScreen):
         return _compose_results(screen)
     return _compose_final(screen)
 
+
+TARGET_PANEL: Rect = (40, 90, 740, 590)
+SIDE_LEFT, SIDE_WIDTH = 820, 420
+SIDE_CENTER = SIDE_LEFT + SIDE_WIDTH // 2
 
 # Countdown target HUD: final size ~18% of canvas height, parked top-right
 # under the header. Intro holds 2x at center for 1.5s, then eases over 0.5s.
@@ -363,6 +353,24 @@ def _draw_translucent_text(
     cv2.addWeighted(overlay, opacity, canvas, 1.0 - opacity, 0, canvas)
 
 
+def _target_panel(
+    canvas: np.ndarray, target: Pose, rect: Rect, caption_height: int, caption_scale: float
+) -> None:
+    """A panel with the pose's name along the top and its stick figure below."""
+    left, top, width, height = rect
+    fill(canvas, rect, PANEL)
+    draw_text(
+        canvas, target.name, left + 16, top + round(caption_height * 0.75), caption_scale, ACCENT
+    )
+    draw_stick_figure(
+        canvas, target.joints, (left, top + caption_height, width, height - caption_height)
+    )
+
+
+def _large_target_panel(canvas: np.ndarray, target: Pose) -> None:
+    _target_panel(canvas, target, TARGET_PANEL, caption_height=56, caption_scale=1.0)
+
+
 def _compose_lobby(screen: LobbyScreen, frame: np.ndarray) -> np.ndarray:
     """Legacy lobby compose (shell uses shared ReadyUp). Labels only — no boxes."""
     canvas = new_canvas()
@@ -400,9 +408,9 @@ def _compose_countdown(screen: CountdownScreen, frame: np.ndarray) -> np.ndarray
         copy.round_of.format(round_number=screen.round_number, total_rounds=screen.total_rounds),
         show_esc=False,
     )
-    target_rect = _countdown_target_rect(screen.elapsed)
-    draw_pose_paper(canvas, target_rect)
-    draw_stick_figure(canvas, screen.target.joints, target_rect, POSE_INK)
+    draw_stick_figure(
+        canvas, screen.target.joints, _countdown_target_rect(screen.elapsed), WHITE
+    )
     draw_countdown_timer(canvas, screen.seconds_left, screen.digit_age)
     return canvas
 
@@ -421,6 +429,28 @@ def draw_countdown_timer(canvas: np.ndarray, seconds_left: int, digit_age: float
     (_, glyph_h), descent = styles.text_size(text, TIMER_CENTER_SCALE, theme.font, h=height)
     baseline = round(height // 2 + (glyph_h - descent) / 2)
     _draw_translucent_text(canvas, text, width // 2, baseline, TIMER_CENTER_SCALE, WHITE, opacity)
+
+
+def _compose_retry(screen: RetryScreen) -> np.ndarray:
+    canvas = new_canvas()
+    _header(
+        canvas,
+        copy.round_of.format(round_number=screen.round_number, total_rounds=screen.total_rounds),
+    )
+    _large_target_panel(canvas, screen.target)
+
+    draw_text(
+        canvas,
+        copy.found_players.format(found=screen.found, expected=screen.expected),
+        SIDE_CENTER,
+        300,
+        1.1,
+        ACCENT,
+        "center",
+    )
+    for line_number, line in enumerate(copy.missing_retry):
+        draw_text(canvas, line, SIDE_CENTER, 370 + line_number * 44, 0.9, WHITE, "center")
+    return canvas
 
 
 def _parked_target_rect() -> Rect:
@@ -493,30 +523,13 @@ def _compose_results(screen: ResultsScreen) -> np.ndarray:
         ),
         show_esc=False,
     )
-    target_rect = _parked_target_rect()
-    draw_pose_paper(canvas, target_rect)
-    draw_stick_figure(canvas, screen.target.joints, target_rect, POSE_INK)
+    draw_stick_figure(canvas, screen.target.joints, _parked_target_rect(), WHITE)
 
     for player, display_score in zip(
         screen.players, screen.display_scores, strict=True
     ):
         color = player_color(player.player)
         draw_skeleton(canvas, player.joints, transform, color)
-        if screen.holding:
-            # Post-snapshot beat: skeletons only; scores wait for the drumroll.
-            head_x, head_y = _head_anchor_xy(player.joints, player.box, transform)
-            _, label_y = _results_score_stack_baselines(head_y)
-            draw_text(
-                canvas,
-                player_name(player.player),
-                head_x,
-                label_y,
-                PLAYER_LABEL_SCALE,
-                color,
-                "center",
-                outline=True,
-            )
-            continue
         _draw_results_player_stack(
             canvas,
             player.player,

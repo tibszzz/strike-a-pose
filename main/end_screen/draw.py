@@ -17,7 +17,7 @@ import pygame
 from main import content
 from main.nav import GestureSnapshot
 from main.styles import Theme
-from main.ui import paper, sketch, widgets
+from main.ui import paper, widgets
 from main.ui.paper import INK, INK_SOFT, Frame, PaperStyle
 
 from .logic import EndChoice, EndScreen
@@ -48,15 +48,11 @@ def draw_end_screen(
     title: str = "",
     body: Body | None = None,
     active: bool = True,
-    pose: object | None = None,
 ) -> None:
-    """Full results page. `active=False` draws it without pointer/selection (before input opens).
-
-    `pose` (the current PoseFrame) sketches the players as stick figures in the backdrop.
-    """
+    """Full results page. `active=False` draws it without pointer/selection (before input opens)."""
     del theme, timestamp, dim
     f = Frame(end.w, end.h)
-    sketch.draw_sketch_backdrop(canvas, pose)
+    paper.draw_backdrop(canvas)
     if title:
         widgets.draw_title_strip(canvas, f, title, seed=17)
 
@@ -84,7 +80,7 @@ def draw_end_screen(
         )
 
     if active:
-        widgets.draw_cursor(canvas, f, snap, end.hold_progress, at=end.cursor.position)
+        widgets.draw_cursor(canvas, f, snap, end.hold_progress)
 
 
 # --- body helpers -------------------------------------------------------------------

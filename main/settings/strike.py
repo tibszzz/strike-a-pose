@@ -18,11 +18,10 @@ class StrikeConfig:
 
     rounds: int = 5
     countdown_seconds: float = 5.0
-    # Dramatic score reveal on ResultsScreen: post-snapshot beat, then scramble.
+    # Dramatic score reveal on ResultsScreen: scramble duration and flash rate.
     # Thumbs-up / hand landmarks activate when the reveal locks.
-    results_hold_s: float = 0.5
     results_reveal_s: float = 2.0
-    results_reveal_hz: float = 20.0
+    results_reveal_hz: float = 10.0
     min_players: int = 2
     max_players: int = 4
 

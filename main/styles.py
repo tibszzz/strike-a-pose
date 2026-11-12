@@ -111,7 +111,7 @@ def _render_glyph(
     return out
 
 
-def blit_rgba_to_bgr(dst: np.ndarray, surf: pygame.Surface, x: int, y: int) -> None:
+def _blit_rgba_to_bgr(dst: np.ndarray, surf: pygame.Surface, x: int, y: int) -> None:
     """Alpha-composite an RGBA pygame surface onto a BGR OpenCV image."""
     sw, sh = surf.get_size()
     dh, dw = dst.shape[:2]
@@ -165,7 +165,7 @@ def draw_text(
     if isinstance(canvas, pygame.Surface):
         canvas.blit(surf, (blit_x, blit_y))
     else:
-        blit_rgba_to_bgr(canvas, surf, blit_x, blit_y)
+        _blit_rgba_to_bgr(canvas, surf, blit_x, blit_y)
     return pygame.Rect(blit_x + pad, blit_y + pad, text_w, ascent)
 
 
