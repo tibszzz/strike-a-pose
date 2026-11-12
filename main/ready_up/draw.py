@@ -7,6 +7,8 @@ from pathlib import Path
 import pygame
 
 from main import content, styles
+from main.nav.hand_draw import draw_hand_skeleton, draw_hold_ring
+from main.nav.hand_geometry import hand_ring_radius, palm_center
 from main.ready_up.labels import draw_player_label, head_anchor
 from main.ready_up.logic import Candidate, ReadyUp, ReadyUpConfig
 from main.styles import Theme
@@ -20,8 +22,13 @@ def draw_ready_up(
     *,
     theme: Theme,
     status: str | None = None,
+    snap: object | None = None,
 ) -> None:
-    """Full-bleed camera assumed already on canvas; draw labels + rules + status."""
+    """Full-bleed camera assumed already on canvas; draw labels + rules + status.
+
+    With `snap` (the shell's gesture snapshot), each recognised hand gets the
+    same skeleton + hold ring as the menu / game-over screens.
+    """
     cfg = ready.config
     colors = list(theme.player)
     muted = theme.muted
@@ -46,6 +53,30 @@ def draw_ready_up(
     _draw_rules_card(canvas, cfg, theme)
     message = status if status is not None else _default_status(ready)
     _draw_status(canvas, message, theme)
+    _draw_hand_holds(canvas, ready, snap, theme)
+
+
+def _draw_hand_holds(
+    canvas: pygame.Surface, ready: ReadyUp, snap: object | None, theme: Theme
+) -> None:
+    """Skeleton for every hand in someone's box; hold ring while a gesture counts down."""
+    hands = getattr(snap, "hands", ()) or ()
+    min_score = ready.config.min_score
+    for hand in hands:
+        if not hand.landmarks or hand.score < min_score:
+            continue
+        owner = ready.hand_owner(hand)
+        if owner is None:
+            continue
+        draw_hand_skeleton(canvas, hand.landmarks, theme.accent)
+        progress = ready.hold_progress(owner, hand.label)
+        if progress is None:
+            continue
+        center = palm_center(hand.landmarks)
+        if center is not None:
+            draw_hold_ring(
+                canvas, center, hand_ring_radius(hand.box), progress, track_color=theme.accent
+            )
 
 
 def _default_status(ready: ReadyUp) -> str:

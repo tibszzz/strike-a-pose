@@ -130,3 +130,33 @@ def test_match_roster_by_seeds_picks_nearest():
 
 def test_match_roster_by_seeds_none_when_short():
     assert match_roster_by_seeds([person(100)], [100.0, 400.0]) is None
+
+
+def test_hold_progress_fills_toward_ready_then_stops_counting():
+    ready = ReadyUp(1000, cfg(min_players=1, max_players=2, hold_frames=4))
+    p = person(200)
+    ready.update([p], [hand_at(THUMB_UP, 200)])
+    c = ready.hand_owner(hand_at(THUMB_UP, 200))
+    assert c is not None
+    assert ready.hold_progress(c, THUMB_UP) == 0.25
+    hold_thumb(ready, [p], THUMB_UP, 200, frames=3)
+    assert c.ready
+    assert ready.hold_progress(c, THUMB_UP) is None  # already ready: nothing to fill
+    assert ready.hold_progress(c, THUMB_DOWN) == 0.0  # would un-ready
+
+
+def test_hold_progress_for_fist_only_when_start_is_possible():
+    ready = ReadyUp(1000, cfg(min_players=1, max_players=2, fist_hold_frames=4))
+    p = person(200)
+    ready.update([p], [hand_at(CLOSED_FIST, 200)])
+    c = ready.hand_owner(hand_at(CLOSED_FIST, 200))
+    assert ready.hold_progress(c, CLOSED_FIST) is None  # not ready yet
+    hold_thumb(ready, [p], THUMB_UP, 200)
+    ready.update([p], [hand_at(CLOSED_FIST, 200)])
+    assert ready.hold_progress(c, CLOSED_FIST) == 0.25
+
+
+def test_hand_outside_everyone_has_no_owner():
+    ready = ReadyUp(1000, cfg())
+    ready.update([person(200)])
+    assert ready.hand_owner(hand_at(THUMB_UP, 800)) is None

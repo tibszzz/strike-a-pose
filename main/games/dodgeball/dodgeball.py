@@ -1,4 +1,4 @@
-"""Dodgeball Game: Avoid the bouncing ball! Each player has 5 lives; a ball hit costs one."""
+"""Dodgeball Game: Avoid the bouncing ball! Each player has 3 lives; a ball hit costs one."""
 
 from __future__ import annotations
 
@@ -7,11 +7,11 @@ import random
 
 import pygame
 
-from main import content, styles
+from main import audio, content, styles
 from main.end_screen import EndChoice, EndScreen, draw_end_screen
 from main.nav import MenuCommand, StartGame
 from main.nav.hand_geometry import NAV_GESTURE_HANDS
-from main.pose import Person, PoseFrame
+from main.pose import KP, Person, PoseFrame
 from main.pose.library import left_to_right
 from main.ready_up import ReadyUp, ReadyUpConfig, draw_player_label, draw_ready_up, head_anchor
 from main.settings import ASSETS, DodgeballConfig
@@ -44,27 +44,26 @@ def _still_paths() -> tuple:
     return tuple(sorted(root.glob("pose_*.png")))
 
 
-def _draw_heart(
-    canvas: pygame.Surface, cx: int, cy: int, size: int, color: tuple[int, int, int], filled: bool
-) -> None:
-    """Heart icon centred on (cx, cy), `size` px wide. Lost lives are drawn grey and faded."""
-    pad = 3  # room for the black edge
-    r = size // 4
-    surf = pygame.Surface((size + pad * 2, size + pad * 2), pygame.SRCALPHA)
-    ox, oy = surf.get_width() // 2, r + pad + 1  # heart origin inside the surface
+_HEART_SPRITES = {True: ASSETS / "sprites" / "heart-alive.png", False: ASSETS / "sprites" / "heart-dead.png"}
+_heart_cache: dict[tuple[bool, int], pygame.Surface] = {}
 
-    def shape(fill, grow: int) -> None:
-        for lx in (ox - r, ox + r):
-            pygame.draw.circle(surf, fill, (lx, oy), r + grow)
-        pygame.draw.polygon(
-            surf, fill, [(ox - 2 * r - grow, oy + r // 4), (ox, oy + 3 * r + grow), (ox + 2 * r + grow, oy + r // 4)]
-        )
 
-    shape((*BLACK, 255), 2)  # black edge keeps the icon readable over video
-    shape((*color, 255) if filled else (*MUTED, 255), 0)
-    if not filled:
-        surf.set_alpha(110)
-    canvas.blit(surf, (cx - surf.get_width() // 2, cy - surf.get_height() // 2))
+def _heart_sprite(filled: bool, size: int) -> pygame.Surface:
+    """Pixel-art heart (alive or lost) scaled to `size` px, loaded once per size."""
+    key = (filled, size)
+    if key not in _heart_cache:
+        img = pygame.image.load(str(_HEART_SPRITES[filled]))
+        if pygame.display.get_surface() is not None:
+            img = img.convert_alpha()
+        # Nearest-neighbour keeps the pixel-art edges crisp.
+        _heart_cache[key] = pygame.transform.scale(img, (size, size))
+    return _heart_cache[key]
+
+
+def _draw_heart(canvas: pygame.Surface, cx: int, cy: int, size: int, filled: bool) -> None:
+    """Heart sprite centred on (cx, cy), `size` px wide: alive, or the lost-life outline."""
+    sprite = _heart_sprite(filled, size)
+    canvas.blit(sprite, sprite.get_rect(center=(cx, cy)))
 
 
 def draw_text(
@@ -82,11 +81,55 @@ def draw_text(
     )
 
 
+LABEL_SCALE = 1.1  # player "P1" labels over heads (base label size is 0.9)
+LABEL_PAD = 16  # px between the top of the head and the label baseline
+
+
+def _label_anchor(person: Person, min_conf: float = 0.3) -> tuple[float, float]:
+    """Baseline point for a player label, padded clear of the top of the head.
+
+    The head top is estimated from the nose: it sits about 0.8x the
+    nose-to-shoulder drop above the nose, so the gap scales with how close the
+    player stands. Falls back to the top of the person box.
+    """
+    x1, y1, x2, _ = person.box
+    conf, xy = person.conf, person.xy
+    if float(conf[KP.NOSE]) < min_conf:
+        return (x1 + x2) / 2, y1 - LABEL_PAD
+    nx, ny = float(xy[KP.NOSE][0]), float(xy[KP.NOSE][1])
+    shoulders = [
+        float(xy[k][1]) for k in (KP.L_SHOULDER, KP.R_SHOULDER) if float(conf[k]) >= min_conf
+    ]
+    if shoulders:
+        drop = max(0.0, sum(shoulders) / len(shoulders) - ny)
+        head_top = ny - 0.8 * drop
+    else:
+        head_top = ny - 0.12 * (person.box[3] - y1)  # ~ head size from body height
+    return nx, head_top - LABEL_PAD
+
+
 class DodgeballGame:
     title = copy.window_title
 
     def __init__(self, size, config: DodgeballConfig | None = None):
         self.w, self.h = size
+        # Same recipes as Duel (and the same optional assets/sounds/*.wav overrides):
+        # its short "steady" tone for wall bounces, its "hit" gunshot for player hits.
+        # Match flow: start jingle, countdown ticks + "go", game-over sting, then
+        # the winner fanfare (Duel's match_over recipe, extended). Each can be
+        # replaced by dropping assets/sounds/<name>.wav in.
+        synth = {
+            "steady": lambda: audio.tone(587, 0.25),
+            "hit": lambda: audio.gunshot(0.4, seed=7),
+            "match_start": lambda: audio.arpeggio([523, 659, 784, 1047], step=0.1),
+            "tick": lambda: audio.tone(440, 0.12, decay=0.05),
+            "go": lambda: audio.tone(880, 0.35, decay=0.12),
+            "game_over": lambda: audio.arpeggio([392, 330, 262, 196], step=0.2),
+            "match_over": lambda: audio.arpeggio([392, 494, 587, 784, 587, 784, 988], step=0.13),
+        }
+        self.sounds = {
+            name: audio.load_or(ASSETS / "sounds" / f"{name}.wav", make) for name, make in synth.items()
+        }
         self.config = config if config is not None else DodgeballConfig()
         self.debug = bool(self.config.debug)
 
@@ -116,12 +159,8 @@ class DodgeballGame:
         self.hit_message = ""
         self.hit_message_timer = 0
 
-        self.hit_timer = 0
-        self.hit_position = (0, 0)
-
         self.person_boxes: list[tuple[int, tuple[float, float, float, float]]] = []
-        self.person_noses: list[tuple[int, tuple[float, float] | None]] = []
-        self.body_polygons: list[tuple[int, list | None]] = []
+        self.person_label_anchors: list[tuple[int, tuple[float, float]]] = []
 
         self._end = EndScreen((self.w, self.h))
         self._pending_nav = None
@@ -165,17 +204,18 @@ class DodgeballGame:
             lobby_x[i] if i < len(lobby_x) else self.w * (i + 1) / (count + 1)
             for i in range(count)
         ]
-        self._begin_round()
+        audio.play(self.sounds["match_start"])  # stands in for the first countdown tick
+        self._begin_round(tick=False)
         self.hit_message = copy.get_ready
 
-    def _begin_round(self) -> None:
+    def _begin_round(self, tick: bool = True) -> None:
+        if tick:
+            audio.play(self.sounds["tick"])  # "5" of the restart countdown
         self.paused = False
         self.countdown = 5 * FPS
         self.hit_registered = [False] * self.player_count
         self.missing_frames = [0] * self.player_count
         self.hit_message_timer = 0
-        self.hit_timer = 0
-        self.body_polygons = []
         self._start_ball()
 
     def reset(self) -> None:
@@ -281,29 +321,25 @@ class DodgeballGame:
         self.person_boxes = [
             (i, tuple(person.box)) for i, person in enumerate(slots) if person is not None
         ]
-        self.person_noses = []
-        for i, person in enumerate(slots):
-            if person is None:
-                continue
-            nose = None
-            if float(person.conf[0]) >= 0.3:
-                nose = (float(person.xy[0][0]), float(person.xy[0][1]))
-            self.person_noses.append((i, nose))
+        self.person_label_anchors = [
+            (i, _label_anchor(person)) for i, person in enumerate(slots) if person is not None
+        ]
 
         if self.paused:
             return
 
         if self.countdown > 0:
             self.countdown -= 1
+            if self.countdown == 0:
+                audio.play(self.sounds["go"])  # ball launches next frame
+            elif self.countdown % FPS == 0:
+                audio.play(self.sounds["tick"])  # 4, 3, 2, 1
             return
 
-        self.body_polygons = []
-
         self.ball.move()
-        self.ball.bounce(self.w, self.h)
+        if self.ball.bounce(self.w, self.h):
+            audio.play(self.sounds["steady"])
 
-        if self.hit_timer > 0:
-            self.hit_timer -= 1
         if self.hit_message_timer > 0:
             self.hit_message_timer -= 1
 
@@ -314,13 +350,11 @@ class DodgeballGame:
         for player_idx, person in enumerate(slots):
             if person is not None and self.lives[player_idx] > 0:
                 collision, body_polygon = self.ball.check_collision(person)
-                self.body_polygons.append((player_idx, body_polygon))
 
                 if collision and not self.hit_registered[player_idx]:
                     self._lose_life(player_idx, "HIT!")
+                    audio.play(self.sounds["hit"])
                     self.hit_registered[player_idx] = True
-                    self.hit_timer = 45
-                    self.hit_position = (int(self.ball.x), int(self.ball.y))
 
                     if body_polygon:
                         polygon_center_x = sum(p[0] for p in body_polygon) / len(body_polygon)
@@ -353,17 +387,24 @@ class DodgeballGame:
 
         speed = math.sqrt(self.ball.vx**2 + self.ball.vy**2)
         if speed > 15:
-            self.ball.color = RED
+            self.ball.color, self.ball.pace = RED, "fast"
         elif speed > 8:
-            self.ball.color = ORANGE
+            self.ball.color, self.ball.pace = ORANGE, "medium"
         else:
-            self.ball.color = YELLOW
+            self.ball.color, self.ball.pace = YELLOW, "slow"
 
     def _lose_life(self, player_idx: int, reason: str) -> None:
         self.lives[player_idx] = max(0, self.lives[player_idx] - 1)
+        was_over = self.game_over
         self.hit_message = self._hit_message(player_idx, reason)
         self.hit_message_timer = 0
         self.paused = True
+        if self.game_over and not was_over:
+            alive = [i for i, lives in enumerate(self.lives) if lives > 0]
+            has_winner = self.player_count > 1 and len(alive) == 1
+            # Sting first; a winner then gets the fanfare queued right after it.
+            fanfare = self.sounds["match_over"] if has_winner else None
+            audio.play_then(self.sounds["game_over"], fanfare)
 
     def _check_offscreen(self, slots: list[Person | None]) -> None:
         for i, person in enumerate(slots):
@@ -458,41 +499,24 @@ class DodgeballGame:
             draw_text(canvas, f"P{i + 1}", right - hearts_w - 14, cy + 10, 0.9, label_color, "right", outline=True)
             for k in range(LIVES):
                 cx = right - hearts_w + k * (size + gap) + size // 2
-                _draw_heart(canvas, cx, cy, size, color, filled=k < self.lives[i])
+                _draw_heart(canvas, cx, cy, size, filled=k < self.lives[i])
 
     def draw(self, canvas: pygame.Surface, frame: PoseFrame) -> None:
         if self.in_lobby:
-            draw_ready_up(canvas, self.ready_up, theme=theme)
+            draw_ready_up(canvas, self.ready_up, theme=theme, snap=self.gesture_snapshot)
             return
 
-        nose_by_slot = {i: nose for i, nose in self.person_noses}
+        anchor_by_slot = dict(self.person_label_anchors)
         for player_idx, box in self.person_boxes:
             out = self.lives[player_idx] == 0
             color = MUTED if out else PLAYER_COLORS[player_idx % len(PLAYER_COLORS)]
-            anchor = head_anchor(box, nose_by_slot.get(player_idx))
+            anchor = anchor_by_slot.get(player_idx) or head_anchor(box)
             label = f"P{player_idx + 1}" + (" OUT" if out else "")
-            draw_player_label(canvas, label, anchor, color, face=theme.font)
-
-        for player_idx, body_polygon in self.body_polygons:
-            if body_polygon is not None:
-                color = PLAYER_COLORS[player_idx % len(PLAYER_COLORS)]
-                temp_surf = pygame.Surface(canvas.get_size(), pygame.SRCALPHA)
-                pygame.draw.polygon(temp_surf, (*color, 80), body_polygon, 2)
-                canvas.blit(temp_surf, (0, 0))
+            draw_player_label(canvas, label, anchor, color, scale=LABEL_SCALE, face=theme.font)
 
         if self.countdown > 0:
             self._draw_launch_marker(canvas)
         self.ball.draw(canvas)
-
-        if self.hit_timer > 0:
-            alpha = int(255 * (self.hit_timer / 45))
-            temp_surf = pygame.Surface(canvas.get_size(), pygame.SRCALPHA)
-            radius = int(30 + (45 - self.hit_timer))
-            pygame.draw.circle(temp_surf, (*RED, alpha), self.hit_position, radius, 3)
-            x, y = self.hit_position
-            pygame.draw.line(temp_surf, (*RED, alpha), (x - 25, y - 25), (x + 25, y + 25), 3)
-            pygame.draw.line(temp_surf, (*RED, alpha), (x - 25, y + 25), (x + 25, y - 25), 3)
-            canvas.blit(temp_surf, (0, 0))
 
         if self.hit_message and (
             self.hit_message_timer > 0 or self.paused or self.countdown > 0 or self.game_over

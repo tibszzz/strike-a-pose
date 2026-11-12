@@ -215,21 +215,44 @@ class ReadyUp:
                 )
                 self._next_id += 1
 
+    def hand_owner(self, hand: _Hand) -> Candidate | None:
+        """The visible candidate whose box holds this hand (nearest centre wins)."""
+        hx, hy = hand.center
+        owners = [
+            c for c in self.candidates if c.visible and _contains(c.box, hx, hy, margin=0.15)
+        ]
+        if not owners:
+            return None
+        return min(owners, key=lambda c: abs(c.center_x - hx))
+
+    def hold_progress(self, c: Candidate, label: str) -> float | None:
+        """0..1 progress of the hold `label` is driving for `c`, or None if it does nothing.
+
+        Thumbs up (not yet ready) / thumbs down (ready) fill toward toggling ready;
+        a closed fist from a ready player fills toward starting the match.
+        """
+        if c not in self.eligible:
+            return None
+        cfg = self.config
+        if (label == THUMB_UP and not c.ready) or (label == THUMB_DOWN and c.ready):
+            held = c.hold_frames if c.gesture == label else 0
+            return min(1.0, held / max(1, cfg.hold_frames))
+        if label == CLOSED_FIST and c.ready and self.can_start:
+            return min(1.0, c.fist_hold_frames / max(1, cfg.fist_hold_frames))
+        return None
+
     def _gestures_by_candidate(
         self, hands: Iterable[_Hand]
     ) -> tuple[dict[int, str], set[int]]:
         """Thumb label per candidate, and which candidate ids show Closed_Fist."""
         best_thumb: dict[int, tuple[float, str]] = {}
         fists: set[int] = set()
-        visible = [c for c in self.candidates if c.visible]
         for hand in hands:
             if hand.score < self.config.min_score:
                 continue
-            hx, hy = hand.center
-            owners = [c for c in visible if _contains(c.box, hx, hy, margin=0.15)]
-            if not owners:
+            owner = self.hand_owner(hand)
+            if owner is None:
                 continue
-            owner = min(owners, key=lambda c: abs(c.center_x - hx))
             if hand.label in (THUMB_UP, THUMB_DOWN):
                 if owner.id not in best_thumb or hand.score > best_thumb[owner.id][0]:
                     best_thumb[owner.id] = (hand.score, hand.label)

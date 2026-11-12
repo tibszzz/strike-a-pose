@@ -4,9 +4,27 @@ import random
 import pygame
 
 from main import styles
+from main.settings import ASSETS
 
-WHITE = styles.DODGEBALL.ink
 ORANGE = styles.DODGEBALL.ball_medium
+
+# Sprite per pace (set by the game from the ball's speed each frame).
+_SPRITES = {
+    "slow": ASSETS / "sprites" / "smug.png",
+    "medium": ASSETS / "sprites" / "sun.png",
+    "fast": ASSETS / "sprites" / "full-moon.png",
+}
+_sprite_cache: dict[tuple[str, int], pygame.Surface] = {}
+
+
+def _sprite(pace: str, size: int) -> pygame.Surface:
+    key = (pace, size)
+    if key not in _sprite_cache:
+        img = pygame.image.load(str(_SPRITES[pace]))
+        if pygame.display.get_surface() is not None:
+            img = img.convert_alpha()
+        _sprite_cache[key] = pygame.transform.smoothscale(img, (size, size))
+    return _sprite_cache[key]
 
 
 class Ball:
@@ -30,6 +48,7 @@ class Ball:
       self.vy = 0.0
       self.reset_velocity()
       self.color = color if color is not None else ORANGE
+      self.pace = "medium"  # "slow" | "medium" | "fast": picks the sprite
   
   def reset_velocity(self) -> None:
       """Give the ball a random initial velocity."""
@@ -50,8 +69,14 @@ class Ball:
           self.vx *= scale
           self.vy *= scale
   
-  def bounce(self, width: float, height: float) -> None:
-      """Bounce off screen boundaries with randomness."""
+  def bounce(self, width: float, height: float) -> bool:
+      """Bounce off screen boundaries with randomness. True if it hit a wall."""
+      hit_wall = (
+          self.x - self.radius < 0
+          or self.x + self.radius > width
+          or self.y - self.radius < 0
+          or self.y + self.radius > height
+      )
       if self.x - self.radius < 0:
           self.x = self.radius
           self.vx = -self.vx * self.elasticity
@@ -86,6 +111,7 @@ class Ball:
           speed = math.sqrt(self.vx**2 + self.vy**2)
           self.vx = math.cos(new_angle) * speed
           self.vy = math.sin(new_angle) * speed
+      return hit_wall
   
   def check_collision(self, person) -> tuple[bool, list | None]:
       """Check if ball collides with person's body shape (keypoints polygon).
@@ -167,7 +193,6 @@ class Ball:
           return distance
   
   def draw(self, canvas: pygame.Surface) -> None:
-      """Draw the ball."""
-      pygame.draw.circle(canvas, self.color, (int(self.x), int(self.y)), int(self.radius) + 4, 2)
-      pygame.draw.circle(canvas, self.color, (int(self.x), int(self.y)), int(self.radius))
-      pygame.draw.circle(canvas, WHITE, (int(self.x) - 5, int(self.y) - 5), 4)
+      """Draw the ball as the sprite for its current pace."""
+      sprite = _sprite(self.pace, int(self.radius) * 2 + 8)
+      canvas.blit(sprite, sprite.get_rect(center=(int(self.x), int(self.y))))

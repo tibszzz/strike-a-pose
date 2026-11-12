@@ -217,7 +217,7 @@ class StrikeGame:
 
     def draw(self, canvas: pygame.Surface, frame: PoseFrame) -> None:
         if self._in_ready_up:
-            draw_ready_up(canvas, self._ready, theme=styles.STRIKE)
+            draw_ready_up(canvas, self._ready, theme=styles.STRIKE, snap=self.gesture_snapshot)
             return
         if self._in_end_screen():
             draw_end_screen(

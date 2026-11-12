@@ -329,7 +329,7 @@ class DuelGame:
             if surf.get_size() != canvas.get_size():
                 surf = pygame.transform.smoothscale(surf, canvas.get_size())
             canvas.blit(surf, (0, 0))
-            draw_ready_up(canvas, self._ready, theme=theme)
+            draw_ready_up(canvas, self._ready, theme=theme, snap=self.gesture_snapshot)
             return
         if d.phase == Phase.REPLAY:
             self._draw_replay(canvas)

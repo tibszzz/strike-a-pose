@@ -80,3 +80,13 @@ def load_or(path: Path, fallback):
 def play(sound: pygame.mixer.Sound | None) -> None:
     if sound is not None:
         sound.play()
+
+
+def play_then(first: pygame.mixer.Sound | None, then: pygame.mixer.Sound | None) -> None:
+    """Play `first`, with `then` queued on the same channel right after it."""
+    if first is None:
+        play(then)
+        return
+    channel = first.play()
+    if channel is not None and then is not None:
+        channel.queue(then)
