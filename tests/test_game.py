@@ -546,6 +546,25 @@ def test_totals_are_the_sum_of_the_whole_number_round_scores():
     )
 
 
+def test_final_screen_carries_every_rounds_score_for_the_points_table():
+    game, _ = new_game()
+
+    def strike(target):
+        return [
+            person_striking(target.joints, center_x=200.0),
+            person_striking(T_POSE, center_x=800.0),
+        ]
+
+    results, final = play_full_game(game, strike)
+
+    assert final.total_rounds == 5
+    assert final.round_scores == tuple(
+        tuple(result.players[index].round_score for result in results) for index in (0, 1)
+    )
+    assert final.round_scores[0] == (100, 100, 100, 100, 100)
+    assert sum(final.round_scores[1]) == results[-1].players[1].total
+
+
 def test_equal_totals_share_first_place():
     game, events = new_game()
 

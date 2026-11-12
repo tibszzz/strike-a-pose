@@ -8,13 +8,23 @@ import random
 import pygame
 
 from main import content, styles
-from main.end_screen import EndChoice, EndScreen, draw_end_screen
+from main.end_screen import (
+    EndChoice,
+    EndScreen,
+    LivesRow,
+    draw_card_art,
+    draw_end_screen,
+    draw_headline,
+    draw_lives_rows,
+    winners_line,
+)
 from main.nav import MenuCommand, StartGame
 from main.nav.hand_geometry import NAV_GESTURE_HANDS
 from main.pose import Person, PoseFrame
 from main.pose.library import left_to_right
 from main.ready_up import ReadyUp, ReadyUpConfig, draw_player_label, draw_ready_up, head_anchor
 from main.settings import ASSETS, DodgeballConfig
+from main.ui.paper import PLAYER_INK_DODGEBALL
 
 from .ball import Ball
 
@@ -416,6 +426,36 @@ class DodgeballGame:
             "NOTE: Red ball = fast, orange = medium, yellow = slow",
         ]
 
+    def _draw_results_body(self, canvas: pygame.Surface, rect: pygame.Rect, frame) -> None:
+        """Winner (or solo game over), hearts left per player, dodge illustration."""
+        results = content.Results
+        if self.player_count <= 1:
+            headline, sub = results.solo_over, results.solo_sub
+        else:
+            alive = [i + 1 for i, lives in enumerate(self.lives) if lives > 0]
+            headline, sub = winners_line(alive), ""
+        bottom = draw_headline(canvas, frame, rect, headline, sub, size=64)
+        top = bottom + frame.px(28)
+        rows_rect = pygame.Rect(rect.x, top, min(int(rect.width * 0.6), frame.px(660)), rect.bottom - top)
+        alive_count = sum(1 for lives in self.lives if lives > 0)
+        draw_lives_rows(
+            canvas,
+            frame,
+            rows_rect,
+            [
+                LivesRow(
+                    player=i + 1,
+                    lives=lives,
+                    max_lives=LIVES,
+                    winner=self.player_count > 1 and lives > 0 and alive_count == 1,
+                )
+                for i, lives in enumerate(self.lives)
+            ],
+            palette=PLAYER_INK_DODGEBALL,
+        )
+        art_box = pygame.Rect(rows_rect.right + frame.px(40), rect.y, rect.right - rows_rect.right - frame.px(40), rect.height)
+        draw_card_art(canvas, ASSETS / "ui" / "how_to_play" / "dodgeball" / "step_2.png", art_box)
+
     def _draw_offscreen_warnings(self, canvas: pygame.Surface) -> None:
         warn_after = FPS // 2
         y = self.h - 90
@@ -464,6 +504,15 @@ class DodgeballGame:
         if self.in_lobby:
             draw_ready_up(canvas, self.ready_up, theme=theme)
             return
+        if self.game_over:
+            draw_end_screen(
+                canvas,
+                self._end,
+                snap=self.gesture_snapshot,
+                title=content.Results.dodgeball_title,
+                body=self._draw_results_body,
+            )
+            return
 
         nose_by_slot = {i: nose for i, nose in self.person_noses}
         for player_idx, box in self.person_boxes:
@@ -495,28 +544,18 @@ class DodgeballGame:
             canvas.blit(temp_surf, (0, 0))
 
         if self.hit_message and (
-            self.hit_message_timer > 0 or self.paused or self.countdown > 0 or self.game_over
+            self.hit_message_timer > 0 or self.paused or self.countdown > 0
         ):
             draw_text(
                 canvas,
                 self.hit_message,
                 self.w // 2,
-                self.h // 2 - 100 if not self.game_over else int(self.h * 0.22),
+                self.h // 2 - 100,
                 scale=1.4,
                 color=RED,
                 align="center",
                 outline=True,
             )
-
-        if self.game_over:
-            draw_end_screen(
-                canvas,
-                self._end,
-                theme=styles.SHELL,
-                snap=self.gesture_snapshot,
-                timestamp=self._frame_ts,
-            )
-            return
 
         if self.countdown > 0:
             countdown_sec = (self.countdown + 29) // 30

@@ -281,3 +281,55 @@ def test_splash_enter_opens_menu_and_back_quits():
     assert splash.poll_nav() == QuitApp()
     image = np.zeros((480, 640, 3), np.uint8)
     assert splash.render_camera(image) is image
+
+
+def test_menu_lists_quit_after_games_and_it_emits_quit_app():
+    pygame.init()
+    menu = MenuGame((640, 480), _entries())
+    assert len(menu.tile_rects()) == len(_entries()) + 1
+    menu.handle_command(MenuCommand.MOVE_UP)  # wraps to the last note: Quit
+    assert menu.debug_lines()[0] == "menu lock quit"
+    menu.handle_command(MenuCommand.SELECT)
+    assert menu.poll_nav() == QuitApp()
+
+
+def test_menu_release_first_ignores_a_fist_carried_in_from_another_page():
+    pygame.init()
+    menu = MenuGame((640, 480), _entries(), release_first=True)
+    tip = menu.tile_rects()[0].center
+    fist = GestureSnapshot(label="Closed_Fist", score=1.0, landmarks=_landmarks_at(*tip))
+    menu.gesture_snapshot = fist
+    menu.update(_frame(timestamp=1.0))
+    menu.update(_frame(timestamp=2.0))
+    assert menu.poll_nav() is None
+
+    menu.gesture_snapshot = GestureSnapshot(label=None, score=0.0, landmarks=_landmarks_at(*tip))
+    menu.update(_frame(timestamp=2.1))
+    menu.gesture_snapshot = fist
+    menu.update(_frame(timestamp=2.2))
+    menu.update(_frame(timestamp=2.8))
+    assert menu.poll_nav() == StartGame("duel")
+
+
+def test_shell_menu_orders_games_like_the_mockup():
+    from main.games.registry import make_menu
+
+    pygame.init()
+    menu = make_menu(build_registry())((640, 480))
+    assert [e.id for e in menu.entries] == ["duel", "strike", "dodgeball"]
+
+
+def test_menu_selection_sticks_and_a_fist_anywhere_presses_it():
+    pygame.init()
+    menu = MenuGame((640, 480), _entries())
+    tip = menu.tile_rects()[2].center
+    menu.gesture_snapshot = GestureSnapshot(label=None, score=0.0, landmarks=_landmarks_at(*tip))
+    menu.update(_frame(timestamp=1.0))
+    away = (320.0, 460.0)  # bottom of the screen, nowhere near the notes
+    menu.gesture_snapshot = GestureSnapshot(label=None, score=0.0, landmarks=_landmarks_at(*away))
+    menu.update(_frame(timestamp=1.1))
+    assert menu.debug_lines()[0] == "menu lock strike"
+    menu.gesture_snapshot = GestureSnapshot(label="Closed_Fist", score=1.0, landmarks=_landmarks_at(*away))
+    menu.update(_frame(timestamp=1.2))
+    menu.update(_frame(timestamp=1.8))
+    assert menu.poll_nav() == StartGame("strike")

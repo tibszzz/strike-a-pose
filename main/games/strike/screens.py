@@ -93,6 +93,9 @@ class Standing:
 @dataclass(frozen=True)
 class FinalScreen:
     standings: tuple[Standing, ...]  # best first
+    # Per-round scores per seat (index 0 = P1), in round order; feeds the points table.
+    round_scores: tuple[tuple[int, ...], ...] = ()
+    total_rounds: int = 0
 
 
 Screen = Union[LobbyScreen, CountdownScreen, RetryScreen, ResultsScreen, FinalScreen]
