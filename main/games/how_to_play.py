@@ -6,12 +6,11 @@ selects it (the selection sticks after the cursor leaves); Closed_Fist held
 anywhere then presses it. Nothing is selected when the page opens, so a fist
 does nothing until a button has been hovered.
 
-The cursor is mouse-like (`main.nav.cursor.HandCursor`, relative mode): it
-starts parked at the centre of the screen and follows the palm's *movement*
-(scaled up, smoothed), re-anchoring once the hand has been gone for a moment.
-A fist carried over from the menu pick therefore can't land on a button, and
-must open once before any new hold counts. Pushing the cursor against a
-screen edge drags its anchor, so the hand never runs out of room.
+The cursor maps the hand exactly like the main menu's (`main.nav.cursor.
+HandCursor`: palm centre, body-sized reach zone, smoothed), so it carries on
+from where it was on the menu instead of jumping. The fist that picked the
+game can't press anything here: the hand must open (`ReleaseGate`) before a
+new hold counts.
 
 Art lives in `assets/ui/how_to_play/<game id>/step_{1,2,3}.png` + `info.png`;
 swap the files to restyle without code changes.
@@ -114,7 +113,7 @@ class HowToPlayGame:
         )
         self._lock: int | None = None  # selected button (sticky)
         self._pending: Nav | None = None
-        self.pointer = nav_cursor(size, relative=True, config=cfg)
+        self.pointer = nav_cursor(size, config=cfg)  # same mapping as the menu: no jump
 
     # -- layout ----------------------------------------------------------------
 
@@ -127,10 +126,9 @@ class HowToPlayGame:
         return [f.rect(964, 84, 1232, 188), f.rect(1254, 90, 1428, 184)]
 
     @property
-    def cursor(self) -> tuple[float, float]:
-        pos = self.pointer.position
-        assert pos is not None  # relative cursor is always parked somewhere
-        return pos
+    def cursor(self) -> tuple[float, float] | None:
+        """Cursor in canvas px, or None while no hand is around."""
+        return self.pointer.position
 
     # -- Game protocol -----------------------------------------------------------
 
@@ -144,11 +142,11 @@ class HowToPlayGame:
     def update(self, frame: PoseFrame) -> None:
         snap = self.gesture_snapshot
         released = self._release.update(snap, frame.timestamp)
-        self.pointer.update(snap, frame.timestamp, frame.people)
-        if self.pointer.tracking and not self._thumb.active:
+        cursor = self.pointer.update(snap, frame.timestamp, frame.people)
+        if cursor is not None and self.pointer.tracking and not self._thumb.active:
             # Hover selects; the selection sticks when the cursor leaves the button.
             for i, rect in enumerate(self.button_rects()):
-                if rect.collidepoint(self.cursor) and self._lock != i:
+                if rect.collidepoint(cursor) and self._lock != i:
                     self._lock = i
                     self._thumb.reset()
                     break

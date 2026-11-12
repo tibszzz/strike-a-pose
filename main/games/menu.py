@@ -2,7 +2,7 @@
 
 Sketchbook backdrop (players drawn as marker stick figures from the pose
 model, no live video) behind a row of notebook-page buttons across the top
-(one per game, then Quit), the brand title bottom-right and faint gesture hints
+(one per game, then Quit), the brand title bottom-right and stacked gesture hints
 bottom-left. Hovering a note (smoothed palm cursor) selects it and the selection
 sticks after the hand moves away; Closed_Fist held anywhere presses the
 selected note. While a Closed_Fist hold is in
@@ -142,17 +142,15 @@ class MenuGame:
                 progress=self._thumb.progress if locked else 0.0,
             )
 
-        # Gesture hints: small and faded, bottom-left; brand title bottom-right.
-        widgets.draw_hint_bar(
+        # Gesture hints stacked bottom-left (softer ink); brand title bottom-right.
+        widgets.draw_hint_stack(
             canvas,
             f,
-            f.rect(50, 770, 610, 846),
             (
-                Hint(widgets.PALM_ICON, hints.hover_heading, hints.hover_sub),
-                Hint(widgets.FIST_ICON, hints.select_heading, hints.start_sub),
+                Hint(widgets.PALM_ICON, hints.hover_heading),
+                Hint(widgets.FIST_ICON, hints.select_heading),
             ),
-            scale=0.68,
-            alpha=150,
+            alpha=190,
         )
         widgets.draw_title_strip(
             canvas,

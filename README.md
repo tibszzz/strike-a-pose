@@ -97,8 +97,9 @@ Nothing is selected when a page opens, so a fist does nothing until you hover.
 
 On a game's ready-up screen, each player gets a "P1"/"P2"… triangle above
 their head: grey while waiting, filled with their colour after a thumbs up
-(thumbs down sits out). Any ready player holds a fist to start; the hint strip
-bottom-left shows how many more players are needed.
+(thumbs down sits out). Any ready player holds a fist to start. Two stacked hints
+bottom-left read "Thumbs up to join" and "Fist to start"; the second stays
+faded until enough players are ready.
 
 Flow: menu → the game's how-to-play page → the game's ready-up → play →
 results page (Play again returns to ready-up, Menu to the menu).
@@ -109,16 +110,15 @@ Pose figure: torso box, limbs, joint knobs, ring head) on a paper backdrop
 (`main/ui/sketch.py`), so players still see themselves move.
 
 The menu has a row of torn-paper notes across the top
-(High Noon, Strike a pose, Dodgeball, Quit), faint gesture hints bottom-left
+(High Noon, Strike a pose, Dodgeball, Quit), stacked gesture hints bottom-left
 and the title bottom-right. The hand cursor (`main/nav/cursor.py`) follows
 your palm centre (so closing a fist doesn't knock it off a button), is
 smoothed, and rides out brief detection dropouts. Its reach is sized to your
 body: the hand is matched to the player whose wrist it's on, and a zone around
 their shoulders (measured in torso lengths) maps onto the screen, so the edges
-take the same arm movement whether you stand far from the camera or close. On how-to-play the cursor starts at the centre of
-the screen and follows your hand's movement like a mouse (lower your hand to
-"lift" it), so the fist that picked the game can't press anything; the hand
-must also open once before a new fist counts. A fist hold survives a split-second
+take the same arm movement whether you stand far from the camera or close. How-to-play uses the same mapping, so the
+cursor carries on from the menu without jumping; the fist that picked the game
+can't press anything there, as the hand must open before a new fist counts. A fist hold survives a split-second
 detector flicker instead of starting over. Tuning lives in `GestureNavConfig`
 (`REACH_BODY`, `REACH_HALF_W`, `REACH_TOP`, `REACH_BOTTOM`, `CURSOR_GAIN`, `CURSOR_REL_GAIN`, `CURSOR_GRACE_S`, `CURSOR_MIN_CUTOFF`,
 `CURSOR_BETA`, `HOLD_GRACE_S`, `RELEASE_OPEN_S`; all env-overridable). The menu does the same

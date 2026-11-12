@@ -13,6 +13,8 @@ from main.games.registry import build_registry, make_how_to
 from main.nav import GestureSnapshot, MenuCommand, StartGame
 from main.pose import PoseFrame
 
+from cursor_util import hand_for
+
 
 def _frame(timestamp: float) -> PoseFrame:
     return PoseFrame(np.zeros((480, 640, 3), np.uint8), timestamp, (None, None), [])
@@ -38,27 +40,28 @@ def _show(page: HowToPlayGame, label, x, y, t: float) -> None:
     page.update(_frame(t))
 
 
-def _aim(page: HowToPlayGame, target, t: float, start=(100.0, 400.0), label=None):
-    """Hand appears at `start` (cursor parked at centre), then moves so the cursor reaches
-    `target`; held still for a few frames so the smoothing settles. Returns (hand, t)."""
-    _show(page, label, *start, t)
-    cx, cy = page.cursor
-    gain = page.pointer.gain
-    hand = (start[0] + (target[0] - cx) / gain, start[1] + (target[1] - cy) / gain)
-    for _ in range(20):
+def _aim(page: HowToPlayGame, target, t: float, label=None):
+    """Move the hand so the cursor sits on `target`; held ~0.2s. Returns (hand, t)."""
+    hand = hand_for(*target)
+    for _ in range(6):
         t += 1 / 30
         _show(page, label, *hand, t)
     return hand, t
 
 
-def test_cursor_starts_at_centre_and_follows_hand_movement_not_position():
+def test_cursor_uses_the_menu_mapping_so_it_does_not_jump_between_pages():
+    from main.games.menu import MenuGame
+    from main.games.registry import GameEntry
+
     pygame.init()
+    menu = MenuGame((640, 480), (GameEntry("duel", "Duel", lambda size: None),))
     page = HowToPlayGame((640, 480), "duel")
-    assert page.cursor == (320.0, 240.0)
-    _show(page, None, 600.0, 50.0, 1.0)  # hand far away: cursor stays centred
-    assert page.cursor == (320.0, 240.0)
-    hand, _ = _aim(page, (200.0, 300.0), 1.1, start=(600.0, 50.0))
-    assert abs(page.cursor[0] - 200.0) < 3 and abs(page.cursor[1] - 300.0) < 3
+    assert page.cursor is None  # no hand yet: nothing drawn, nothing parked at the centre
+    snap = _snap(None, 500.0, 120.0)
+    menu.gesture_snapshot = page.gesture_snapshot = snap
+    menu.update(_frame(1.0))
+    page.update(_frame(1.0))
+    assert page.cursor == menu.cursor.position
 
 
 def test_fist_away_from_buttons_does_nothing():
@@ -76,6 +79,7 @@ def test_fist_carried_from_menu_cannot_select_even_over_a_button():
     play = page.button_rects()[0].center
     hand, t = _aim(page, play, 1.0, label="Closed_Fist")  # still closed from the menu pick
     assert page.button_rects()[0].collidepoint(page.cursor)
+    assert page.debug_lines()[0].endswith("play")  # selected, but the carried fist can't press
     _show(page, "Closed_Fist", *hand, t + 1.0)
     assert page.poll_nav() is None
 

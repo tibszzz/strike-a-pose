@@ -157,7 +157,7 @@ def note_row_rects(frame: Frame, labels: Sequence[str], *, top: float = 40, heig
 class Hint:
     icon: Path | None
     heading: str
-    sub: str
+    sub: str = ""
 
 
 def draw_hint_bar(
@@ -208,6 +208,57 @@ def draw_hint_bar(
         max_text = left + round(slot_w) - x - frame.px(14)
         paper.text(surface, hint.heading, head_face, ink(INK), (x, rect.centery + frame.px(2)), "bottomleft", max_width=max_text)
         paper.text(surface, hint.sub, sub_face, ink(INK_SOFT), (x, rect.centery + frame.px(2)), "topleft", max_width=max_text)
+
+
+def draw_hint_stack(
+    surface: pygame.Surface,
+    frame: Frame,
+    hints: Sequence[Hint],
+    *,
+    left: float = 50,
+    bottom: float = 846,
+    text_size: float = 44,
+    icon_size: float = 60,
+    gap: float = 12,
+    alpha: int = 255,
+    dim: Sequence[int] = (),
+    seed: int = 21,
+) -> list[pygame.Rect]:
+    """Hints as separate torn-paper strips stacked upward from (left, bottom), design px.
+
+    Icon + heading only (no sub line); every strip gets the widest strip's
+    width so they line up. `dim` lists hint indexes drawn faded (e.g. "Fist to
+    start" before enough players are ready). Returns the strip rects, top first.
+    """
+    if not hints:
+        return []
+    face = paper.hand(frame, text_size)
+    pad_x, pad_y, icon_gap = 24, 12, 18
+    text_w = max(face.size(h.heading)[0] for h in hints) / frame.scale
+    width = pad_x * 2 + icon_size + icon_gap + text_w
+    height = icon_size + pad_y * 2
+    rects: list[pygame.Rect] = []
+    y = bottom
+    for i in range(len(hints) - 1, -1, -1):
+        hint = hints[i]
+        rect = frame.rect(left, y - height, left + width, y)
+        paper.draw_paper(surface, rect, frame, PaperStyle(torn="tb", jag=5), seed=seed + i)
+        a = alpha if i not in dim else round(alpha * 0.4)
+        x = rect.x + frame.px(pad_x)
+        if hint.icon is not None:
+            box = pygame.Rect(x, rect.centery - frame.px(icon_size) // 2, frame.px(icon_size), frame.px(icon_size))
+            paper.blit_art(surface, hint.icon, box, alpha=a)
+            x = box.right + frame.px(icon_gap)
+        paper.text(surface, hint.heading, face, _fade(INK, a), (x, rect.centery + frame.px(2)), "midleft")
+        rects.insert(0, rect)
+        y -= height + gap
+    return rects
+
+
+def _fade(color: paper.Rgb, alpha: int) -> paper.Rgb:
+    """Ink mixed toward the paper color: `alpha` 255 = full ink, 0 = invisible on paper."""
+    a = max(0, min(255, alpha))
+    return tuple(round(p + (c - p) * a / 255) for c, p in zip(color, paper.PAPER))  # type: ignore[return-value]
 
 
 # --- how-to-play card -------------------------------------------------------------
