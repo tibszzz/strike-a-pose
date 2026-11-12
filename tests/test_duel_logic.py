@@ -344,3 +344,15 @@ def test_start_delay_also_applies_to_rematch():
     assert s.duel.can_restart(s.t)
     s.request_start()
     assert s.duel.phase == Phase.INTRO
+
+
+def test_debug_force_match_over_lands_on_results():
+    s = Sim(debug=True, lives=3, round_result_time=2.0, match_result_min_time=2.0)
+    s.request_start()
+    s.run_until(Phase.READY, H, H)
+    s.duel.debug_force_match_over(s.t, winner=1)
+    assert s.duel.phase == Phase.MATCH_OVER
+    assert s.duel.match_winner == 1
+    assert not s.duel.showing_final_round(s.t)
+    assert s.duel.can_restart(s.t)
+    assert s.duel.lives_left(1) == 3 and s.duel.lives_left(0) == 0

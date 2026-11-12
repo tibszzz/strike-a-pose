@@ -409,6 +409,24 @@ class Game:
         choices = [n for n in range(101) if n != final]
         return self._rng.choice(choices)
 
+    def debug_force_final(self) -> FinalScreen | None:
+        """Debug only: jump to FINAL standings. None if still in lobby."""
+        if self._phase is _Phase.LOBBY:
+            return None
+        seats = max(1, self._player_count, len(self._totals))
+        if len(self._totals) < seats:
+            self._totals = list(self._totals) + [0] * (seats - len(self._totals))
+        if len(self._round_scores) < seats:
+            self._round_scores = list(self._round_scores) + [
+                [] for _ in range(seats - len(self._round_scores))
+            ]
+        if self._totals and max(self._totals) == 0:
+            self._totals[0] = 1
+        self._phase = _Phase.FINAL
+        screen = self._final_screen()
+        self._emit(GameOver(standings=screen.standings))
+        return screen
+
     def _step_final(self, now: float, confirm: bool) -> Screen:
         if confirm:
             self._phase = _Phase.LOBBY

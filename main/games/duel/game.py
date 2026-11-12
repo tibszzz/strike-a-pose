@@ -3,8 +3,9 @@
 Look matches the menu / how-to / results pages: sketch-paper sheet, marker +
 hand-lettered type, hand-drawn hearts for lives. Side portrait
 PiPs show each player's body so they can check framing; after a hit, a slow-mo
-camera replay fills the screen before the result. Debug mode (D) still puts the
-full camera image behind the same UI.
+camera replay fills the screen before the result. Final RESULTS puts a live
+winner PiP in the card art slot (how-to art if tracking is lost). Debug overlay
+(D) still puts the full camera image behind the same UI.
 """
 
 from __future__ import annotations
@@ -41,7 +42,7 @@ from main.ui.paper import HEART, INK, INK_FAINT, INK_SOFT, Frame, PaperStyle
 
 from .float_path import FloatPath, ease_out, fade
 from .logic import Duel, Phase
-from .preview import PreviewTracker
+from .preview import PreviewTracker, cover_crop, resolve_results_portrait
 from .replay import ReplayPlayback, ReplayRecorder
 
 theme = styles.DUEL
@@ -204,6 +205,18 @@ class DuelGame:
             if started is not None:
                 self._apply_started(started, self.now)
 
+    def debug_skip_to_results(self) -> bool:
+        """`--debug` + R after ready-up: jump to final RESULTS. False → shell may reset."""
+        if not self.duel.config.debug or self._in_ready_up():
+            return False
+        self.duel.debug_force_match_over(self.now, winner=0)
+        self.win_msg = self.win_msgs.pick()
+        self.win_img = self._pick_cowboy()
+        self._end.reset()
+        self._clear_replay()
+        self.floaters.clear()
+        return True
+
     def handle_command(self, command: MenuCommand) -> None:
         if not self._in_end_screen():
             return
@@ -357,7 +370,7 @@ class DuelGame:
                 self._end,
                 snap=self.gesture_snapshot,
                 title=content.Results.duel_title,
-                body=self._draw_results_body,
+                body=lambda c, r, f: self._draw_results_body(c, r, f, frame),
                 active=self._in_end_screen(),
                 pose=frame,
             )
@@ -461,16 +474,27 @@ class DuelGame:
         image_bgr: np.ndarray,
         box: tuple[float, float, float, float],
         dest: pygame.Rect,
-    ) -> None:
+        *,
+        cover: bool = False,
+        missing_placeholder: bool = True,
+    ) -> bool:
+        """Blit person crop into `dest`. `cover` center-crops to fill. Returns False if empty."""
         x1, y1, x2, y2 = (int(v) for v in box)
         x1, x2 = max(0, min(x1, x2)), min(image_bgr.shape[1], max(x1, x2))
         y1, y2 = max(0, min(y1, y2)), min(image_bgr.shape[0], max(y1, y2))
         if x2 <= x1 or y2 <= y1:
-            self._draw_preview_placeholder(canvas, dest)
-            return
+            if missing_placeholder:
+                self._draw_preview_placeholder(canvas, dest)
+            return False
         crop = np.ascontiguousarray(image_bgr[y1:y2, x1:x2, ::-1])  # BGR -> RGB
+        if cover:
+            cx, cy, cw, ch = cover_crop(crop.shape[1], crop.shape[0], dest.width, dest.height)
+            ix, iy = int(cx), int(cy)
+            iw, ih = max(1, int(cw)), max(1, int(ch))
+            crop = np.ascontiguousarray(crop[iy : iy + ih, ix : ix + iw])
         surf = pygame.image.frombuffer(crop.tobytes(), (crop.shape[1], crop.shape[0]), "RGB")
         canvas.blit(pygame.transform.smoothscale(surf, dest.size), dest)
+        return True
 
     def _draw_header(self, canvas):
         """Colored player tag + hand-drawn hearts (same as the results page) per side."""
@@ -539,8 +563,10 @@ class DuelGame:
                 color = theme.bg  # paper-colored ink on the red wash
             paper.text(canvas, text, self.body_face, color, (self._side_x(i), 0.905 * self.h), "center")
 
-    def _draw_results_body(self, canvas: pygame.Surface, rect: pygame.Rect, frame) -> None:
-        """Winner + taunt, hearts left per gunslinger, and the draw illustration."""
+    def _draw_results_body(
+        self, canvas: pygame.Surface, rect: pygame.Rect, frame, pose: PoseFrame
+    ) -> None:
+        """Winner + taunt, hearts left, live winner PiP (how-to art fallback)."""
         d = self.duel
         winners = [] if d.match_winner is None else [d.match_winner + 1]
         bottom = draw_headline(canvas, frame, rect, winners_line(winners), self.win_msg, size=64)
@@ -557,7 +583,31 @@ class DuelGame:
             ],
         )
         art_box = pygame.Rect(rows_rect.right + frame.px(40), rect.y, rect.right - rows_rect.right - frame.px(40), rect.height)
-        draw_card_art(canvas, ASSETS / "ui" / "how_to_play" / "duel" / "step_3.png", art_box)
+        self._draw_results_portrait(canvas, art_box, pose)
+
+    def _draw_results_portrait(
+        self, canvas: pygame.Surface, art_box: pygame.Rect, pose: PoseFrame
+    ) -> None:
+        """RESULTS portrait slot: live winner PiP, or step_3 how-to art."""
+        fallback = ASSETS / "ui" / "how_to_play" / "duel" / "step_3.png"
+        winner = self.duel.match_winner
+        if winner is None or art_box.width <= 0 or art_box.height <= 0:
+            draw_card_art(canvas, fallback, art_box)
+            return
+        fh, fw = pose.image.shape[:2]
+        box = resolve_results_portrait(
+            self.previews[winner],
+            pose.players[winner],
+            now=self.now,
+            frame_w=fw,
+            frame_h=fh,
+        )
+        if box is None or not self._blit_preview_crop(
+            canvas, pose.image, box, art_box, cover=True, missing_placeholder=False
+        ):
+            draw_card_art(canvas, fallback, art_box)
+            return
+        paper.draw_marker_box(canvas, art_box, self.frame, INK, seed=80 + winner)
 
     def _draw_floaters(self, canvas):
         dur = max(0.01, self.view.early_float_time)

@@ -33,8 +33,8 @@ Shared shell keys (`D` debug, `F` fullscreen, `Esc` menu, `Q` quit) plus:
 
 | Key | Action |
 |---|---|
-| `SPACE` | Rules → who's playing; who's playing → start the match |
-| `R` | Who's playing: clear everyone's choice. In game: resume / new match (5-second countdown) |
+| `SPACE` | Rules → who's playing; who's playing → start the match. `--debug`: force-start ready-up when eligible |
+| `R` | Ready-up: clear choices / reset. Mid-match: no-op (round restarts itself). Game over: rematch into ready-up. With `--debug` after play starts: skip to RESULTS |
 | `Backspace` | Who's playing → back to the rules |
 | `1` / `2` / `3` | Skip gestures and start with that many people from the frame |
 

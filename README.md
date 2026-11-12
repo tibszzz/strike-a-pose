@@ -82,6 +82,8 @@ python -m main strike
 python -m main --debug          # keyboard menu nav + strike/duel solo
 python -m main duel --debug
 python -m main strike --debug
+# With --debug, after gameplay begins: R skips to that game's final RESULTS
+# (in ready-up, R still resets).
 ```
 
 ### Menu / how-to-play / results controls
@@ -105,10 +107,12 @@ faded until enough players are ready.
 Flow: menu → the game's how-to-play page → the game's ready-up → play →
 results page (Play again returns to ready-up, Menu to the menu).
 
-The menu, how-to-play and results pages don't show the live video. Instead,
+The menu, how-to-play and results pages don't show the full live video. Instead,
 everyone the pose model sees is drawn as a marker stick figure (the Strike a
 Pose figure: torso box, limbs, joint knobs, ring head) on a paper backdrop
-(`main/ui/sketch.py`), so players still see themselves move.
+(`main/ui/sketch.py`), so players still see themselves move. Duel's final
+RESULTS card also puts a live winner PiP (body-follow crop) in the right art
+slot; missing track falls back to the how-to illustration.
 
 The menu has a row of torn-paper notes across the top
 (High Noon, Strike a pose, Dodgeball, Quit), stacked gesture hints bottom-left

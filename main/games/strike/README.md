@@ -12,6 +12,8 @@ For solo testing while developing, pass `--debug` so the lobby accepts one perso
 python -m main strike --debug
 ```
 
+With `--debug`, after ready-up / gameplay has begun, `R` jumps to the final RESULTS card (shell `R` still resets in ready-up).
+
 ## How to play
 
 - Stand far enough back that everyone's whole body is in frame. Players are numbered left to right as they appear on screen.

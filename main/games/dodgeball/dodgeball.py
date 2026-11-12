@@ -435,6 +435,20 @@ class DodgeballGame:
                 roster = [p for p in started.roster if isinstance(p, Person)]
                 self.start(len(roster), seed_x=[p.center_x for p in roster])
 
+    def debug_skip_to_results(self) -> bool:
+        """`--debug` + R after ready-up: jump to game-over RESULTS. False → shell may reset."""
+        if not self.debug or self.in_lobby or not self.lives:
+            return False
+        if len(self.lives) == 1:
+            # Solo: keep the one player alive and end the match.
+            pass
+        else:
+            self.lives = [LIVES if i == 0 else 0 for i in range(len(self.lives))]
+        self.game_over = True
+        self.paused = True
+        self._end.reset()
+        return True
+
     def render_camera(self, image_bgr):
         if self.in_lobby or self.game_over or self.countdown <= 0:
             return image_bgr

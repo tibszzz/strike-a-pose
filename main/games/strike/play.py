@@ -192,6 +192,18 @@ class StrikeGame:
                 return
             self._confirm = True
 
+    def debug_skip_to_results(self) -> bool:
+        """`--debug` + R after ready-up: jump to final RESULTS. False → shell may reset."""
+        if not self._config.debug or self._in_ready_up:
+            return False
+        screen = self._logic.debug_force_final()
+        if screen is None:
+            return False
+        self._stop_drumroll()
+        self._screen = screen
+        self._end.reset()
+        return True
+
     def handle_command(self, command: MenuCommand) -> None:
         if not self._in_end_screen():
             return

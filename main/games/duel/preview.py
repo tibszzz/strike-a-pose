@@ -53,6 +53,19 @@ def crop_source(box: Box, target_aspect: float, pad_frac: float, frame_w: float,
     return aspect_expand(pad_box(box, pad_frac, frame_w, frame_h), target_aspect, frame_w, frame_h)
 
 
+def cover_crop(src_w: float, src_h: float, dest_w: float, dest_h: float) -> Box:
+    """Center-crop of `src` that matches `dest` aspect (cover-fit, no letterbox)."""
+    if src_w <= 0 or src_h <= 0 or dest_w <= 0 or dest_h <= 0:
+        return (0.0, 0.0, max(0.0, src_w), max(0.0, src_h))
+    src_aspect = src_w / src_h
+    dest_aspect = dest_w / dest_h
+    if src_aspect > dest_aspect:
+        w = src_h * dest_aspect
+        return ((src_w - w) / 2, 0.0, w, src_h)
+    h = src_w / dest_aspect
+    return (0.0, (src_h - h) / 2, src_w, h)
+
+
 @dataclass
 class PreviewTracker:
     """Per-side crop tracker: smooth while present, grace-hold, then None."""
@@ -86,6 +99,21 @@ class PreviewTracker:
     def reset(self) -> None:
         self._box = None
         self._last_seen = None
+
+
+def resolve_results_portrait(
+    tracker: PreviewTracker,
+    person: Person | None,
+    *,
+    now: float,
+    frame_w: float,
+    frame_h: float,
+) -> Box | None:
+    """RESULTS portrait slot: live tracked crop, or None → fallback art.
+
+    v1 fills with the gameplay PiP crop. v2 can swap this slot to stick-only art.
+    """
+    return tracker.update(person, now, frame_w, frame_h)
 
 
 def _clamp(box: Box, frame_w: float, frame_h: float) -> Box:
