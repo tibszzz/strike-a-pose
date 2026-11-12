@@ -77,7 +77,11 @@ def test_last_life_still_ends_the_match_and_waits_there():
 
 def test_countdown_digit_is_drawn_by_strikes_renderer(monkeypatch):
     calls = []
-    monkeypatch.setattr(d, "draw_countdown_timer", lambda image, n, age: calls.append((image.shape, n, round(age, 3))))
+    monkeypatch.setattr(
+        d,
+        "draw_countdown_timer",
+        lambda image, n, age, **_kwargs: calls.append((image.shape, n, round(age, 3))),
+    )
 
     game = d.DodgeballGame((640, 480))
     game.start(1)

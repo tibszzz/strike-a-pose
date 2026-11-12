@@ -31,6 +31,8 @@ from main.pose.library import (
     save_pose,
 )
 from main.pose.tracker import Camera, CameraError, PoseDetector
+from main.ui.paper import MARKER_FONT
+
 from .game import (
     ACCENT,
     CANVAS_HEIGHT,
@@ -98,7 +100,15 @@ def compose_live(
     if seconds_left is not None:
         # Off to the side, so the number does not cover the person posing.
         draw_text(
-            canvas, str(seconds_left), CANVAS_WIDTH - 130, 300, 6.0, ACCENT, "center", outline=True
+            canvas,
+            str(seconds_left),
+            CANVAS_WIDTH - 130,
+            300,
+            6.0,
+            ACCENT,
+            "center",
+            outline=True,
+            face=MARKER_FONT,
         )
     draw_text(
         canvas, message, CANVAS_WIDTH // 2, CANVAS_HEIGHT - 32, 0.9, WHITE, "center", outline=True

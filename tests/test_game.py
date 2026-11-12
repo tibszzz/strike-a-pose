@@ -276,15 +276,20 @@ def test_countdown_timer_centered_when_visible():
         _baseline_for_vertical_center,
         _countdown_timer_style,
     )
+    from main.ui.paper import MARKER_FONT
 
-    expected_y = _baseline_for_vertical_center("3", CANVAS_HEIGHT // 2, TIMER_CENTER_SCALE)
+    expected_y = _baseline_for_vertical_center(
+        "3", CANVAS_HEIGHT // 2, TIMER_CENTER_SCALE, face=MARKER_FONT
+    )
     x, y, scale = _countdown_timer_style(3)
     assert (x, y, scale) == (CANVAS_WIDTH // 2, expected_y, TIMER_CENTER_SCALE)
     assert y != CANVAS_HEIGHT // 2  # baseline sits below visual center
 
     x, y, scale = _countdown_timer_style(1)
     assert (x, scale) == (CANVAS_WIDTH // 2, TIMER_CENTER_SCALE)
-    assert y == _baseline_for_vertical_center("1", CANVAS_HEIGHT // 2, TIMER_CENTER_SCALE)
+    assert y == _baseline_for_vertical_center(
+        "1", CANVAS_HEIGHT // 2, TIMER_CENTER_SCALE, face=MARKER_FONT
+    )
 
 
 def test_countdown_timer_hidden_until_three_then_blinks_and_fades():
@@ -697,10 +702,20 @@ def test_shared_countdown_timer_matches_strike_layout_pixel_for_pixel():
         _draw_translucent_text,
         draw_countdown_timer,
     )
+    from main.ui.paper import MARKER_FONT
 
     base = np.random.default_rng(0).integers(0, 255, (CANVAS_HEIGHT, CANVAS_WIDTH, 3), dtype=np.uint8)
     shared, manual = base.copy(), base.copy()
     draw_countdown_timer(shared, 2, 0.6)
     x, y, scale = _countdown_timer_style(2)
-    _draw_translucent_text(manual, "2", x, y, scale, WHITE, _countdown_timer_opacity(2, 0.6))
+    _draw_translucent_text(
+        manual,
+        "2",
+        x,
+        y,
+        scale,
+        WHITE,
+        _countdown_timer_opacity(2, 0.6),
+        face=MARKER_FONT,
+    )
     assert np.array_equal(shared, manual)

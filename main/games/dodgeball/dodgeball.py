@@ -471,7 +471,7 @@ class DodgeballGame:
         # Strike's countdown digit, drawn by Strike's own renderer onto the camera
         # image (translucent, no background), before the pygame overlays go on top.
         image = image_bgr.copy()
-        draw_countdown_timer(image, *self._countdown_digit())
+        draw_countdown_timer(image, *self._countdown_digit(), face=styles.DODGEBALL.font)
         return image
 
     def debug_lines(self) -> list[str]:
