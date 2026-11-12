@@ -46,6 +46,16 @@ def test_wants_gestures_only_when_results_are_idle():
     assert game.wants_gestures is False
 
 
+def test_wants_gestures_on_final_screen():
+    from main.games.strike.screens import FinalScreen, Standing
+
+    game = StrikeGame((640, 480))
+    game._in_ready_up = False
+    game._screen = FinalScreen(standings=(Standing(place=1, player=1, total=3),))
+    assert game.wants_gestures is True
+    assert game.gesture_hands == NAV_GESTURE_HANDS
+
+
 def test_wants_gestures_during_ready_up():
     game = StrikeGame((640, 480))
     assert game._in_ready_up is True

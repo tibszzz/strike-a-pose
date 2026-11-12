@@ -687,7 +687,6 @@ def _compose_final(screen: FinalScreen) -> np.ndarray:
         )
         draw_text(canvas, str(standing.total), center + 230, y, 1.5, WHITE, "right")
 
-    draw_text(canvas, copy.space_new_game, center, 680, 0.9, MUTED, "center")
     return canvas
 
 

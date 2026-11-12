@@ -1,12 +1,12 @@
 """Pure duel rules. No camera, no pygame: feed it (timestamp, pose states) per frame.
 
 Round flow:
-  WAIT_START -> (shell ready-up calls request_start) -> READY -> STEADY -> BANG
-  -> (hit) REPLAY -> ROUND_OVER -> WAIT_START ...
+  WAIT_START -> (shell ready-up on first entry, or idle hold between rounds) -> READY
+  -> STEADY -> BANG -> (hit) REPLAY -> ROUND_OVER -> WAIT_START ...
   Non-hits (tie / timeout / void) skip REPLAY and go straight to ROUND_OVER.
   The hit that takes a player's last life goes REPLAY -> MATCH_OVER, which first shows
-  that round's result for `round_result_time`, then the winner. Rematch goes through
-  ready-up again via request_start after can_restart.
+  that round's result for `round_result_time`, then the winner. Rematch is owned by the
+  shell end-screen (Replay -> ready-up again); `request_start` still clears MATCH_OVER.
 
 A draw only counts once it has held for `draw_confirm_frames` consecutive frames; its
 time is the capture timestamp of the first of those frames. A draw that started at or
@@ -131,7 +131,11 @@ class Duel:
         cfg = self.config
 
         if self.phase == Phase.WAIT_START:
-            pass  # shell ready-up calls request_start
+            # Between rounds (and after abort): both idle for start_hold begins READY.
+            # First match entry is gated by the shell ReadyUp, which never calls update
+            # until request_start.
+            if present and self._both_idle_held(now, states):
+                self._start_round(now, events)
 
         elif self.phase in (Phase.READY, Phase.STEADY):
             if not present:

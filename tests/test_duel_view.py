@@ -52,6 +52,7 @@ def test_all_screens_render():
     seen.add(game.duel.phase)
     # ready-up request_start -> READY -> P1 draws early in STEADY -> P2 draws after BANG -> replay -> winner
     game.duel.request_start(0.0)
+    game._needs_ready_up = False
     game._roster_seed_x = [110.0, 480.0]
     for states in [(H, H)] * 40 + [(D, H)] * 120 + [(D, D)] * 20 + [(H, H)] * 220:
         t += DT
@@ -83,6 +84,7 @@ def test_preview_placeholder_when_missing():
     game = DuelGame(SIZE, config=DuelConfig(lives=1))
     canvas = pygame.Surface(SIZE)
     game.duel.request_start(0.0)
+    game._needs_ready_up = False
     game.now = 0.0
     game.draw(canvas, _frame((None, None)))
     # inset from border/label: placeholder fill is theme.hint, not the camera RGB
@@ -101,6 +103,7 @@ def test_replay_screen_cover_blits():
 
     t = 0.0
     game.duel.request_start(t)
+    game._needs_ready_up = False
     game._roster_seed_x = [110.0, 480.0]
     for states in [(H, H)] * 40 + [(H, H)] * 60 + [(D, H)] * 30:
         t += DT

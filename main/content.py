@@ -11,6 +11,12 @@ class ReadyUp:
     thumbs_hint = "THUMBS UP TO READY · THUMBS DOWN TO CANCEL"
 
 
+class EndScreen:
+    replay = "REPLAY"
+    menu = "MENU"
+    hint = "POINT TO SELECT · HOLD FIST TO CONFIRM"
+
+
 class Shell:
     brand = "moovit"
     menu_title = "moovit"

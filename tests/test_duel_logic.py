@@ -70,9 +70,19 @@ def test_request_start_begins_ready():
     assert ("ready", None) in s.events
 
 
-def test_idle_alone_does_not_start():
-    s = Sim()
-    s.step(H, H, frames=100)
+def test_idle_hold_starts_round_without_request_start():
+    """Between rounds / after abort: both idle for start_hold begins READY."""
+    s = Sim(start_hold=0.5)
+    s.step(H, H, frames=10)  # ~0.33s — not enough
+    assert s.duel.phase == Phase.WAIT_START
+    s.step(H, H, frames=20)  # past 0.5s
+    assert s.duel.phase == Phase.READY
+    assert ("ready", None) in s.events
+
+
+def test_drawn_pose_blocks_idle_start():
+    s = Sim(start_hold=0.3)
+    s.step(D, H, frames=40)
     assert s.duel.phase == Phase.WAIT_START
 
 

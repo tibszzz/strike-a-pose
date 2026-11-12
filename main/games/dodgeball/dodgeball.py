@@ -8,6 +8,9 @@ import random
 import pygame
 
 from main import content, styles
+from main.end_screen import EndChoice, EndScreen, draw_end_screen
+from main.nav import MenuCommand, StartGame
+from main.nav.hand_geometry import NAV_GESTURE_HANDS
 from main.pose import Person, PoseFrame
 from main.pose.library import left_to_right
 from main.ready_up import ReadyUp, ReadyUpConfig, draw_player_label, draw_ready_up, head_anchor
@@ -120,6 +123,10 @@ class DodgeballGame:
         self.person_noses: list[tuple[int, tuple[float, float] | None]] = []
         self.body_polygons: list[tuple[int, list | None]] = []
 
+        self._end = EndScreen((self.w, self.h))
+        self._pending_nav = None
+        self._frame_ts = 0.0
+
     def _new_ready_up(self) -> ReadyUp:
         return ReadyUp(
             self.w,
@@ -138,11 +145,13 @@ class DodgeballGame:
 
     @property
     def gesture_hands(self) -> int:
+        if self.game_over and not self.in_lobby:
+            return NAV_GESTURE_HANDS
         return self.config.max_players * 2
 
     @property
     def wants_gestures(self) -> bool:
-        return self.in_lobby
+        return self.in_lobby or self.game_over
 
     def start(self, count: int, seed_x: list[float] | None = None) -> None:
         """Leave ready-up and play with `count` players."""
@@ -150,6 +159,7 @@ class DodgeballGame:
         self.player_count = count
         self.lives = [LIVES] * count
         self.game_over = False
+        self._end.reset()
         lobby_x = seed_x if seed_x is not None else []
         self.last_x = [
             lobby_x[i] if i < len(lobby_x) else self.w * (i + 1) / (count + 1)
@@ -169,17 +179,41 @@ class DodgeballGame:
         self._start_ball()
 
     def reset(self) -> None:
-        """R key: clear ready-up choices, or resume / rematch into ready-up."""
+        """R key: clear ready-up choices, rematch into ready-up, or resume mid-match."""
         if self.in_lobby:
             self.ready_up.reset()
             return
         if self.game_over:
-            self.in_lobby = True
-            self.ready_up = self._new_ready_up()
-            self.hit_message = ""
+            self._enter_ready_up()
             return
         self.hit_message = copy.restarting
         self._begin_round()
+
+    def _enter_ready_up(self) -> None:
+        self.in_lobby = True
+        self.game_over = False
+        self.ready_up = self._new_ready_up()
+        self._end.reset()
+        self.hit_message = ""
+        self._pending_nav = None
+
+    def handle_command(self, command: MenuCommand) -> None:
+        if not self.game_over or self.in_lobby:
+            return
+        choice = self._end.handle_command(command)
+        if choice is not None:
+            self._apply_end_choice(choice)
+
+    def poll_nav(self):
+        nav = self._pending_nav
+        self._pending_nav = None
+        return nav
+
+    def _apply_end_choice(self, choice: EndChoice) -> None:
+        if choice is EndChoice.MENU:
+            self._pending_nav = StartGame(None)
+            return
+        self._enter_ready_up()
 
     def _start_ball(self) -> None:
         self.ball = Ball(
@@ -224,6 +258,7 @@ class DodgeballGame:
         return [people[i] for i in sorted(used_i)]
 
     def update(self, frame: PoseFrame) -> None:
+        self._frame_ts = frame.timestamp
         if self.in_lobby:
             snap = self.gesture_snapshot
             hands = snap.hands if snap is not None else ()
@@ -234,6 +269,12 @@ class DodgeballGame:
                     # Candidate fallbacks shouldn't happen when people were tracked
                     roster = list(frame.people)[: len(started.roster)]
                 self.start(len(roster), seed_x=[p.center_x for p in roster])
+            return
+
+        if self.game_over:
+            choice = self._end.update(self.gesture_snapshot, frame.timestamp)
+            if choice is not None:
+                self._apply_end_choice(choice)
             return
 
         slots = self._assign_players(frame.people)
@@ -340,11 +381,13 @@ class DodgeballGame:
         alive = [i for i, lives in enumerate(self.lives) if lives > 0]
         if self.player_count == 1 and not alive:
             self.game_over = True
-            return "GAME OVER! Press R to play again"
+            self._end.reset()
+            return "GAME OVER!"
         if self.player_count > 1 and len(alive) <= 1:
             self.game_over = True
+            self._end.reset()
             winner = f"P{alive[0] + 1} WINS!" if alive else "Nobody wins!"
-            return f"{winner} Press R to play again"
+            return winner
         if self.lives[player_idx] == 0:
             return f"{name} is OUT! Press R to resume"
         return f"{name} {reason} Press R to resume"
@@ -451,17 +494,29 @@ class DodgeballGame:
             pygame.draw.line(temp_surf, (*RED, alpha), (x - 25, y + 25), (x + 25, y - 25), 3)
             canvas.blit(temp_surf, (0, 0))
 
-        if self.hit_message and (self.hit_message_timer > 0 or self.paused or self.countdown > 0):
+        if self.hit_message and (
+            self.hit_message_timer > 0 or self.paused or self.countdown > 0 or self.game_over
+        ):
             draw_text(
                 canvas,
                 self.hit_message,
                 self.w // 2,
-                self.h // 2 - 100,
+                self.h // 2 - 100 if not self.game_over else int(self.h * 0.22),
                 scale=1.4,
                 color=RED,
                 align="center",
                 outline=True,
             )
+
+        if self.game_over:
+            draw_end_screen(
+                canvas,
+                self._end,
+                theme=styles.SHELL,
+                snap=self.gesture_snapshot,
+                timestamp=self._frame_ts,
+            )
+            return
 
         if self.countdown > 0:
             countdown_sec = (self.countdown + 29) // 30
