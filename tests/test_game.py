@@ -61,11 +61,11 @@ def _results_idle_at(game, snapshot_at: float) -> float:
     return snapshot_at + cfg.results_hold_s + cfg.results_reveal_s
 
 
-def advance_results(game, snapshot_at, player_count=None, confirm=True):
-    """Wait out the results score reveal, then optionally confirm.
+def advance_results(game, snapshot_at, player_count=None, wait=True):
+    """Wait out the results score reveal, then optionally the auto-advance.
 
     Returns `(screen, next_started_at)` where `next_started_at` is when the
-    following countdown began (or idle time if not confirming).
+    following countdown began (or idle time if not waiting out the advance).
     """
     screen = game.step(snapshot_at)
     assert isinstance(screen, ResultsScreen)
@@ -74,11 +74,11 @@ def advance_results(game, snapshot_at, player_count=None, confirm=True):
     screen = game.step(idle_at)
     assert isinstance(screen, ResultsScreen)
     assert screen.idle
-    if not confirm:
+    if not wait:
         return screen, idle_at
-    confirm_at = idle_at + 0.01
-    screen = game.step(confirm_at, confirm=True)
-    return screen, confirm_at
+    advance_at = idle_at + game._config.results_advance_s
+    screen = game.step(advance_at)
+    return screen, advance_at
 
 
 def play_full_game(game, strike, players=2):
@@ -220,21 +220,6 @@ def test_results_score_stack_clamps_below_header():
     assert score_y >= HEADER_BOTTOM
 
 
-def test_hand_owner_player_matches_box_then_nearest():
-    from main.games.strike.game import hand_owner_player
-    from main.games.strike.screens import PlayerResult
-
-    p1 = PlayerResult(1, {}, (0.0, 0.0, 100.0, 200.0), 0, 0)
-    p2 = PlayerResult(2, {}, (200.0, 0.0, 300.0, 200.0), 0, 0)
-    players = (p1, p2)
-
-    assert hand_owner_player((50.0, 80.0), players) == 1
-    assert hand_owner_player((250.0, 80.0), players) == 2
-    # Outside both boxes: nearest horizontal center (50 vs 250).
-    assert hand_owner_player((160.0, 10.0), players) == 2
-    assert hand_owner_player((50.0, 80.0), ()) is None
-
-
 def test_countdown_target_rect_holds_then_eases_to_top_right():
     from main.games.strike.game import (
         CANVAS_HEIGHT,
@@ -242,7 +227,7 @@ def test_countdown_target_rect_holds_then_eases_to_top_right():
         COUNTDOWN_MARGIN,
         COUNTDOWN_TARGET_HEIGHT,
         COUNTDOWN_TARGET_WIDTH,
-        HEADER_BOTTOM,
+        PARKED_TARGET_TOP,
         _countdown_target_rect,
     )
 
@@ -257,7 +242,7 @@ def test_countdown_target_rect_holds_then_eases_to_top_right():
     final = _countdown_target_rect(2.0)
     assert final == (
         CANVAS_WIDTH - COUNTDOWN_TARGET_WIDTH - COUNTDOWN_MARGIN,
-        HEADER_BOTTOM,
+        PARKED_TARGET_TOP,
         COUNTDOWN_TARGET_WIDTH,
         COUNTDOWN_TARGET_HEIGHT,
     )
@@ -361,7 +346,7 @@ def test_results_keep_the_snapshot_frame():
     assert play_round(game, 0.0, everyone_perfect(2)).snapshot is FRAME
 
 
-def test_results_stay_busy_until_reveal_locks_then_accept_confirm():
+def test_results_stay_busy_until_reveal_locks_then_auto_advance():
     game, _ = one_round_game()
     start_game(game)
     results = play_round(
@@ -386,8 +371,10 @@ def test_results_stay_busy_until_reveal_locks_then_accept_confirm():
     assert isinstance(idle, ResultsScreen)
     assert idle.idle
     assert idle.display_scores == tuple(p.round_score for p in idle.players)
+    assert idle.advance_remaining_s == pytest.approx(game._config.results_advance_s)
+    assert idle.advance_progress == pytest.approx(0.0)
 
-    final = game.step(idle_at + 0.01, confirm=True)
+    final = game.step(idle_at + game._config.results_advance_s)
     assert isinstance(final, FinalScreen)
 
 
@@ -623,6 +610,8 @@ def test_dodgeball_countdown_reuses_strike_timer_look():
 
     assert strike_view._countdown_timer_opacity is shared.timer_opacity
     assert strike_view.TIMER_CENTER_SCALE == shared.TIMER_CENTER_SCALE == 16.0
+
+
 # --- results score reveal ----------------------------------------------------
 
 
@@ -689,6 +678,117 @@ def test_results_reveal_emits_ticks_at_flash_rate():
     game.step(COUNTDOWN + 0.5)
     assert len(of_type(events, ScoreRevealLocked)) == 1
     assert len(of_type(events, ScoreRevealTick)) == 5
+
+
+def test_results_auto_advance_after_advance_wait_with_progress():
+    game, _ = new_game(
+        rounds=1,
+        results_hold_s=0.0,
+        results_reveal_s=0.0,
+        results_advance_s=5.0,
+    )
+    start_game(game)
+    play_round(game, 0.0, everyone_perfect(2))
+    idle_at = _results_idle_at(game, COUNTDOWN)
+
+    locked = game.step(idle_at)
+    assert isinstance(locked, ResultsScreen)
+    assert locked.idle
+    assert locked.advance_remaining_s == pytest.approx(5.0)
+    assert locked.advance_progress == pytest.approx(0.0)
+
+    mid = game.step(idle_at + 1.5, confirm=True)  # confirm must not skip
+    assert isinstance(mid, ResultsScreen)
+    assert mid.idle
+    assert mid.advance_remaining_s == pytest.approx(3.5)
+    assert mid.advance_progress == pytest.approx(0.3)
+
+    almost = game.step(idle_at + 4.99)
+    assert isinstance(almost, ResultsScreen)
+    assert almost.advance_remaining_s == pytest.approx(0.01)
+    assert almost.advance_progress == pytest.approx(0.998)
+
+    final = game.step(idle_at + 5.0)
+    assert isinstance(final, FinalScreen)
+
+
+def test_results_advance_bar_spans_left_to_right_near_bottom():
+    from main.games.strike.game import (
+        CANVAS_HEIGHT,
+        CANVAS_WIDTH,
+        RESULTS_ADVANCE_BAR_HEIGHT,
+        RESULTS_ADVANCE_BAR_MARGIN_BOTTOM,
+        RESULTS_ADVANCE_BAR_MARGIN_X,
+        _results_advance_bar_rect,
+    )
+
+    left, top, right, bottom = _results_advance_bar_rect(CANVAS_WIDTH, CANVAS_HEIGHT)
+    assert left == RESULTS_ADVANCE_BAR_MARGIN_X
+    assert right == CANVAS_WIDTH - RESULTS_ADVANCE_BAR_MARGIN_X
+    assert bottom == CANVAS_HEIGHT - RESULTS_ADVANCE_BAR_MARGIN_BOTTOM
+    assert bottom - top == RESULTS_ADVANCE_BAR_HEIGHT
+
+
+def test_results_advance_draws_next_round_label_above_bar(monkeypatch):
+    import numpy as np
+
+    from main import content
+    from main.settings import CANVAS_HEIGHT, CANVAS_WIDTH
+    from main.games.strike import game as strike_view
+
+    texts = []
+    real_draw = strike_view.draw_text
+
+    def capture(canvas, text, x, y, *args, **kwargs):
+        texts.append((text, x, y))
+        return real_draw(canvas, text, x, y, *args, **kwargs)
+
+    monkeypatch.setattr(strike_view, "draw_text", capture)
+    canvas = np.zeros((CANVAS_HEIGHT, CANVAS_WIDTH, 3), dtype=np.uint8)
+    left, top, right, bottom = strike_view._results_advance_bar_rect(
+        CANVAS_WIDTH, CANVAS_HEIGHT
+    )
+    strike_view._draw_results_advance(canvas, 0.0)
+
+    assert texts == [
+        (
+            content.Strike.results_next_round,
+            left,
+            top - strike_view.RESULTS_ADVANCE_LABEL_GAP,
+        )
+    ]
+    assert texts[0][2] < top < bottom
+    assert strike_view.RESULTS_ADVANCE_LABEL_SCALE == pytest.approx(2.7)
+
+
+def test_results_advance_bar_fill_grows_with_progress():
+    import numpy as np
+
+    from main.settings import CANVAS_HEIGHT, CANVAS_WIDTH
+    from main.games.strike.game import (
+        RESULTS_ADVANCE_BAR_FILL,
+        _draw_results_advance,
+        _results_advance_bar_rect,
+    )
+
+    empty = np.zeros((CANVAS_HEIGHT, CANVAS_WIDTH, 3), dtype=np.uint8)
+    half = empty.copy()
+    full = empty.copy()
+    _draw_results_advance(empty, 0.0)
+    _draw_results_advance(half, 0.5)
+    _draw_results_advance(full, 1.0)
+
+    left, top, right, bottom = _results_advance_bar_rect(CANVAS_WIDTH, CANVAS_HEIGHT)
+    mid_x = (left + right) // 2
+    cy = (top + bottom) // 2
+    fill = np.array(RESULTS_ADVANCE_BAR_FILL, dtype=np.uint8)
+
+    assert not np.array_equal(empty[cy, mid_x], fill)  # track only at mid when empty
+    assert np.array_equal(half[cy, mid_x], fill)
+    assert np.array_equal(full[cy, right - 2], fill)
+    assert np.count_nonzero(np.all(full == fill, axis=-1)) > np.count_nonzero(
+        np.all(half == fill, axis=-1)
+    )
 
 
 def test_shared_countdown_timer_matches_strike_layout_pixel_for_pixel():

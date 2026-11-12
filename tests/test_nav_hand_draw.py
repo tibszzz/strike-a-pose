@@ -30,7 +30,7 @@ def _frame(size=(480, 640), timestamp: float = 1.0) -> PoseFrame:
 def test_splash_menu_strike_share_one_gesture_hand():
     assert SplashGame.gesture_hands == NAV_GESTURE_HANDS
     assert MenuGame.gesture_hands == NAV_GESTURE_HANDS
-    # Strike uses many hands in ready-up; results advance still uses one hand.
+    # Strike uses many hands in ready-up; mid-game / results use one (end screen).
     game = StrikeGame((640, 480))
     game._in_ready_up = False
     assert game.gesture_hands == NAV_GESTURE_HANDS

@@ -1,4 +1,4 @@
-"""Dodgeball's pre-launch countdown: 3 seconds, Strike's digit look."""
+"""Dodgeball's pre-launch countdown: 3 seconds, Strike's big digit."""
 
 from __future__ import annotations
 

@@ -594,7 +594,7 @@ class DodgeballGame:
                 canvas,
                 self.hit_message,
                 self.w // 2,
-                # Above the big countdown digit while it shows; else just above centre.
+                # High on the frame during countdown / game-over; else just above centre.
                 int(self.h * 0.22) if self.game_over or self.countdown > 0 else self.h // 2 - 100,
                 scale=1.4,
                 color=RED,

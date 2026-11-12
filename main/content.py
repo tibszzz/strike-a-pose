@@ -163,11 +163,6 @@ class Strike:
     banner = "STRIKE A POSE"
     esc_menu = "Esc: menu"
     quit_key = "Q: quit"
-    space_final = "SPACE: final scores"
-    space_next = "SPACE: next round"
-    space_new_game = "SPACE: new game      Q: quit"
-    results_thumbs = "Hold thumbs up to continue"
-    results_thumbs_final = "Hold thumbs up for final scores"
     final_scores = "FINAL SCORES"
     col_player = "PLAYER"
     col_round = "ROUND"
@@ -181,7 +176,7 @@ class Strike:
         "Closest match scores the round — best total wins",
     )
     round_of = "Round {round_number} of {total_rounds}"
-    round_results = "Round {round_number} of {total_rounds}  -  results"
+    results_next_round = "Next round starting..."
     saved_pose = "Saved: {name}"
     edit_title = "Edit pose: {name}"
     player_label = "P{player}"
@@ -194,7 +189,7 @@ class Strike:
         "You get {countdown_seconds} seconds, then a snapshot is taken",
         "The screen is a mirror: raise the arm on the same side as the figure",
         "Each pose scores 0 to 100 for how closely your body matches",
-        "Hold thumbs up on the results to move to the next round",
+        "Scores lock, then next round starts on a timer",
         "After {rounds} rounds, the highest total wins",
     )
 
