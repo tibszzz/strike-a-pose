@@ -273,6 +273,7 @@ DUEL = BRAND.with_overrides(
 
 # Strike: dark warm bg + orange accent. Stored RGB; OpenCV uses bgr().
 # Former BGR BACKGROUND (30,26,24) → RGB (24,26,30); accent #f6ae2d.
+# Body chrome uses Patrick Hand (paper UI); banners/countdown/scores pass Marker.
 STRIKE = BRAND.with_overrides(
     bg=(24, 26, 30),
     panel=(42, 46, 52),
@@ -285,6 +286,7 @@ STRIKE = BRAND.with_overrides(
         (110, 230, 110),
         (255, 215, 70),
     ),
+    font=ASSETS / "fonts" / "PatrickHand-Regular.ttf",
 )
 
 # Dodgeball: pygame RGB values as shipped today (accent was the strike BGR tuple used as RGB).

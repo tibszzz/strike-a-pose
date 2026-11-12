@@ -18,7 +18,7 @@ from main.end_screen import (
     draw_points_table,
     winners_line,
 )
-from main.nav import GestureSnapshot, MenuCommand, StartGame, ThumbHoldTracker, load_gesture_nav_config
+from main.nav import GestureSnapshot, MenuCommand, StartGame
 from main.nav.hand_geometry import NAV_GESTURE_HANDS
 from main.pose import PoseFrame
 from main.pose.library import Pose, from_coco_person, load_library
@@ -26,7 +26,7 @@ from main.pose.types import Person as CocoPerson
 from main.ready_up import ReadyUp, ReadyUpConfig, Started, draw_ready_up
 from main.settings import ASSETS, StrikeConfig
 
-from .game import compose, overlay_results_hold
+from .game import compose
 from .logic import Game as StrikeLogic
 from .screens import (
     CountdownTick,
@@ -62,7 +62,7 @@ def _load_sounds(
         "sting": lambda: audio.reveal_sting(),
     }
     files = {
-        "tick": "ready.wav",
+        "tick": "tick.wav",
         "shutter": "shutter.wav",
         "drumroll": "drumroll.wav",
         "sting": "sting.wav",
@@ -102,8 +102,6 @@ class StrikeGame:
         self._image = None
         self._confirm = False
         self.gesture_snapshot: GestureSnapshot | None = None
-        cfg = load_gesture_nav_config()
-        self._thumb = ThumbHoldTracker(hold_s=cfg.thumb_hold_s, min_score=cfg.min_score)
         self._in_ready_up = True
         self._ready = self._make_ready()
         self._end = EndScreen((self.w, self.h))
@@ -160,9 +158,7 @@ class StrikeGame:
 
     @property
     def wants_gestures(self) -> bool:
-        if self._in_ready_up or self._in_end_screen():
-            return True
-        return isinstance(self._screen, ResultsScreen) and self._screen.idle
+        return self._in_ready_up or self._in_end_screen()
 
     def reset(self) -> None:
         self._stop_drumroll()
@@ -170,7 +166,6 @@ class StrikeGame:
         self._logic = StrikeLogic(self._config, library)
         self._logic.subscribe(self._on_logic_event)
         self._confirm = False
-        self._thumb.reset()
         self.gesture_snapshot = None
         self._in_ready_up = True
         self._ready = self._make_ready()
@@ -247,20 +242,8 @@ class StrikeGame:
 
         confirm = self._confirm
         self._confirm = False
-
         if isinstance(self._screen, ResultsScreen):
             confirm = False
-            if self._screen.idle:
-                if self._thumb.update(
-                    self.gesture_snapshot,
-                    frame.timestamp,
-                    frame_size=(self.w, self.h),
-                ):
-                    confirm = True
-            else:
-                self._thumb.reset()
-        else:
-            self._thumb.reset()
 
         now = frame.timestamp
         people = None
@@ -277,16 +260,6 @@ class StrikeGame:
             composed = source
         else:
             composed = compose(self._screen, source)
-            if isinstance(self._screen, ResultsScreen) and self._screen.idle:
-                fh, fw = source.shape[:2]
-                overlay_results_hold(
-                    composed,
-                    self._thumb.progress,
-                    final_round=self._screen.round_number == self._screen.total_rounds,
-                    snap=self.gesture_snapshot,
-                    frame_size=(fw, fh),
-                    players=self._screen.players,
-                )
         if composed.shape[1] != self.w or composed.shape[0] != self.h:
             composed = cv2.resize(composed, (self.w, self.h))
         return composed

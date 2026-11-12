@@ -69,8 +69,12 @@ class ResultsScreen:
     snapshot: object  # the camera frame; the game never looks inside it
     players: tuple[PlayerResult, ...]
     display_scores: tuple[int, ...]  # parallel to players; scrambled until lock
-    idle: bool  # True once the score reveal locks and thumbs-up can advance
+    idle: bool  # True once the score reveal locks; auto-advance timer runs
     holding: bool = False  # True during the post-snapshot beat before scramble
+    # Seconds until auto-advance while idle; None before the reveal locks.
+    advance_remaining_s: float | None = None
+    # 0–1 elapsed fraction of the advance wait; drives the results progress bar.
+    advance_progress: float | None = None
 
 
 @dataclass(frozen=True)
@@ -120,7 +124,7 @@ class ScoreRevealTick:
 
 @dataclass(frozen=True)
 class ScoreRevealLocked:
-    """Final scores landed; thumbs-up may advance."""
+    """Final scores landed; auto-advance timer starts."""
 
     scores: tuple[int, ...]  # in player order: P1 first
 

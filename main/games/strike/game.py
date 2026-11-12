@@ -9,22 +9,15 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Sequence
-
+from pathlib import Path
 import cv2
 import numpy as np
 
 from main import content, styles
-from main.nav.hand_geometry import (
-    HAND_CONNECTIONS,
-    hand_ring_radius,
-    palm_center,
-    primary_landmarks,
-    show_hold_ring,
-)
 from main.pose.library import BONES, HEAD_JOINT, Box, Joints, Point, midpoint
 from main.settings import CANVAS_HEIGHT, CANVAS_WIDTH
-from main.ui.paper import Frame, PaperStyle, paper_surface
+from main.ui import paper
+from main.ui.paper import MARKER_FONT, Frame, PaperStyle, paper_surface
 
 from .screens import (
     Action,
@@ -47,8 +40,6 @@ WHITE = styles.bgr(theme.ink)
 MUTED = styles.bgr(theme.muted)
 ACCENT = styles.bgr(theme.accent)
 PLAYER_COLORS = tuple(styles.bgr(c) for c in theme.player)
-HOLD_FILL = styles.bgr((85, 221, 224))  # #55dde0 progress arc
-HAND_TRACK = ACCENT  # #f6ae2d skeleton + ring track
 # Target stick figures sit on menu paper; black ink for contrast.
 POSE_INK = styles.bgr((0, 0, 0))
 POSE_PAPER_STYLE = PaperStyle(torn="tblr", jag=6)
@@ -60,8 +51,14 @@ SCORE_SCALE = 4.0
 PLAYER_LABEL_SCALE = 1.2
 SCORE_GAP_ABOVE_LABEL = 28  # score baseline above P# baseline
 LABEL_GAP_ABOVE_HEAD = 10  # P# baseline above head top
-RESULTS_PROMPT_Y = CANVAS_HEIGHT - 48
-RESULTS_PROMPT_SCALE = 2.0
+# Idle results auto-advance bar (menu-button hold style).
+RESULTS_ADVANCE_BAR_HEIGHT = 12
+RESULTS_ADVANCE_BAR_MARGIN_X = 40
+RESULTS_ADVANCE_BAR_MARGIN_BOTTOM = 48
+RESULTS_ADVANCE_BAR_TRACK = styles.bgr(paper.INK_FAINT)
+RESULTS_ADVANCE_BAR_FILL = styles.bgr(paper.HOLD_RING)
+RESULTS_ADVANCE_LABEL_SCALE = 2.7  # was 0.9; 3×
+RESULTS_ADVANCE_LABEL_GAP = 56  # baseline above bar top (scaled with 3× label)
 
 # Left, top, width, height, in canvas pixels.
 Rect = tuple[int, int, int, int]
@@ -118,12 +115,15 @@ def draw_text(
     color: tuple[int, int, int] = WHITE,
     align: str = "left",
     outline: bool = False,
+    *,
+    face: Path | None = None,
 ) -> None:
     """Draw text with its baseline at `y`. `align` places `x` at the text's
     left edge, centre or right edge. `outline` keeps text readable over video.
 
     `color` is BGR (OpenCV); shared renderer wants RGB.
     Font pixels scale with canvas height (design sizes at CANVAS_HEIGHT).
+    Default face is Patrick Hand (theme); pass MARKER_FONT for display text.
     """
     styles.draw_text(
         canvas,
@@ -134,7 +134,7 @@ def draw_text(
         color=(color[2], color[1], color[0]),
         align=align,
         outline=outline,
-        face=theme.font,
+        face=face or theme.font,
         h=canvas.shape[0],
     )
 
@@ -273,7 +273,11 @@ def compose(screen: Screen, frame: np.ndarray) -> np.ndarray:
 
 # Countdown target HUD: final size ~18% of canvas height, parked top-right
 # under the header. Intro holds 2x at center for 1.5s, then eases over 0.5s.
-HEADER_BOTTOM = 70
+HEADER_SCALE = 3.9  # was 1.3; round N of M / results header
+HEADER_TEXT_Y = 110  # baseline; room for ~3× ascent vs old y=62
+HEADER_BOTTOM = 130  # clears the taller left header for score stacks
+# Small target parks top-right; not tied to HEADER_BOTTOM (header is left-only).
+PARKED_TARGET_TOP = 70
 COUNTDOWN_MARGIN = 40
 COUNTDOWN_TARGET_HEIGHT = 130
 COUNTDOWN_TARGET_WIDTH = 200
@@ -291,7 +295,7 @@ from main.countdown import (  # noqa: E402
 
 
 def _header(canvas: np.ndarray, text: str, *, show_esc: bool = True) -> None:
-    draw_text(canvas, text, 40, 62, 1.3)
+    draw_text(canvas, text, 40, HEADER_TEXT_Y, HEADER_SCALE)
     if show_esc:
         draw_text(canvas, copy.esc_menu, CANVAS_WIDTH - 40, 58, 0.7, MUTED, "right")
 
@@ -310,7 +314,7 @@ def _countdown_target_rect(elapsed: float) -> Rect:
     """Where the target stick figure sits for a given countdown elapsed time."""
     final_w, final_h = COUNTDOWN_TARGET_WIDTH, COUNTDOWN_TARGET_HEIGHT
     final_left = CANVAS_WIDTH - final_w - COUNTDOWN_MARGIN
-    final_top = HEADER_BOTTOM
+    final_top = PARKED_TARGET_TOP
     final_cx = final_left + final_w / 2
     final_cy = final_top + final_h / 2
 
@@ -332,9 +336,13 @@ def _countdown_target_rect(elapsed: float) -> Rect:
     return (round(cx - w / 2), round(cy - h / 2), round(w), round(h))
 
 
-def _baseline_for_vertical_center(text: str, center_y: int, scale: float) -> int:
+def _baseline_for_vertical_center(
+    text: str, center_y: int, scale: float, *, face: Path | None = None
+) -> int:
     """Baseline that places the glyph's visual center at `center_y`."""
-    (_, height), descent = styles.text_size(text, scale, theme.font, h=CANVAS_HEIGHT)
+    (_, height), descent = styles.text_size(
+        text, scale, face or theme.font, h=CANVAS_HEIGHT
+    )
     return round(center_y + (height - descent) / 2)
 
 
@@ -343,7 +351,9 @@ def _countdown_timer_style(seconds_left: int) -> tuple[int, int, float]:
     text = str(seconds_left)
     return (
         CANVAS_WIDTH // 2,
-        _baseline_for_vertical_center(text, CANVAS_HEIGHT // 2, TIMER_CENTER_SCALE),
+        _baseline_for_vertical_center(
+            text, CANVAS_HEIGHT // 2, TIMER_CENTER_SCALE, face=MARKER_FONT
+        ),
         TIMER_CENTER_SCALE,
     )
 
@@ -356,10 +366,12 @@ def _draw_translucent_text(
     scale: float,
     color: tuple[int, int, int],
     opacity: float,
+    *,
+    face: Path | None = None,
 ) -> None:
     """Draw outlined text blended onto the canvas at `opacity`."""
     overlay = canvas.copy()
-    draw_text(overlay, text, x, y, scale, color, "center", outline=True)
+    draw_text(overlay, text, x, y, scale, color, "center", outline=True, face=face)
     cv2.addWeighted(overlay, opacity, canvas, 1.0 - opacity, 0, canvas)
 
 
@@ -372,7 +384,17 @@ def _compose_lobby(screen: LobbyScreen, frame: np.ndarray) -> np.ndarray:
         color = player_color(marker.player)
         draw_box_label(canvas, player_name(marker.player), marker.box, transform, color)
 
-    draw_text(canvas, copy.banner, CANVAS_WIDTH // 2, 58, 1.6, WHITE, "center", outline=True)
+    draw_text(
+        canvas,
+        copy.banner,
+        CANVAS_WIDTH // 2,
+        58,
+        1.6,
+        WHITE,
+        "center",
+        outline=True,
+        face=MARKER_FONT,
+    )
     draw_text(canvas, copy.quit_key, CANVAS_WIDTH - 40, 54, 0.7, MUTED, "right", outline=True)
 
     count = len(screen.markers)
@@ -407,20 +429,77 @@ def _compose_countdown(screen: CountdownScreen, frame: np.ndarray) -> np.ndarray
     return canvas
 
 
-def draw_countdown_timer(canvas: np.ndarray, seconds_left: int, digit_age: float) -> None:
+def draw_countdown_timer(
+    canvas: np.ndarray,
+    seconds_left: int,
+    digit_age: float,
+    *,
+    face: Path | None = None,
+) -> None:
     """The big translucent countdown digit, centred on any BGR canvas.
 
     Strike's round timer; Dodgeball draws its countdown with this too. On the
     1280x720 Strike canvas this is exactly `_countdown_timer_style`.
+    Defaults to Permanent Marker; pass another face (e.g. Dodgeball theme) to override.
     """
     opacity = _countdown_timer_opacity(seconds_left, digit_age)
     if opacity is None or opacity <= 0:
         return
+    digit_face = face or MARKER_FONT
     height, width = canvas.shape[:2]
     text = str(seconds_left)
-    (_, glyph_h), descent = styles.text_size(text, TIMER_CENTER_SCALE, theme.font, h=height)
+    (_, glyph_h), descent = styles.text_size(
+        text, TIMER_CENTER_SCALE, digit_face, h=height
+    )
     baseline = round(height // 2 + (glyph_h - descent) / 2)
-    _draw_translucent_text(canvas, text, width // 2, baseline, TIMER_CENTER_SCALE, WHITE, opacity)
+    _draw_translucent_text(
+        canvas,
+        text,
+        width // 2,
+        baseline,
+        TIMER_CENTER_SCALE,
+        WHITE,
+        opacity,
+        face=digit_face,
+    )
+
+
+def _results_advance_bar_rect(width: int, height: int) -> tuple[int, int, int, int]:
+    """Left, top, right, bottom of the results advance bar on a BGR canvas."""
+    margin_x = max(8, round(RESULTS_ADVANCE_BAR_MARGIN_X * width / CANVAS_WIDTH))
+    margin_bottom = max(8, round(RESULTS_ADVANCE_BAR_MARGIN_BOTTOM * height / CANVAS_HEIGHT))
+    bar_h = max(6, round(RESULTS_ADVANCE_BAR_HEIGHT * height / CANVAS_HEIGHT))
+    left = margin_x
+    right = width - margin_x
+    bottom = height - margin_bottom
+    top = bottom - bar_h
+    return left, top, right, bottom
+
+
+def _fill_pill(
+    canvas: np.ndarray,
+    left: int,
+    top: int,
+    right: int,
+    bottom: int,
+    color: tuple[int, int, int],
+) -> None:
+    """Axis-aligned pill (rounded ends) filled in BGR."""
+    height = bottom - top
+    if height <= 0 or right <= left:
+        return
+    radius = height // 2
+    if right - left <= height:
+        cx = (left + right) // 2
+        cy = (top + bottom) // 2
+        cv2.circle(canvas, (cx, cy), radius, color, -1, cv2.LINE_AA)
+        return
+    cv2.rectangle(
+        canvas, (left + radius, top), (right - radius, bottom), color, -1, cv2.LINE_AA
+    )
+    cy = (top + bottom) // 2
+    cv2.circle(canvas, (left + radius, cy), radius, color, -1, cv2.LINE_AA)
+    cv2.circle(canvas, (right - radius, cy), radius, color, -1, cv2.LINE_AA)
 
 
 def _parked_target_rect() -> Rect:
@@ -441,7 +520,7 @@ def _results_score_stack_baselines(head_y: int) -> tuple[int, int]:
     """Score and P# baselines above the head, clamped below the header."""
     label_y = head_y - LABEL_GAP_ABOVE_HEAD
     score_y = label_y - SCORE_GAP_ABOVE_LABEL
-    (_, ascent), _ = styles.text_size("88", SCORE_SCALE, theme.font, h=CANVAS_HEIGHT)
+    (_, ascent), _ = styles.text_size("88", SCORE_SCALE, MARKER_FONT, h=CANVAS_HEIGHT)
     score_top = score_y - ascent
     if score_top < HEADER_BOTTOM:
         shift = HEADER_BOTTOM - score_top
@@ -470,6 +549,7 @@ def _draw_results_player_stack(
         color,
         "center",
         outline=True,
+        face=MARKER_FONT,
     )
     draw_text(
         canvas,
@@ -488,7 +568,7 @@ def _compose_results(screen: ResultsScreen) -> np.ndarray:
     transform = draw_frame(canvas, screen.snapshot, FULL_CANVAS)
     _header(
         canvas,
-        copy.round_results.format(
+        copy.round_of.format(
             round_number=screen.round_number, total_rounds=screen.total_rounds
         ),
         show_esc=False,
@@ -527,129 +607,38 @@ def _compose_results(screen: ResultsScreen) -> np.ndarray:
             color,
         )
 
-    if screen.idle:
-        _draw_results_prompt(
-            canvas, final_round=screen.round_number == screen.total_rounds
+    if screen.idle and screen.advance_progress is not None:
+        label = (
+            copy.results_final
+            if screen.round_number >= screen.total_rounds
+            else copy.results_next_round
         )
+        _draw_results_advance(canvas, screen.advance_progress, label)
 
     return canvas
 
 
-def _draw_results_prompt(canvas: np.ndarray, *, final_round: bool) -> None:
-    prompt = copy.results_thumbs_final if final_round else copy.results_thumbs
+def _draw_results_advance(canvas: np.ndarray, progress: float, label: str) -> None:
+    """Menu-style hold bar: faint track, fill grows left → right with `progress` (0–1)."""
+    progress = max(0.0, min(1.0, progress))
+    height, width = canvas.shape[:2]
+    left, top, right, bottom = _results_advance_bar_rect(width, height)
+    label_gap = max(16, round(RESULTS_ADVANCE_LABEL_GAP * height / CANVAS_HEIGHT))
     draw_text(
         canvas,
-        prompt,
-        CANVAS_WIDTH // 2,
-        RESULTS_PROMPT_Y,
-        RESULTS_PROMPT_SCALE,
-        ACCENT,
-        "center",
+        label,
+        left,
+        top - label_gap,
+        RESULTS_ADVANCE_LABEL_SCALE,
+        WHITE,
+        "left",
         outline=True,
     )
-
-
-def hand_owner_player(
-    anchor: tuple[float, float],
-    players: Sequence,
-) -> int | None:
-    """Player whose results box owns this hand; nearest box center as fallback."""
-    if not players:
-        return None
-    ax, ay = anchor
-    for player in players:
-        x0, y0, x1, y1 = player.box
-        if x0 <= ax <= x1 and y0 <= ay <= y1:
-            return player.player
-    return min(
-        players,
-        key=lambda p: abs(ax - (p.box[0] + p.box[2]) / 2.0),
-    ).player
-
-
-def draw_hand_skeleton(
-    canvas: np.ndarray,
-    landmarks: Sequence[tuple[float, float]],
-    transform: Transform,
-    color: tuple[int, int, int] = HAND_TRACK,
-) -> None:
-    """Draw MediaPipe hand bones and joints in canvas space."""
-    if len(landmarks) < 2:
-        return
-    pts = [transform.apply(p) for p in landmarks]
-    for a, b in HAND_CONNECTIONS:
-        if a < len(pts) and b < len(pts):
-            cv2.line(canvas, pts[a], pts[b], color, 2, cv2.LINE_AA)
-    for pt in pts:
-        cv2.circle(canvas, pt, 3, color, -1, cv2.LINE_AA)
-
-
-def draw_hold_ring(
-    canvas: np.ndarray,
-    center: tuple[float, float],
-    radius: float,
-    progress: float,
-    transform: Transform,
-    *,
-    track_color: tuple[int, int, int] = HAND_TRACK,
-    fill_color: tuple[int, int, int] = HOLD_FILL,
-) -> None:
-    """Faint track circle + bright progress arc around the palm."""
-    if radius <= 1:
-        return
-    cx, cy = transform.apply(center)
-    r = max(4, round(radius * transform.scale))
-    # Track at lower opacity via a darkened accent blend.
-    track = tuple(int(c * 0.45) for c in track_color)
-    cv2.circle(canvas, (cx, cy), r, track, 3, cv2.LINE_AA)
-    if progress <= 0:
-        return
-    sweep = 360.0 * min(1.0, progress)
-    cv2.ellipse(
-        canvas,
-        (cx, cy),
-        (r, r),
-        0,
-        -90,
-        -90 + sweep,
-        fill_color,
-        5,
-        cv2.LINE_AA,
-    )
-
-
-def overlay_results_hold(
-    canvas: np.ndarray,
-    progress: float,
-    *,
-    final_round: bool,
-    snap: object | None = None,
-    frame_size: tuple[int, int] | None = None,
-    players: Sequence = (),
-) -> None:
-    """Prompt, primary-hand skeleton, and palm hold ring after compose."""
-    _draw_results_prompt(canvas, final_round=final_round)
-    if snap is None or frame_size is None:
-        return
-    fw, fh = frame_size
-    if fw <= 0 or fh <= 0:
-        return
-    transform = fit(fw, fh, FULL_CANVAS)
-
-    # Single primary hand only (MediaPipe is configured for one hand on results).
-    primary = primary_landmarks(snap)
-    if primary:
-        wrist = primary[0]
-        owner = hand_owner_player(wrist, players)
-        color = player_color(owner) if owner is not None else HAND_TRACK
-        draw_hand_skeleton(canvas, primary, transform, color)
-
-    box = getattr(snap, "hand_box", None)
-    if primary and show_hold_ring(progress, getattr(snap, "label", None)):
-        center = palm_center(primary)
-        if center is not None:
-            radius = hand_ring_radius(box) if box is not None else 40.0
-            draw_hold_ring(canvas, center, radius, progress, transform)
+    _fill_pill(canvas, left, top, right, bottom, RESULTS_ADVANCE_BAR_TRACK)
+    span = right - left
+    fill_w = max(bottom - top, round(span * progress)) if progress > 0 else 0
+    if fill_w > 0:
+        _fill_pill(canvas, left, top, left + fill_w, bottom, RESULTS_ADVANCE_BAR_FILL)
 
 
 def _winners_line(screen: FinalScreen) -> str:
@@ -662,8 +651,12 @@ def _winners_line(screen: FinalScreen) -> str:
 def _compose_final(screen: FinalScreen) -> np.ndarray:
     canvas = new_canvas()
     center = CANVAS_WIDTH // 2
-    draw_text(canvas, copy.final_scores, center, 110, 2.0, WHITE, "center")
-    draw_text(canvas, _winners_line(screen), center, 190, 1.4, ACCENT, "center")
+    draw_text(
+        canvas, copy.final_scores, center, 110, 2.0, WHITE, "center", face=MARKER_FONT
+    )
+    draw_text(
+        canvas, _winners_line(screen), center, 190, 1.4, ACCENT, "center", face=MARKER_FONT
+    )
 
     for row, standing in enumerate(screen.standings):
         y = 300 + row * 80
@@ -672,7 +665,16 @@ def _compose_final(screen: FinalScreen) -> np.ndarray:
         draw_text(
             canvas, player_name(standing.player), center - 120, y, 1.5, player_color(standing.player)
         )
-        draw_text(canvas, str(standing.total), center + 230, y, 1.5, WHITE, "right")
+        draw_text(
+            canvas,
+            str(standing.total),
+            center + 230,
+            y,
+            1.5,
+            WHITE,
+            "right",
+            face=MARKER_FONT,
+        )
 
     return canvas
 

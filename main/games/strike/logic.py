@@ -240,12 +240,14 @@ class Game:
             if seconds_left != self._last_tick:
                 self._last_tick = seconds_left
                 self._emit(CountdownTick(seconds_left=seconds_left))
+            duration = self._config.countdown_seconds
+            elapsed = max(0.0, duration - remaining)
             return CountdownScreen(
                 round_number=self._round_number,
                 total_rounds=self._config.rounds,
                 target=self._target,
                 seconds_left=seconds_left,
-                elapsed=max(0.0, self._config.countdown_seconds - remaining),
+                elapsed=elapsed,
                 digit_age=max(0.0, seconds_left - remaining),
             )
 
@@ -332,7 +334,13 @@ class Game:
             self._advance_score_reveal(now)
             # Lock frame (and every scramble frame) ignores confirm — no skip.
             return self._results
-        if not confirm:
+        remaining = self._results_advance_remaining(now)
+        if remaining > 0:
+            self._results = replace(
+                self._results,
+                advance_remaining_s=remaining,
+                advance_progress=self._results_advance_progress(remaining),
+            )
             return self._results
         if self._round_number < self._config.rounds:
             self._round_index += 1
@@ -340,6 +348,23 @@ class Game:
         self._phase = _Phase.FINAL
         self._emit(GameOver(standings=rank(self._totals)))
         return self._final_screen()
+
+    def _results_lock_at(self) -> float:
+        return (
+            self._results_at
+            + self._config.results_hold_s
+            + self._config.results_reveal_s
+        )
+
+    def _results_advance_remaining(self, now: float) -> float:
+        return self._config.results_advance_s - (now - self._results_lock_at())
+
+    def _results_advance_progress(self, remaining: float) -> float:
+        duration = self._config.results_advance_s
+        if duration <= 0:
+            return 1.0
+        elapsed = duration - remaining
+        return min(1.0, max(0.0, elapsed / duration))
 
     def _advance_score_reveal(self, now: float) -> None:
         assert self._results is not None
@@ -355,6 +380,8 @@ class Game:
                 display_scores=finals,
                 idle=True,
                 holding=False,
+                advance_remaining_s=self._config.results_advance_s,
+                advance_progress=0.0,
             )
             self._emit(ScoreRevealLocked(scores=finals))
             return
