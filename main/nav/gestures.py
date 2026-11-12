@@ -4,7 +4,7 @@
 `GestureRecognizerSession` lazy-imports mediapipe and is started/stopped by the shell.
 
 When YOLO people are available, the session only considers wrists raised above
-the hip: it crops those regions, upscales, runs the recognizer, then maps
+the elbow: it crops those regions, upscales, runs the recognizer, then maps
 landmarks back to full-frame coordinates. If people are visible but no wrists
 are raised, recognition is skipped (no full-frame fallback).
 """
@@ -132,7 +132,7 @@ def any_raised_wrists(
     min_wrist_conf: float = 0.35,
     lift_frac: float = 0.08,
 ) -> bool:
-    """True when any YOLO wrist sits clearly above its hip."""
+    """True when any YOLO wrist sits clearly above its elbow."""
     for person in people:
         for side in ("left", "right"):
             if is_wrist_raised(
@@ -153,7 +153,7 @@ def hand_rois_from_people(
     max_rois: int = 2,
     lift_frac: float = 0.08,
 ) -> list[HandRoi]:
-    """Build up to `max_rois` square crops centered near wrists raised above the hip."""
+    """Build up to `max_rois` square crops centered near wrists raised above the elbow."""
     if frame_w <= 0 or frame_h <= 0 or max_rois <= 0:
         return []
 
@@ -376,7 +376,7 @@ def apply_raised_arm_gate(
     lift_frac: float = 0.08,
     match_frac: float = 0.35,
 ) -> GestureSnapshot:
-    """Drop hand detection unless the hand sits near a YOLO wrist above the hip.
+    """Drop hand detection unless the hand sits near a YOLO wrist above the elbow.
 
     Clears label, score, landmarks, and hand_box together. If no people are
     visible the snapshot is left alone (nothing to verify against).
@@ -409,7 +409,7 @@ def filter_raised_hands(
     lift_frac: float = 0.08,
     match_frac: float = 0.35,
 ) -> tuple[HandGesture, ...]:
-    """Keep only hands whose anchor sits near a YOLO wrist above the hip."""
+    """Keep only hands whose anchor sits near a YOLO wrist above the elbow."""
     if not enabled or not people:
         return tuple(hands)
     raised = _raised_wrist_anchors(

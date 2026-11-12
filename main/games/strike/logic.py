@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import math
 import random
+from dataclasses import replace
 from enum import Enum, auto
 from typing import Callable, Sequence
 from main.settings import StrikeConfig
@@ -137,6 +138,7 @@ class Game:
         self._last_tick: int | None = None
         self._found = 0
         self._results: ResultsScreen | None = None
+        self._results_at = 0.0
 
     def subscribe(self, listener: Callable[[Event], None]) -> None:
         """Have `listener` called with every event the game announces."""
@@ -271,13 +273,14 @@ class Game:
             )
 
         self._phase = _Phase.RESULTS
+        self._results_at = now
         self._results = ResultsScreen(
             round_number=self._round_number,
             total_rounds=self._config.rounds,
             target=self._target,
             snapshot=_copy_snapshot(frame),
             players=scored,
-            idle=True,
+            idle=False,
         )
         self._emit(
             RoundScored(
@@ -306,6 +309,11 @@ class Game:
 
     def _step_results(self, now: float, confirm: bool) -> Screen:
         assert self._results is not None
+        if not self._results.idle:
+            if now - self._results_at >= self._config.results_gesture_delay:
+                self._results = replace(self._results, idle=True)
+            else:
+                return self._results
         if not confirm:
             return self._results
         if self._round_number < self._config.rounds:

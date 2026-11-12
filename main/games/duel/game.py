@@ -1,7 +1,9 @@
 """Wild West Duel: pygame view + sounds on top of the pure Duel rules.
 
-Look follows refrences/: white page, pixel font, hearts for lives. Players don't see the
-camera; debug mode (D) puts the camera image behind the same UI.
+Look follows refrences/: white page, pixel font, hearts for lives. Side portrait
+PiPs show each player's body so they can check framing; after a hit, a slow-mo
+camera replay fills the screen before the result. Debug mode (D) still puts the
+full camera image behind the same UI.
 """
 
 from __future__ import annotations
@@ -9,6 +11,7 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass
 
+import numpy as np
 import pygame
 
 from main import audio, content, styles
@@ -17,6 +20,8 @@ from main.settings import ASSETS, DuelConfig, GestureConfig, Messages, ViewConfi
 
 from .float_path import FloatPath, ease_out, fade
 from .logic import Duel, Phase
+from .preview import PreviewTracker
+from .replay import ReplayPlayback, ReplayRecorder
 
 theme = styles.DUEL
 copy = content.Duel
@@ -60,6 +65,24 @@ class DuelGame:
         self.win_img: pygame.Surface | None = None
         self.floaters: list[_Floater] = []
         self.paths = (FloatPath(size, 0), FloatPath(size, 1))
+        aspect = (self.view.preview_width * self.w) / max(1.0, self.view.preview_height * self.h)
+        self.previews = (
+            PreviewTracker(
+                pad=self.view.preview_pad,
+                smooth=self.view.preview_smooth,
+                grace=self.view.preview_grace,
+                target_aspect=aspect,
+            ),
+            PreviewTracker(
+                pad=self.view.preview_pad,
+                smooth=self.view.preview_smooth,
+                grace=self.view.preview_grace,
+                target_aspect=aspect,
+            ),
+        )
+        self.recorder = ReplayRecorder(scale=self.view.replay_scale)
+        self.playback: ReplayPlayback | None = None
+        self._replay_hit_played = False
 
         self._fonts: dict[tuple[int, bool], pygame.font.Font] = {}
         self.sz_main = theme.duel_main_px(self.h)
@@ -88,24 +111,45 @@ class DuelGame:
     def reset(self) -> None:
         self.duel.reset()
         self.floaters.clear()
+        for tracker in self.previews:
+            tracker.reset()
+        self.recorder.discard()
+        self.playback = None
+        self._replay_hit_played = False
 
     def update(self, frame: PoseFrame) -> None:
         self.step(frame.timestamp, tuple(classify(p, self.gestures) for p in frame.players))
+        if self.duel.phase == Phase.BANG and self.recorder.active:
+            self.recorder.push(frame.image, frame.timestamp)
+        elif self.duel.phase == Phase.REPLAY:
+            self._tick_replay_audio()
 
     def step(self, now: float, states: tuple[PoseState, PoseState]) -> None:
         self.now = now
         self.states = states
+        was_replay = self.duel.phase == Phase.REPLAY
         for name, player in self.duel.update(now, states):
             if name in ("ready", "abort"):
                 self.floaters.clear()
+                if name == "abort":
+                    self._clear_replay()
+            elif name == "bang":
+                self.recorder.start(now)
             elif name == "early":
                 self.floaters.append(_Floater(self.paths[player], self.early_msgs.pick(), self.now))
             elif name == "hit":
                 self.shot_msg = self.shot_msgs.pick()
+                self._begin_playback()
+            elif name in ("tie", "timeout", "void"):
+                self._clear_replay()
             elif name == "match_over":
                 self.win_msg = self.win_msgs.pick()
                 self.win_img = self._pick_cowboy()
             audio.play(self.sounds.get(name))
+        if was_replay and self.duel.phase != Phase.REPLAY:
+            self._clear_replay()  # drop bang→draw frames once the clip has played
+        elif self.duel.phase == Phase.REPLAY:
+            self._tick_replay_audio()
 
     def debug_lines(self) -> list[str]:
         d = self.duel
@@ -116,10 +160,14 @@ class DuelGame:
 
     def draw(self, canvas: pygame.Surface, frame: PoseFrame) -> None:
         d = self.duel
+        if d.phase == Phase.REPLAY:
+            self._draw_replay(canvas)
+            return
         if d.phase == Phase.MATCH_OVER and not d.showing_final_round(self.now):
             self._draw_winner(canvas)
             return
 
+        self._draw_previews(canvas, frame)
         if d.phase == Phase.ROUND_OVER or d.showing_final_round(self.now):
             self._draw_result(canvas)
         else:
@@ -136,6 +184,124 @@ class DuelGame:
         self._draw_floaters(canvas)
 
     # -- screens ----------------------------------------------------------------------
+
+    def _clear_replay(self) -> None:
+        self.recorder.discard()
+        self.playback = None
+        self._replay_hit_played = False
+
+    def _begin_playback(self) -> None:
+        times = [t for t in self.duel.draw_time if t is not None]
+        end = min(times) if times else self.now
+        clip = self.recorder.clip(end)
+        self._replay_hit_played = False
+        if clip is None:
+            self.playback = None
+            return
+        cfg = self.duel.config
+        self.playback = ReplayPlayback(clip, speed=cfg.replay_speed, freeze=cfg.replay_freeze)
+        audio.play(self.sounds.get("bang"))
+
+    def _tick_replay_audio(self) -> None:
+        if self.playback is None or self._replay_hit_played:
+            return
+        elapsed = self.now - self.duel.phase_start
+        _, _, at_impact = self.playback.sample(elapsed)
+        if at_impact:
+            self._replay_hit_played = True
+            audio.play(self.sounds.get("hit"))
+
+    def _draw_replay(self, canvas: pygame.Surface) -> None:
+        elapsed = self.now - self.duel.phase_start
+        if self.playback is None:
+            canvas.fill(theme.ink)
+            reaction_ms = 0.0
+        else:
+            rgb, reaction_ms, _ = self.playback.sample(elapsed)
+            self._blit_cover(canvas, rgb)
+        label_x = 0.14 * self.w
+        self._text(
+            canvas,
+            copy.replay_label,
+            self.sz_label,
+            (label_x, 0.08 * self.h),
+            color=theme.bg,
+            bold=True,
+            shadow=True,
+        )
+        self._text(
+            canvas,
+            f"{reaction_ms:.0f} ms",
+            self.sz_label,
+            (label_x, 0.14 * self.h),
+            color=theme.bg,
+            bold=True,
+            shadow=True,
+        )
+
+    def _blit_cover(self, canvas: pygame.Surface, rgb: np.ndarray) -> None:
+        h, w = rgb.shape[:2]
+        if w <= 0 or h <= 0:
+            canvas.fill(theme.ink)
+            return
+        scale = max(self.w / w, self.h / h)
+        tw, th = max(1, int(round(w * scale))), max(1, int(round(h * scale)))
+        buf = np.ascontiguousarray(rgb)
+        surf = pygame.image.frombuffer(buf.tobytes(), (w, h), "RGB")
+        scaled = pygame.transform.smoothscale(surf, (tw, th))
+        canvas.blit(scaled, ((self.w - tw) // 2, (self.h - th) // 2))
+
+    def _draw_previews(self, canvas: pygame.Surface, frame: PoseFrame) -> None:
+        fh, fw = frame.image.shape[:2]
+        for i in (0, 1):
+            rect = self._preview_rect(i)
+            box = self.previews[i].update(frame.players[i], self.now, fw, fh)
+            if box is None:
+                self._draw_preview_placeholder(canvas, rect)
+            else:
+                self._blit_preview_crop(canvas, frame.image, box, rect)
+            border = max(2, self.h // 240)
+            pygame.draw.rect(canvas, theme.ink, rect, border)
+
+    def _preview_rect(self, i: int) -> pygame.Rect:
+        pw = int(self.view.preview_width * self.w)
+        ph = int(self.view.preview_height * self.h)
+        margin = int(self.view.preview_margin_x * self.w)
+        rect = pygame.Rect(0, 0, pw, ph)
+        rect.top = int(self.view.preview_top * self.h)
+        if i == 0:
+            rect.left = margin
+        else:
+            rect.right = self.w - margin
+        return rect
+
+    def _draw_preview_placeholder(self, canvas: pygame.Surface, rect: pygame.Rect) -> None:
+        canvas.fill(theme.hint, rect)
+        self._text(
+            canvas,
+            copy.preview_waiting,
+            self.sz_label,
+            rect.center,
+            color=theme.bg,
+            bold=True,
+        )
+
+    def _blit_preview_crop(
+        self,
+        canvas: pygame.Surface,
+        image_bgr: np.ndarray,
+        box: tuple[float, float, float, float],
+        dest: pygame.Rect,
+    ) -> None:
+        x1, y1, x2, y2 = (int(v) for v in box)
+        x1, x2 = max(0, min(x1, x2)), min(image_bgr.shape[1], max(x1, x2))
+        y1, y2 = max(0, min(y1, y2)), min(image_bgr.shape[0], max(y1, y2))
+        if x2 <= x1 or y2 <= y1:
+            self._draw_preview_placeholder(canvas, dest)
+            return
+        crop = np.ascontiguousarray(image_bgr[y1:y2, x1:x2, ::-1])  # BGR -> RGB
+        surf = pygame.image.frombuffer(crop.tobytes(), (crop.shape[1], crop.shape[0]), "RGB")
+        canvas.blit(pygame.transform.smoothscale(surf, dest.size), dest)
 
     def _draw_header(self, canvas):
         heart_w = self.heart_alive.get_width()

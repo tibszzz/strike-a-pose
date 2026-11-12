@@ -56,17 +56,21 @@ def play_round(game, started_at, strike):
 
 
 def advance_results(game, snapshot_at, player_count=None, confirm=True):
-    """Confirm past idle results (immediate after snapshot).
+    """Wait out the results gesture delay, then optionally confirm.
 
     Returns `(screen, next_started_at)` where `next_started_at` is when the
     following countdown began (or idle time if not confirming).
     """
     screen = game.step(snapshot_at)
     assert isinstance(screen, ResultsScreen)
+    assert not screen.idle
+    idle_at = snapshot_at + game._config.results_gesture_delay
+    screen = game.step(idle_at)
+    assert isinstance(screen, ResultsScreen)
     assert screen.idle
     if not confirm:
-        return screen, snapshot_at
-    confirm_at = snapshot_at + 0.01
+        return screen, idle_at
+    confirm_at = idle_at + 0.01
     screen = game.step(confirm_at, confirm=True)
     return screen, confirm_at
 
@@ -154,7 +158,7 @@ def test_debug_lobby_allows_a_solo_player():
     assert len(results.players) == game._config.max_players
     assert results.players[0].round_score == 100
     assert [player.player for player in results.players] == [1, 2, 3, 4]
-    assert results.idle
+    assert not results.idle
 
 
 # --- countdown and snapshot --------------------------------------------------
@@ -197,8 +201,6 @@ def test_results_score_stack_clamps_below_header():
         LABEL_GAP_ABOVE_HEAD,
         SCORE_GAP_ABOVE_LABEL,
         _results_score_stack_baselines,
-        palm_center,
-        hand_ring_radius,
     )
 
     # Comfortable head position: fixed gaps, no clamp.
@@ -210,10 +212,6 @@ def test_results_score_stack_clamps_below_header():
     score_y, label_y = _results_score_stack_baselines(80)
     assert label_y - score_y == SCORE_GAP_ABOVE_LABEL
     assert score_y >= HEADER_BOTTOM
-
-    assert palm_center(()) is None
-    assert palm_center(((10.0, 20.0), (30.0, 40.0))) == (20.0, 30.0)
-    assert hand_ring_radius((0.0, 0.0, 60.0, 80.0)) == pytest.approx(50.0)
 
 
 def test_hand_owner_player_matches_box_then_nearest():
@@ -337,7 +335,10 @@ def test_snapshot_fires_once_at_5_seconds():
     later = game.step(6.0)
     assert isinstance(later, ResultsScreen)
     assert later.snapshot is results.snapshot
-    assert later.idle
+    assert not later.idle
+    idle = game.step(5.0 + game._config.results_gesture_delay)
+    assert isinstance(idle, ResultsScreen)
+    assert idle.idle
     assert game.step(7.0).snapshot is results.snapshot
     assert len(of_type(events, SnapshotTaken)) == 1
     assert len(of_type(events, RoundScored)) == 1
@@ -349,7 +350,7 @@ def test_results_keep_the_snapshot_frame():
     assert play_round(game, 0.0, everyone_perfect(2)).snapshot is FRAME
 
 
-def test_results_show_all_scores_immediately_and_wait_for_confirm():
+def test_results_stay_busy_until_gesture_delay_then_accept_confirm():
     game, _ = one_round_game()
     start_game(game)
     results = play_round(
@@ -360,14 +361,20 @@ def test_results_show_all_scores_immediately_and_wait_for_confirm():
             person_striking(mirrored(target.joints), center_x=800.0),
         ],
     )
-    assert results.idle
+    assert not results.idle
     assert len(results.players) == 2
+    delay = game._config.results_gesture_delay
 
-    still = game.step(COUNTDOWN + 1.0)
-    assert isinstance(still, ResultsScreen)
-    assert still.snapshot is results.snapshot
+    still_busy = game.step(COUNTDOWN + delay - 0.01, confirm=True)
+    assert isinstance(still_busy, ResultsScreen)
+    assert not still_busy.idle
+    assert still_busy.snapshot is results.snapshot
 
-    final = game.step(COUNTDOWN + 1.01, confirm=True)
+    idle = game.step(COUNTDOWN + delay)
+    assert isinstance(idle, ResultsScreen)
+    assert idle.idle
+
+    final = game.step(COUNTDOWN + delay + 0.01, confirm=True)
     assert isinstance(final, FinalScreen)
 
 

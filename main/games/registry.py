@@ -22,30 +22,28 @@ class GameEntry:
     factory: GameFactory
 
 
-def _duel(size: Size):
-    from main.games.duel.game import DuelGame
-
-    return DuelGame(size)
-
-
 def _dodgeball(size: Size):
     from main.games.dodgeball.dodgeball import DodgeballGame
 
     return DodgeballGame(size)
 
 
-def build_registry(*, strike_config=None) -> dict[str, GameEntry]:
+def build_registry(*, strike_config=None, duel_config=None) -> dict[str, GameEntry]:
     """Factories for every title shown in the menu and accepted on the CLI."""
+    from main.games.duel.game import DuelGame
     from main.games.strike.play import StrikeGame
     from main.settings import StrikeConfig
 
     config = strike_config if strike_config is not None else StrikeConfig()
 
+    def duel(size: Size):
+        return DuelGame(size, config=duel_config)
+
     def strike(size: Size):
         return StrikeGame(size, config=config)
 
     return {
-        "duel": GameEntry("duel", content.Registry.duel, _duel),
+        "duel": GameEntry("duel", content.Registry.duel, duel),
         "dodgeball": GameEntry("dodgeball", content.Registry.dodgeball, _dodgeball),
         "strike": GameEntry("strike", content.Registry.strike, strike),
     }

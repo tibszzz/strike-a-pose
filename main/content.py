@@ -6,22 +6,22 @@ from __future__ import annotations
 class Shell:
     brand = "moovit"
     menu_title = "moovit"
-    splash_prompt = "Hold thumbs up to start"
-    menu_hint = "Pointing up selects · Hold thumbs up to start"
-    menu_gesture_idle = "show a hand gesture…"
-    splash_gesture_idle = "show a thumbs up…"
+    splash_prompt = "HOLD THUMBS UP TO START"
+    menu_hint = "POINT TO SELECT · HOLD THUMBS UP TO START"
 
 
 class Registry:
-    duel = "Wild West Duel"
+    duel = "High Noon"
     dodgeball = "Dodgeball"
-    strike = "Strike a Pose"
+    strike = "Strike the Pose"
 
 
 class Duel:
-    window_title = "Strike a Pose: Wild West Duel"
+    window_title = "moovit"
     player_names = ("Player 1", "Player 2")
     waiting_for = "WAITING FOR"
+    preview_waiting = "WAITING"
+    replay_label = "REPLAY"
     get_ready = "GET READY, PARTNERS"
     lower_gun = "lower your gun"
     lower_guns_again = "lower your guns to play again"

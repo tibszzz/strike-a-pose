@@ -27,9 +27,9 @@ class GestureNavConfig:
     roi_min_px: int = 80  # minimum crop side in source pixels
     roi_max: int = 2  # max wrist ROIs tried per frame
     min_wrist_conf: float = 0.35
-    # 1 = ignore hand detection unless a YOLO wrist near the hand is above the hip.
+    # 1 = ignore hand detection unless a YOLO wrist near the hand is above the elbow.
     raise_gate: int = 1
-    raise_lift_frac: float = 0.08  # wrist must clear hip by this × torso length
+    raise_lift_frac: float = 0.08  # wrist must clear elbow by this × torso length
     raise_match_frac: float = 0.35  # max hand↔raised-wrist distance as × person-box height
     thumb_hold_s: float = 1.0  # seconds Thumb_Up must be held on splash / menu confirm
 

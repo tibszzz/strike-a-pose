@@ -26,6 +26,8 @@ from main.nav import (
     effective_label,
     load_gesture_nav_config,
 )
+from main.nav.hand_draw import draw_primary_hand_hold
+from main.nav.hand_geometry import NAV_GESTURE_HANDS
 from main.pose import PoseFrame
 
 theme = styles.SHELL
@@ -39,6 +41,7 @@ class MenuGame:
     title = copy.brand
     is_menu = True
     wants_gestures = True
+    gesture_hands = NAV_GESTURE_HANDS
     background = theme.bg
 
     def __init__(self, size: tuple[int, int], entries: Sequence[GameEntry]) -> None:
@@ -63,15 +66,27 @@ class MenuGame:
         self._hover = None
         self._thumb.reset()
 
+    def _title_y(self) -> int:
+        return self.h // 10
+
+    def _hint_y(self) -> int:
+        bottom_margin = max(16, self.h // 36)
+        return self.h - self._hint_font.get_height() - bottom_margin
+
     def tile_rects(self) -> list[pygame.Rect]:
         n = len(self.entries)
         margin_x = self.w * 0.08
         gap = self.w * 0.04
         available = self.w - 2 * margin_x - (n - 1) * gap
-        side = min(available / n, self.h * 0.42)
+        title_bottom = self._title_y() + self._title_font.get_height()
+        hint_top = self._hint_y()
+        band_pad = max(12, self.h // 48)
+        band_top = title_bottom + band_pad
+        band_h = max(1, hint_top - band_pad - band_top)
+        side = min(available / n, band_h)
         total_w = n * side + (n - 1) * gap
         start_x = (self.w - total_w) / 2
-        top = self.h * 0.38
+        top = band_top + (band_h - side) / 2
         return [
             pygame.Rect(
                 int(start_x + i * (side + gap)),
@@ -121,31 +136,8 @@ class MenuGame:
         overlay.fill(theme.overlay)
         canvas.blit(overlay, (0, 0))
 
-        if snap is not None and snap.hand_box is not None:
-            x1, y1, x2, y2 = snap.hand_box
-            pygame.draw.rect(
-                canvas,
-                theme.hand_box,
-                pygame.Rect(int(x1), int(y1), int(x2 - x1), int(y2 - y1)),
-                width=3,
-            )
-
         title = self._title_font.render(copy.menu_title, True, theme.ink)
-        canvas.blit(title, (self.w // 2 - title.get_width() // 2, self.h // 10))
-
-        hint_y = self.h // 10 + title.get_height() + 8
-        primary = self._hint_font.render(copy.menu_hint, True, theme.accent)
-        canvas.blit(primary, (self.w // 2 - primary.get_width() // 2, hint_y))
-
-        status_y = hint_y + primary.get_height() + 12
-        hold = self._thumb.hold_status()
-        if hold is not None:
-            status = self._hint_font.render(hold, True, theme.accent)
-        elif snap is not None and snap.label:
-            status = self._hint_font.render(f"{snap.label}  {snap.score:.2f}", True, theme.ink)
-        else:
-            status = self._hint_font.render(copy.menu_gesture_idle, True, theme.muted)
-        canvas.blit(status, (self.w // 2 - status.get_width() // 2, status_y))
+        canvas.blit(title, (self.w // 2 - title.get_width() // 2, self._title_y()))
 
         for i, (entry, rect) in enumerate(zip(self.entries, self.tile_rects())):
             fill = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
@@ -154,16 +146,6 @@ class MenuGame:
 
             locked = i == self._hard_lock
             hovered = i == self._hover
-            if locked and self._thumb.progress > 0:
-                hold_surf = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
-                hold_h = max(1, int(rect.height * self._thumb.progress))
-                hold_surf.fill(theme.hold_fill_tile)
-                canvas.blit(
-                    hold_surf,
-                    (rect.left, rect.bottom - hold_h),
-                    area=pygame.Rect(0, rect.height - hold_h, rect.width, hold_h),
-                )
-
             if locked:
                 border_color = theme.accent
                 border_w = 5
@@ -187,6 +169,15 @@ class MenuGame:
                     rect.centery - label.get_height() // 2,
                 ),
             )
+
+        primary = self._hint_font.render(copy.menu_hint, True, theme.ink)
+        styles.apply_hint_blink(primary, frame.timestamp)
+        canvas.blit(primary, (self.w // 2 - primary.get_width() // 2, self._hint_y()))
+
+        # Hand chrome last so the skeleton/ring sit above tiles and copy.
+        draw_primary_hand_hold(
+            canvas, snap, self._thumb.progress, color=theme.accent
+        )
 
     def handle_command(self, command: MenuCommand) -> None:
         n = len(self.entries)

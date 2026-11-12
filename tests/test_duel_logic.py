@@ -42,6 +42,10 @@ class Sim:
         self.run_until(Phase.READY, H, H)
         self.run_until(Phase.BANG, H, H)
 
+    def finish_replay(self, p1=H, p2=H):
+        while self.duel.phase == Phase.REPLAY:
+            self.step(p1, p2)
+
 
 def test_waits_for_both_idle_before_ready():
     s = Sim()
@@ -60,6 +64,33 @@ def test_missing_player_blocks_start():
     s.step(H, M, frames=100)
     assert s.duel.phase == Phase.WAIT_START
     assert s.duel.missing == (False, True)
+
+
+def test_debug_solo_starts_against_idle_ghost():
+    s = Sim(debug=True)
+    s.step(H, M, frames=int(1.0 / DT) + 2)
+    assert s.duel.phase == Phase.READY
+    assert s.duel.missing == (False, False)
+    assert ("ready", None) in s.events
+
+
+def test_debug_solo_draw_beats_ghost():
+    s = Sim(debug=True)
+    s.run_until(Phase.READY, H, M)
+    s.run_until(Phase.BANG, H, M)
+    s.step(H, M, frames=6)
+    s.step(D, M, frames=10)
+    r = s.duel.last_result
+    assert r.winner == 0 and r.reason == "hit"
+    assert s.duel.scores == [1, 0]
+
+
+def test_debug_solo_leaving_aborts_countdown():
+    s = Sim(debug=True)
+    s.run_until(Phase.STEADY, H, M)
+    s.step(M, M)
+    assert s.duel.phase == Phase.WAIT_START
+    assert ("abort", None) in s.events
 
 
 def test_ready_steady_bang_timing():
@@ -83,6 +114,23 @@ def test_faster_draw_wins_point_and_reaction_time():
     assert r.winner == 0 and r.reason == "hit"
     assert r.reaction_ms[0] == pytest.approx(7 * DT * 1000, abs=1)
     assert s.duel.scores == [1, 0]
+    assert s.duel.phase == Phase.REPLAY
+    s.finish_replay()
+    assert s.duel.phase == Phase.ROUND_OVER
+
+
+def test_hit_skips_replay_for_tie_and_timeout():
+    s = Sim()
+    s.to_bang()
+    s.step(H, H, frames=6)
+    s.step(D, D, frames=5)
+    assert s.duel.last_result.reason == "tie"
+    assert s.duel.phase == Phase.ROUND_OVER
+
+    s = Sim()
+    s.to_bang()
+    s.step(H, H, frames=int(3.0 / DT) + 2)
+    assert s.duel.last_result.reason == "timeout"
     assert s.duel.phase == Phase.ROUND_OVER
 
 
@@ -185,6 +233,8 @@ def test_round_over_returns_to_wait_start():
     s = Sim()
     s.to_bang()
     s.step(D, H, frames=10)
+    assert s.duel.phase == Phase.REPLAY
+    s.finish_replay()
     assert s.duel.phase == Phase.ROUND_OVER
     s.step(H, H, frames=int(3.0 / DT) + 1)
     assert s.duel.phase == Phase.WAIT_START
@@ -195,6 +245,7 @@ def win_round(s, winner):
     s.to_bang()
     s.step(H, H, frames=6)
     s.step(D if winner == 0 else H, D if winner == 1 else H, frames=10)
+    s.finish_replay()
 
 
 def test_three_lives_then_winner_screen_and_idle_restarts():
@@ -206,13 +257,14 @@ def test_three_lives_then_winner_screen_and_idle_restarts():
     win_round(s, 0)
     assert s.duel.phase == Phase.MATCH_OVER
     assert s.duel.match_winner == 0 and s.duel.scores == [3, 1]
-    assert ("match_over", 0) in s.events
+    assert ("match_over", 0) not in s.events  # deferred until the winner screen
 
     assert s.duel.lives_left(0) == 2 and s.duel.lives_left(1) == 0
     assert s.duel.showing_final_round(s.t)  # the deciding shot is shown first
 
     s.step(H, H, frames=int(3.0 / DT) + 1)
     assert not s.duel.showing_final_round(s.t)
+    assert ("match_over", 0) in s.events
     assert s.duel.phase == Phase.MATCH_OVER  # then the winner screen, at least 3 s more
     assert not s.duel.can_restart(s.t)
     s.step(H, H, frames=int(3.0 / DT) + 1)
@@ -225,3 +277,16 @@ def test_lives_setting_changes_match_length():
     s = Sim(lives=1)
     win_round(s, 1)
     assert s.duel.phase == Phase.MATCH_OVER and s.duel.match_winner == 1
+    assert ("match_over", 1) not in s.events
+
+
+def test_replay_duration_uses_speed_and_freeze():
+    s = Sim(replay_speed=0.25, replay_freeze=1.0)
+    s.to_bang()
+    bang = s.duel.bang_time
+    s.step(H, H, frames=6)
+    s.step(D, H, frames=2)  # confirm draw
+    s.run_until(Phase.REPLAY, D, H)
+    first = min(t for t in s.duel.draw_time if t is not None)
+    expected = (first - bang) / 0.25 + 1.0
+    assert s.duel.replay_until - s.duel.phase_start == pytest.approx(expected, abs=DT)

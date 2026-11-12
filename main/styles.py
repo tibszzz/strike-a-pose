@@ -9,6 +9,7 @@ OpenCV-style `scale` maps to pixel size via `scale_to_px`.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -27,6 +28,11 @@ FONT = ASSETS / "fonts" / "VT323-Regular.ttf"
 _SCALE_TO_PX = 30
 _OUTLINE_PAD = 2
 
+# Slow sine pulse for splash / menu hints (~2s full cycle).
+HINT_BLINK_PERIOD_S = 2.0
+_HINT_ALPHA_MIN = 64
+_HINT_ALPHA_MAX = 255
+
 _font_cache: dict[tuple[str, int], pygame.font.Font] = {}
 
 
@@ -38,6 +44,16 @@ def bgr(color: Rgb) -> Rgb:
 
 def scale_to_px(scale: float) -> int:
     return max(8, round(scale * _SCALE_TO_PX))
+
+
+def apply_hint_blink(surface: pygame.Surface, timestamp: float) -> pygame.Surface:
+    """Modulate antialiased-glyph alpha with a slow sine blink. Mutates `surface`."""
+    pulse = 0.5 * (1.0 + math.sin(timestamp * math.tau / HINT_BLINK_PERIOD_S))
+    alpha = int(_HINT_ALPHA_MIN + (_HINT_ALPHA_MAX - _HINT_ALPHA_MIN) * pulse)
+    fade = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
+    fade.fill((255, 255, 255, alpha))
+    surface.blit(fade, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+    return surface
 
 
 def load_font(path: Path, size: int) -> pygame.font.Font:
@@ -157,11 +173,7 @@ class Theme:
     player: tuple[Rgb, ...]
     font: Path
     # Shell / shared chrome extras
-    hand_box: Rgb = (80, 220, 255)
     hover: Rgb = (220, 220, 220)
-    hold_track: Rgba = (255, 255, 255, 40)
-    hold_fill: Rgba = (85, 221, 224, 200)  # #55dde0
-    hold_fill_tile: Rgba = (85, 221, 224, 70)
     tile_fill: Rgba = (0, 0, 0, 120)
     # Duel extras
     shadow: Rgb = (190, 190, 190)
@@ -176,19 +188,19 @@ class Theme:
         return replace(self, **kwargs)
 
     def title_px(self, h: int) -> int:
-        return max(36, h // 12)
+        return max(72, h // 6)
 
     def menu_title_px(self, h: int) -> int:
-        return max(28, h // 16)
+        return 120
 
     def body_px(self, h: int) -> int:
         return max(16, h // 28)
 
     def hint_px(self, h: int) -> int:
-        return max(14, h // 36)
+        return 36
 
     def tile_label_px(self, h: int) -> int:
-        return max(16, h // 32)
+        return 72
 
     def duel_main_px(self, h: int) -> int:
         return int(0.11 * h)

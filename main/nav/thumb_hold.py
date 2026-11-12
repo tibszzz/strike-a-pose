@@ -46,7 +46,7 @@ class ThumbHoldTracker:
 
     def hold_status(self) -> str | None:
         if self.active and not self.fired:
-            return f"hold thumbs up… {self.progress:.0%}"
+            return f"HOLD THUMBS UP… {self.progress:.0%}"
         return None
 
     def update(

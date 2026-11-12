@@ -18,12 +18,25 @@ class DuelConfig:
     draw_confirm_frames: int = 2
     round_result_time: float = 3.0  # how long the round result is shown
     match_result_min_time: float = 3.0  # winner screen shown at least this long (after the round result)
+    replay_speed: float = 0.25  # slow-mo factor for post-hit action replay (1.0 = realtime)
+    replay_freeze: float = 1.0  # seconds to hold the impact frame after slow-mo
+    # Solo testing: the empty half is treated as an idle ghost so one person can play.
+    debug: bool = False
 
 
 @dataclass(frozen=True)
 class ViewConfig:
     early_float_time: float = 2.0  # seconds for "too early" to drift up the path and vanish
     early_fade_start: float = 0.5  # fraction of the trip after which it starts fading
+    # Side camera PiPs: body framing windows under the name/hearts band.
+    preview_width: float = 0.20  # fraction of canvas width
+    preview_height: float = 0.50  # fraction of canvas height
+    preview_top: float = 0.24  # fraction of canvas height; clears the hearts
+    preview_margin_x: float = 0.1  # fraction of canvas width from the outer edge
+    preview_pad: float = 0.18  # pad around Person.box before aspect expand
+    preview_smooth: float = 0.35  # EMA alpha toward the latest crop (higher = snappier)
+    preview_grace: float = 0.3  # seconds to hold last crop after track loss
+    replay_scale: float = 0.5  # linear downscale for bang→draw frame buffer
 
 
 @dataclass(frozen=True)
