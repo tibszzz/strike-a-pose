@@ -129,7 +129,6 @@ class DuelGame:
             "steady": lambda: audio.tone(587, 0.25),
             "bang": lambda: audio.gunshot(),
             "early": lambda: audio.tone(150, 0.4),
-            "hit": lambda: audio.gunshot(0.4, seed=7),
             "match_over": lambda: audio.arpeggio([392, 494, 587, 784]),
         }
         self.sounds = {name: audio.load_or(SOUNDS / f"{name}.wav", make) for name, make in synth.items()}
