@@ -30,6 +30,8 @@ from .screens import (
     ResultsScreen,
     RetryScreen,
     RoundScored,
+    ScoreRevealLocked,
+    ScoreRevealTick,
     Screen,
     SnapshotTaken,
     Standing,
@@ -142,6 +144,7 @@ class Game:
         self._found = 0
         self._results: ResultsScreen | None = None
         self._results_at = 0.0
+        self._last_reveal_flash: int | None = None
 
     def subscribe(self, listener: Callable[[Event], None]) -> None:
         """Have `listener` called with every event the game announces."""
@@ -283,12 +286,15 @@ class Game:
 
         self._phase = _Phase.RESULTS
         self._results_at = now
+        self._last_reveal_flash = 0
+        display_scores = self._roll_display_scores(scored)
         self._results = ResultsScreen(
             round_number=self._round_number,
             total_rounds=self._config.rounds,
             target=self._target,
             snapshot=_copy_snapshot(frame),
             players=scored,
+            display_scores=display_scores,
             idle=False,
         )
         self._emit(
@@ -298,6 +304,7 @@ class Game:
                 totals=tuple(self._totals),
             )
         )
+        self._emit(ScoreRevealTick(scores=display_scores))
         return self._results
 
     # --- retry, results, final -----------------------------------------------
@@ -319,10 +326,9 @@ class Game:
     def _step_results(self, now: float, confirm: bool) -> Screen:
         assert self._results is not None
         if not self._results.idle:
-            if now - self._results_at >= self._config.results_gesture_delay:
-                self._results = replace(self._results, idle=True)
-            else:
-                return self._results
+            self._advance_score_reveal(now)
+            # Lock frame (and every scramble frame) ignores confirm — no skip.
+            return self._results
         if not confirm:
             return self._results
         if self._round_number < self._config.rounds:
@@ -331,6 +337,38 @@ class Game:
         self._phase = _Phase.FINAL
         self._emit(GameOver(standings=rank(self._totals)))
         return self._final_screen()
+
+    def _advance_score_reveal(self, now: float) -> None:
+        assert self._results is not None
+        elapsed = now - self._results_at
+        if elapsed >= self._config.results_reveal_s:
+            finals = tuple(player.round_score for player in self._results.players)
+            self._results = replace(
+                self._results, display_scores=finals, idle=True
+            )
+            self._emit(ScoreRevealLocked(scores=finals))
+            return
+
+        # Epsilon keeps exact 1/hz boundaries from flooring down (e.g. 0.1*10).
+        flash_index = math.floor(
+            elapsed * self._config.results_reveal_hz + 1e-9
+        )
+        if flash_index == self._last_reveal_flash:
+            return
+        self._last_reveal_flash = flash_index
+        display_scores = self._roll_display_scores(self._results.players)
+        self._results = replace(self._results, display_scores=display_scores)
+        self._emit(ScoreRevealTick(scores=display_scores))
+
+    def _roll_display_scores(self, players: Sequence[PlayerResult]) -> tuple[int, ...]:
+        """Random 0–100 per player, excluding each player's true round score."""
+        return tuple(
+            self._roll_scramble_score(player.round_score) for player in players
+        )
+
+    def _roll_scramble_score(self, final: int) -> int:
+        choices = [n for n in range(101) if n != final]
+        return self._rng.choice(choices)
 
     def _step_final(self, now: float, confirm: bool) -> Screen:
         if confirm:

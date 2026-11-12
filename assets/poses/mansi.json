@@ -1,0 +1,18 @@
+{
+  "name": "mansi",
+  "joints": {
+    "nose": [0.391, 0.000],
+    "left_shoulder": [0.605, 0.128],
+    "right_shoulder": [0.334, 0.121],
+    "left_elbow": [0.789, 0.232],
+    "right_elbow": [0.172, 0.073],
+    "left_wrist": [0.980, 0.320],
+    "right_wrist": [0.020, 0.050],
+    "left_hip": [0.664, 0.507],
+    "right_hip": [0.491, 0.526],
+    "left_knee": [0.782, 0.742],
+    "right_knee": [0.509, 0.771],
+    "left_ankle": [0.946, 0.918],
+    "right_ankle": [0.560, 1.000]
+  }
+}

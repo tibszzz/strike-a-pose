@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Sequence
 
 import cv2
 import pygame
 
-from main import content, styles
+from main import audio, content, styles
 from main.end_screen import (
     EndChoice,
     EndScreen,
@@ -17,6 +18,8 @@ from main.end_screen import (
     draw_points_table,
     winners_line,
 )
+from main import audio, content, styles
+from main.end_screen import EndChoice, EndScreen, draw_end_screen
 from main.nav import GestureSnapshot, MenuCommand, StartGame, ThumbHoldTracker, load_gesture_nav_config
 from main.nav.hand_geometry import NAV_GESTURE_HANDS
 from main.pose import PoseFrame
@@ -27,12 +30,37 @@ from main.settings import ASSETS, StrikeConfig
 
 from .game import compose, overlay_results_hold
 from .logic import Game as StrikeLogic
-from .screens import FinalScreen, LobbyScreen, ResultsScreen, Screen
+from .screens import (
+    CountdownTick,
+    Event,
+    FinalScreen,
+    LobbyScreen,
+    ResultsScreen,
+    Screen,
+    SnapshotTaken,
+)
+
+SOUNDS = ASSETS / "sounds"
 
 
 def _still_paths() -> tuple:
     root = ASSETS / "ready_up" / "strike"
     return tuple(sorted(root.glob("pose_*.png")))
+
+
+def _load_countdown_sounds(
+    sounds_dir: Path = SOUNDS,
+) -> dict[str, pygame.mixer.Sound | None]:
+    """Reuse Duel assets: ready tick per digit, bang at snapshot."""
+    synth = {
+        "tick": lambda: audio.tone(440, 0.25),
+        "bang": lambda: audio.gunshot(),
+    }
+    files = {"tick": "ready.wav", "bang": "bang.wav"}
+    return {
+        name: audio.load_or(sounds_dir / files[name], make)
+        for name, make in synth.items()
+    }
 
 
 class StrikeGame:
@@ -49,6 +77,8 @@ class StrikeGame:
         self._config = config if config is not None else StrikeConfig()
         library = list(poses) if poses is not None else load_library(self._config.poses_dir)
         self._logic = StrikeLogic(self._config, library)
+        self._logic.subscribe(self._on_logic_event)
+        self._sounds = _load_countdown_sounds()
         self._screen: Screen = LobbyScreen(
             markers=(),
             can_start=False,
@@ -65,6 +95,12 @@ class StrikeGame:
         self._end = EndScreen((self.w, self.h))
         self._pending_nav = None
         self._frame_ts = 0.0
+
+    def _on_logic_event(self, event: Event) -> None:
+        if isinstance(event, CountdownTick) and event.seconds_left <= 3:
+            audio.play(self._sounds.get("tick"))
+        elif isinstance(event, SnapshotTaken):
+            audio.play(self._sounds.get("bang"))
 
     def _make_ready(self) -> ReadyUp:
         return ReadyUp(
@@ -102,6 +138,7 @@ class StrikeGame:
     def reset(self) -> None:
         library = load_library(self._config.poses_dir)
         self._logic = StrikeLogic(self._config, library)
+        self._logic.subscribe(self._on_logic_event)
         self._confirm = False
         self._thumb.reset()
         self.gesture_snapshot = None
