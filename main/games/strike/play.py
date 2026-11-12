@@ -18,8 +18,6 @@ from main.end_screen import (
     draw_points_table,
     winners_line,
 )
-from main import audio, content, styles
-from main.end_screen import EndChoice, EndScreen, draw_end_screen
 from main.nav import GestureSnapshot, MenuCommand, StartGame, ThumbHoldTracker, load_gesture_nav_config
 from main.nav.hand_geometry import NAV_GESTURE_HANDS
 from main.pose import PoseFrame
@@ -36,6 +34,8 @@ from .screens import (
     FinalScreen,
     LobbyScreen,
     ResultsScreen,
+    ScoreRevealLocked,
+    ScoreRevealTick,
     Screen,
     SnapshotTaken,
 )
@@ -48,15 +48,25 @@ def _still_paths() -> tuple:
     return tuple(sorted(root.glob("pose_*.png")))
 
 
-def _load_countdown_sounds(
+def _load_sounds(
     sounds_dir: Path = SOUNDS,
+    *,
+    reveal_s: float = 2.0,
+    reveal_hz: float = 20.0,
 ) -> dict[str, pygame.mixer.Sound | None]:
-    """Reuse Duel assets: ready tick per digit, bang at snapshot."""
+    """Countdown ticks, snapshot shutter, results drumroll + sting."""
     synth = {
         "tick": lambda: audio.tone(440, 0.25),
-        "bang": lambda: audio.gunshot(),
+        "shutter": lambda: audio.camera_shutter(),
+        "drumroll": lambda: audio.drumroll(reveal_s, hz=reveal_hz),
+        "sting": lambda: audio.reveal_sting(),
     }
-    files = {"tick": "ready.wav", "bang": "bang.wav"}
+    files = {
+        "tick": "ready.wav",
+        "shutter": "shutter.wav",
+        "drumroll": "drumroll.wav",
+        "sting": "sting.wav",
+    }
     return {
         name: audio.load_or(sounds_dir / files[name], make)
         for name, make in synth.items()
@@ -78,7 +88,11 @@ class StrikeGame:
         library = list(poses) if poses is not None else load_library(self._config.poses_dir)
         self._logic = StrikeLogic(self._config, library)
         self._logic.subscribe(self._on_logic_event)
-        self._sounds = _load_countdown_sounds()
+        self._sounds = _load_sounds(
+            reveal_s=self._config.results_reveal_s,
+            reveal_hz=self._config.results_reveal_hz,
+        )
+        self._drumroll_channel: pygame.mixer.Channel | None = None
         self._screen: Screen = LobbyScreen(
             markers=(),
             can_start=False,
@@ -100,7 +114,22 @@ class StrikeGame:
         if isinstance(event, CountdownTick) and event.seconds_left <= 3:
             audio.play(self._sounds.get("tick"))
         elif isinstance(event, SnapshotTaken):
-            audio.play(self._sounds.get("bang"))
+            audio.play(self._sounds.get("shutter"))
+        elif isinstance(event, ScoreRevealTick):
+            self._start_drumroll()
+        elif isinstance(event, ScoreRevealLocked):
+            self._stop_drumroll()
+            audio.play(self._sounds.get("sting"))
+
+    def _start_drumroll(self) -> None:
+        if self._drumroll_channel is not None:
+            return
+        self._drumroll_channel = audio.play(self._sounds.get("drumroll"))
+
+    def _stop_drumroll(self) -> None:
+        if self._drumroll_channel is not None:
+            self._drumroll_channel.stop()
+            self._drumroll_channel = None
 
     def _make_ready(self) -> ReadyUp:
         return ReadyUp(
@@ -136,6 +165,7 @@ class StrikeGame:
         return isinstance(self._screen, ResultsScreen) and self._screen.idle
 
     def reset(self) -> None:
+        self._stop_drumroll()
         library = load_library(self._config.poses_dir)
         self._logic = StrikeLogic(self._config, library)
         self._logic.subscribe(self._on_logic_event)

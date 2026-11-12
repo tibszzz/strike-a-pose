@@ -16,7 +16,7 @@ from enum import Enum, auto
 from typing import Callable, Sequence
 from main.settings import StrikeConfig
 from main.pose.library import Person, Pose, left_to_right
-from main.ready_up import match_roster_by_seeds
+from main.ready_up import match_roster_slots
 from .scoring import round_score, score_pose
 from .screens import (
     CountdownScreen,
@@ -28,7 +28,6 @@ from .screens import (
     PlayerMarker,
     PlayerResult,
     ResultsScreen,
-    RetryScreen,
     RoundScored,
     ScoreRevealLocked,
     ScoreRevealTick,
@@ -41,9 +40,23 @@ from .screens import (
 class _Phase(Enum):
     LOBBY = auto()
     COUNTDOWN = auto()
-    RETRY = auto()
     RESULTS = auto()
     FINAL = auto()
+
+
+# Placeholder box for a roster seat with nobody in frame (score stack anchor).
+_ABSENT_HALF_W = 100.0
+_ABSENT_TOP = 120.0
+_ABSENT_BOTTOM = 520.0
+
+
+def _absent_box(seed_x: float) -> tuple[float, float, float, float]:
+    return (
+        seed_x - _ABSENT_HALF_W,
+        _ABSENT_TOP,
+        seed_x + _ABSENT_HALF_W,
+        _ABSENT_BOTTOM,
+    )
 
 
 def rank(totals: Sequence[int]) -> tuple[Standing, ...]:
@@ -141,7 +154,6 @@ class Game:
         self._round_scores: list[list[int]] = []
         self._deadline = 0.0
         self._last_tick: int | None = None
-        self._found = 0
         self._results: ResultsScreen | None = None
         self._results_at = 0.0
         self._last_reveal_flash: int | None = None
@@ -171,8 +183,6 @@ class Game:
             return self._step_lobby(now, confirm, people)
         if self._phase is _Phase.COUNTDOWN:
             return self._step_countdown(now, frame, people)
-        if self._phase is _Phase.RETRY:
-            return self._step_retry(now, confirm)
         if self._phase is _Phase.RESULTS:
             return self._step_results(now, confirm)
         return self._step_final(now, confirm)
@@ -249,14 +259,20 @@ class Game:
     def _take_snapshot(self, now: float, frame: object, people: Sequence[Person]) -> Screen:
         self._emit(SnapshotTaken(round_number=self._round_number))
 
-        selected = match_roster_by_seeds(people, self._roster_seed_x)
-        if selected is None:
-            self._phase = _Phase.RETRY
-            self._found = len(people)
-            return self._retry_screen()
-
+        slots = match_roster_slots(people, self._roster_seed_x)
         results = []
-        for index, person in enumerate(selected):
+        for index, person in enumerate(slots):
+            if person is None:
+                results.append(
+                    PlayerResult(
+                        player=index + 1,
+                        joints={},
+                        box=_absent_box(self._roster_seed_x[index]),
+                        round_score=0,
+                        total=self._totals[index],
+                    )
+                )
+                continue
             visible = person.visible_joints(self._config.joint_confidence)
             score = round_score(
                 score_pose(self._target.joints, visible, self._config.strictness_degrees)
@@ -286,16 +302,16 @@ class Game:
 
         self._phase = _Phase.RESULTS
         self._results_at = now
-        self._last_reveal_flash = 0
-        display_scores = self._roll_display_scores(scored)
+        self._last_reveal_flash = -1
         self._results = ResultsScreen(
             round_number=self._round_number,
             total_rounds=self._config.rounds,
             target=self._target,
             snapshot=_copy_snapshot(frame),
             players=scored,
-            display_scores=display_scores,
+            display_scores=tuple(0 for _ in scored),
             idle=False,
+            holding=True,
         )
         self._emit(
             RoundScored(
@@ -304,24 +320,11 @@ class Game:
                 totals=tuple(self._totals),
             )
         )
-        self._emit(ScoreRevealTick(scores=display_scores))
+        # Score scramble / drumroll wait for results_hold_s; kick off if hold is 0.
+        self._advance_score_reveal(now)
         return self._results
 
-    # --- retry, results, final -----------------------------------------------
-
-    def _step_retry(self, now: float, confirm: bool) -> Screen:
-        if confirm:
-            return self._start_countdown(now)
-        return self._retry_screen()
-
-    def _retry_screen(self) -> RetryScreen:
-        return RetryScreen(
-            round_number=self._round_number,
-            total_rounds=self._config.rounds,
-            target=self._target,
-            found=self._found,
-            expected=self._player_count,
-        )
+    # --- results, final ------------------------------------------------------
 
     def _step_results(self, now: float, confirm: bool) -> Screen:
         assert self._results is not None
@@ -341,23 +344,32 @@ class Game:
     def _advance_score_reveal(self, now: float) -> None:
         assert self._results is not None
         elapsed = now - self._results_at
-        if elapsed >= self._config.results_reveal_s:
+        hold = self._config.results_hold_s
+        if elapsed < hold:
+            return
+        reveal_elapsed = elapsed - hold
+        if reveal_elapsed >= self._config.results_reveal_s:
             finals = tuple(player.round_score for player in self._results.players)
             self._results = replace(
-                self._results, display_scores=finals, idle=True
+                self._results,
+                display_scores=finals,
+                idle=True,
+                holding=False,
             )
             self._emit(ScoreRevealLocked(scores=finals))
             return
 
         # Epsilon keeps exact 1/hz boundaries from flooring down (e.g. 0.1*10).
         flash_index = math.floor(
-            elapsed * self._config.results_reveal_hz + 1e-9
+            reveal_elapsed * self._config.results_reveal_hz + 1e-9
         )
         if flash_index == self._last_reveal_flash:
             return
         self._last_reveal_flash = flash_index
         display_scores = self._roll_display_scores(self._results.players)
-        self._results = replace(self._results, display_scores=display_scores)
+        self._results = replace(
+            self._results, display_scores=display_scores, holding=False
+        )
         self._emit(ScoreRevealTick(scores=display_scores))
 
     def _roll_display_scores(self, players: Sequence[PlayerResult]) -> tuple[int, ...]:
