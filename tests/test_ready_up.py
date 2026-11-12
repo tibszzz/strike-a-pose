@@ -152,6 +152,34 @@ def test_hold_progress_fills_toward_ready_then_stops_counting():
     assert ready.hold_progress(c, THUMB_DOWN) == 0.0  # would un-ready
 
 
+def test_thumb_hold_survives_brief_detector_dropout():
+    """One-frame Thumb_Up miss must not wipe a nearly complete ready hold."""
+    ready = ReadyUp(
+        1000, cfg(min_players=1, max_players=2, hold_frames=10, hold_grace_frames=2)
+    )
+    p = person(200)
+    hold_thumb(ready, [p], THUMB_UP, 200, frames=8)
+    c = ready.candidates[0]
+    assert c.hold_frames == 8 and not c.ready
+    ready.update([p], [])  # detector dropout
+    assert c.gesture == THUMB_UP and c.hold_frames == 8 and c.hold_miss == 1
+    hold_thumb(ready, [p], THUMB_UP, 200, frames=2)
+    assert c.ready
+
+
+def test_thumb_hold_resets_after_grace_exhausted():
+    ready = ReadyUp(
+        1000, cfg(min_players=1, max_players=2, hold_frames=10, hold_grace_frames=1)
+    )
+    p = person(200)
+    hold_thumb(ready, [p], THUMB_UP, 200, frames=5)
+    c = ready.candidates[0]
+    ready.update([p], [])
+    assert c.hold_frames == 5
+    ready.update([p], [])  # grace exhausted
+    assert c.gesture is None and c.hold_frames == 0
+
+
 def test_hold_progress_for_fist_only_when_start_is_possible():
     ready = ReadyUp(1000, cfg(min_players=1, max_players=2, fist_hold_frames=4))
     p = person(200)

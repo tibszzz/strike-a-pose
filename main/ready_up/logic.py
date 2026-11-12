@@ -38,6 +38,7 @@ class Candidate:
     ready: bool = False
     gesture: str | None = None
     hold_frames: int = 0
+    hold_miss: int = 0  # consecutive frames without the held thumb (grace budget)
     fist_hold_frames: int = 0
     missing: int = 0
     id: int = field(default=0)
@@ -61,6 +62,8 @@ class ReadyUpConfig:
     how_to_lines: tuple[str, ...]
     pose_stills: tuple[Path, ...] = ()
     hold_frames: int = 8
+    # Tolerate detector flicker so a one-frame Thumb_Up dropout does not wipe hold.
+    hold_grace_frames: int = 6  # ~0.2s at 30fps (matches shell hold_grace_s)
     fist_hold_frames: int = 15  # ~0.5s at 30fps
     forget_frames: int = 30
     min_score: float = 0.5
@@ -130,15 +133,23 @@ class ReadyUp:
         thumbs, fists = self._gestures_by_candidate(hands)
         for c in self.candidates:
             if not c.visible:
-                c.gesture, c.hold_frames = None, 0
+                c.gesture, c.hold_frames, c.hold_miss = None, 0, 0
                 c.fist_hold_frames = 0
                 c.ready = False
                 continue
             label = thumbs.get(c.id)
-            if label is None or label != c.gesture:
-                c.gesture, c.hold_frames = label, (1 if label else 0)
+            if label is None:
+                if c.gesture is not None and c.hold_frames > 0:
+                    c.hold_miss += 1
+                    if c.hold_miss > self.config.hold_grace_frames:
+                        c.gesture, c.hold_frames, c.hold_miss = None, 0, 0
+                else:
+                    c.gesture, c.hold_frames, c.hold_miss = None, 0, 0
+            elif label != c.gesture:
+                c.gesture, c.hold_frames, c.hold_miss = label, 1, 0
             else:
                 c.hold_frames += 1
+                c.hold_miss = 0
             if (
                 c in self.eligible
                 and c.gesture
