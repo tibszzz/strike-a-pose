@@ -13,6 +13,9 @@ class StrikeConfig:
     # Pose model weights. Swap for a larger model if far-away players get
     # wrong skeletons.
     model_path: Path = ASSETS / "models" / "yolo26n-pose.pt"
+    # YOLO input size for PoseDetector (OpenCV strike paths). Separate from
+    # shell IMGSZ / PoseTracker.
+    imgsz: int = 960
     poses_dir: Path = ASSETS / "poses"
     camera_index: int = 0
 

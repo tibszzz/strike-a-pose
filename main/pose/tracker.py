@@ -113,18 +113,19 @@ class Camera:
 class PoseDetector:
     """Named-joint detector for the strike game."""
 
-    def __init__(self, model_path: Path) -> None:
+    def __init__(self, model_path: Path, imgsz: int = 960) -> None:
         if not model_path.is_file():
             raise FileNotFoundError(f"pose model not found at {model_path}")
         # Imported here so the rest of the package, and its tests, load
         # without pulling in the model library.
         from ultralytics import YOLO
 
+        self.imgsz = imgsz
         self._model = YOLO(str(model_path))
 
     def detect(self, frame) -> list[library.Person]:
         """Everyone the model finds in one frame, in no particular order."""
-        result = self._model(frame, verbose=False)[0]
+        result = self._model(frame, imgsz=self.imgsz, verbose=False)[0]
         keypoints = result.keypoints
         if keypoints is None or keypoints.conf is None:
             return []

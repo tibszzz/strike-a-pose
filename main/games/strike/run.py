@@ -19,7 +19,7 @@ from main.pose.tracker import Camera, CameraError, PoseDetector
 def run(config: Config) -> int:
     try:
         game = Game(config, load_library(config.poses_dir))
-        detector = PoseDetector(config.model_path)
+        detector = PoseDetector(config.model_path, imgsz=config.imgsz)
         camera = Camera(config.camera_index)
     except (CameraError, FileNotFoundError, ValueError) as error:
         print(f"Cannot start: {error}", file=sys.stderr)

@@ -159,7 +159,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
 
     try:
-        detector = PoseDetector(config.model_path)
+        detector = PoseDetector(config.model_path, imgsz=config.imgsz)
         camera = Camera(config.camera_index)
     except (CameraError, FileNotFoundError) as error:
         print(f"Cannot start: {error}", file=sys.stderr)

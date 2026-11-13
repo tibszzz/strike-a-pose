@@ -209,6 +209,7 @@ def heart_surface(filled: bool, size: int) -> pygame.Surface:
 
     The heart body is ~0.94x `size` wide (like paper.draw_heart, used by High Noon
     and the results page); the surface is padded past that for the marker outline.
+    Empty hearts are pale fill + outline only (no scribbled cross).
     """
     key = (filled, size)
     cached = _heart_cache.get(key)
@@ -242,11 +243,6 @@ def heart_surface(filled: bool, size: int) -> pygame.Surface:
     outline = _heart_points(c, c, s, rng)
     outline = outline[5:] + outline[:9]  # one stroke that overlaps where it starts
     _stroke(surf, outline, INK, s * 0.075)
-    if not filled:
-        # A quick scribbled cross: this life is gone.
-        a, b = s * 0.16, s * 0.04
-        _stroke(surf, [(c - a, c - a + b), (c + a, c + a - b)], INK, s * 0.05)
-        _stroke(surf, [(c + a, c - a), (c - a + b, c + a)], INK, s * 0.05)
     out = _down(surf, dim)
     _heart_cache[key] = out
     return out

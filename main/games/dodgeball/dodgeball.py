@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 import random
 
+import numpy as np
 import pygame
 
 from main import audio, content, styles
@@ -13,7 +14,6 @@ from main.end_screen import (
     EndChoice,
     EndScreen,
     LivesRow,
-    draw_card_art,
     draw_end_screen,
     draw_headline,
     draw_lives_rows,
@@ -28,7 +28,8 @@ from main.pose import Person, PoseFrame
 from main.ready_up import ReadyUp, ReadyUpConfig, draw_ready_up
 from main.settings import ASSETS, DodgeballConfig
 from main.ui import paper
-from main.ui.paper import INK_FAINT, MARKER_FONT, Frame
+from main.ui.paper import INK, INK_FAINT, MARKER_FONT, Frame
+from main.ui.preview import PreviewTracker, cover_crop, resolve_results_portrait
 
 from . import sketches
 from .ball import Ball
@@ -76,7 +77,7 @@ def _still_paths() -> tuple:
 
 
 def _draw_heart(canvas: pygame.Surface, cx: int, cy: int, size: int, filled: bool) -> None:
-    """Hand-drawn heart centred on (cx, cy), `size` px wide: alive, or a crossed-out lost life."""
+    """Hand-drawn heart centred on (cx, cy), `size` px wide: filled alive, or pale empty lost life."""
     sprite = sketches.heart_surface(filled, size)
     canvas.blit(sprite, sprite.get_rect(center=(cx, cy)))
 
@@ -168,10 +169,12 @@ class DodgeballGame:
 
         self._frame = Frame(self.w, self.h)
         self._tag_face = paper.hand(self._frame, TAG_DESIGN_PX)
+        self._winner_tag_face = paper.hand(self._frame, 26)
 
         self._end = EndScreen((self.w, self.h))
         self._pending_nav = None
         self._frame_ts = 0.0
+        self._results_preview = PreviewTracker()
 
     def _new_ready_up(self) -> ReadyUp:
         return ReadyUp(
@@ -207,6 +210,7 @@ class DodgeballGame:
         self.lives = [self.max_lives] * count
         self.game_over = False
         self._end.reset()
+        self._results_preview.reset()
         lobby_x = seed_x if seed_x is not None else []
         self.last_x = [
             lobby_x[i] if i < len(lobby_x) else self.w * (i + 1) / (count + 1)
@@ -266,6 +270,7 @@ class DodgeballGame:
         self.game_over = False
         self.ready_up = self._new_ready_up()
         self._end.reset()
+        self._results_preview.reset()
         self.hit_message = ""
         self._pending_nav = None
 
@@ -478,8 +483,17 @@ class DodgeballGame:
             "NOTE: Red ball = fast, orange = medium, yellow = slow",
         ]
 
-    def _draw_results_body(self, canvas: pygame.Surface, rect: pygame.Rect, frame) -> None:
-        """Winner (or solo game over), hearts left per player, dodge illustration."""
+    def _results_winner_seat(self) -> int | None:
+        """0-based seat for the results PiP, or None for unmarked full-frame cover."""
+        if self.player_count == 1:
+            return 0
+        alive = [i for i, lives in enumerate(self.lives) if lives > 0]
+        return alive[0] if len(alive) == 1 else None
+
+    def _draw_results_body(
+        self, canvas: pygame.Surface, rect: pygame.Rect, frame, pose: PoseFrame
+    ) -> None:
+        """Winner (or solo game over), hearts left per player, live winner PiP."""
         results = content.Results
         if self.player_count <= 1:
             headline, sub = results.solo_over, results.solo_sub
@@ -505,8 +519,89 @@ class DodgeballGame:
             ],
             palette=paper.PLAYER_INK,
         )
-        art_box = pygame.Rect(rows_rect.right + frame.px(40), rect.y, rect.right - rows_rect.right - frame.px(40), rect.height)
-        draw_card_art(canvas, ASSETS / "ui" / "how_to_play" / "dodgeball" / "step_2.png", art_box)
+        art_box = pygame.Rect(
+            rows_rect.right + frame.px(40),
+            rect.y,
+            rect.right - rows_rect.right - frame.px(40),
+            rect.height,
+        )
+        self._draw_results_portrait(canvas, frame, art_box, pose)
+
+    def _draw_results_portrait(
+        self,
+        canvas: pygame.Surface,
+        frame,
+        art_box: pygame.Rect,
+        pose: PoseFrame,
+    ) -> None:
+        """RESULTS portrait: winner tag above live crop (full frame if lost / nobody wins)."""
+        if art_box.width <= 0 or art_box.height <= 0:
+            return
+        winner = self._results_winner_seat()
+        feed = art_box
+        if winner is not None:
+            face = self._winner_tag_face
+            tag_h = face.get_height() + 2 * max(1, face.get_height() // 12)
+            label_gap = frame.px(10)
+            feed = pygame.Rect(
+                art_box.x,
+                art_box.y + tag_h + label_gap,
+                art_box.width,
+                art_box.height - tag_h - label_gap,
+            )
+            if feed.height <= 0:
+                return
+            paper.draw_tag(
+                canvas,
+                content.Results.player.format(player=winner + 1),
+                face,
+                paper.player_ink(winner + 1),
+                (art_box.centerx, art_box.top),
+                "midtop",
+            )
+        fh, fw = pose.image.shape[:2]
+        full = (0.0, 0.0, float(fw), float(fh))
+        person = None
+        if winner is not None:
+            slots = self._assign_players(list(pose.people))
+            if winner < len(slots):
+                person = slots[winner]
+        self._results_preview.target_aspect = feed.width / max(1, feed.height)
+        box = (
+            resolve_results_portrait(
+                self._results_preview,
+                person,
+                now=self._frame_ts,
+                frame_w=fw,
+                frame_h=fh,
+            )
+            or full
+        )
+        self._blit_preview_crop(canvas, pose.image, box, feed)
+        seed = 80 if winner is None else 80 + winner
+        paper.draw_marker_box(canvas, feed, frame, INK, seed=seed)
+
+    def _blit_preview_crop(
+        self,
+        canvas: pygame.Surface,
+        image_bgr: np.ndarray,
+        box: tuple[float, float, float, float],
+        dest: pygame.Rect,
+    ) -> bool:
+        """Cover-blit a BGR crop into `dest`. Returns False if empty."""
+        x1, y1, x2, y2 = (int(v) for v in box)
+        x1, x2 = max(0, min(x1, x2)), min(image_bgr.shape[1], max(x1, x2))
+        y1, y2 = max(0, min(y1, y2)), min(image_bgr.shape[0], max(y1, y2))
+        if x2 <= x1 or y2 <= y1:
+            return False
+        crop = np.ascontiguousarray(image_bgr[y1:y2, x1:x2, ::-1])  # BGR -> RGB
+        cx, cy, cw, ch = cover_crop(crop.shape[1], crop.shape[0], dest.width, dest.height)
+        ix, iy = int(cx), int(cy)
+        iw, ih = max(1, int(cw)), max(1, int(ch))
+        crop = np.ascontiguousarray(crop[iy : iy + ih, ix : ix + iw])
+        surf = pygame.image.frombuffer(crop.tobytes(), (crop.shape[1], crop.shape[0]), "RGB")
+        canvas.blit(pygame.transform.smoothscale(surf, dest.size), dest)
+        return True
 
     def _draw_offscreen_warnings(self, canvas: pygame.Surface) -> None:
         warn_after = FPS // 2
@@ -567,7 +662,7 @@ class DodgeballGame:
                 self._end,
                 snap=self.gesture_snapshot,
                 title=content.Results.dodgeball_title,
-                body=self._draw_results_body,
+                body=lambda c, r, f: self._draw_results_body(c, r, f, frame),
                 pose=frame,
             )
             return

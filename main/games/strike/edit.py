@@ -398,7 +398,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if camera is not None and detector is not None:
             return None
         try:
-            detector = PoseDetector(config.model_path)
+            detector = PoseDetector(config.model_path, imgsz=config.imgsz)
             camera = Camera(config.camera_index)
         except (CameraError, FileNotFoundError) as error:
             camera = None
