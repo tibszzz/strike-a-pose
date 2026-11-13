@@ -119,3 +119,38 @@ def test_countdown_digit_matches_strike_maths():
     game.countdown = int(2.5 * d.FPS)
     seconds_left, age = game._countdown_digit()
     assert seconds_left == 3 and age == pytest.approx(0.5)
+
+
+def _knock_out(game, idx: int) -> None:
+    while game.lives[idx] > 0 and not game.game_over:
+        game._lose_life(idx, "HIT!")
+        _run_countdown(game)
+
+
+@pytest.mark.parametrize("players", [2, 3, 4])
+def test_multiplayer_ends_only_when_one_player_is_left(players):
+    game = d.DodgeballGame((640, 480))
+    game.start(players)
+    _run_countdown(game)
+    survivor = players - 1
+    for idx in range(players - 1):
+        assert not game.game_over, f"ended with {players - idx} players still alive"
+        _knock_out(game, idx)
+        if idx < players - 2:
+            assert game.hit_message == f"P{idx + 1} is OUT!"
+            assert not game.paused  # play goes on
+    assert game.game_over and game.paused
+    assert game.hit_message == f"P{survivor + 1} WINS!"
+    assert [i for i, n in enumerate(game.lives) if n > 0] == [survivor]
+
+
+def test_knocked_out_player_is_ignored_while_the_rest_play_on():
+    game = d.DodgeballGame((640, 480))
+    game.start(3)
+    _run_countdown(game)
+    _knock_out(game, 1)
+    assert game.lives[1] == 0 and not game.game_over
+    # Out players can't lose more lives by leaving the frame.
+    game.missing_frames[1] = d.OFFSCREEN_FRAMES
+    game._check_offscreen([object(), None, object()])
+    assert game.lives[1] == 0 and not game.game_over
