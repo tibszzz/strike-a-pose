@@ -78,7 +78,7 @@ class Results:
 
 class Shell:
     brand = "moovit"
-    menu_title = "Moooooovit"
+    menu_title = "Vai, Vai, Dai!"
     menu_quit = "Quit"
     splash_prompt = "HOLD THUMBS UP TO START"
     menu_hint = "POINT TO SELECT · HOLD FIST TO START"
