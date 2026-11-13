@@ -25,6 +25,7 @@ Gestures are read by MediaPipe's gesture recognizer (`assets/models/gesture_reco
 - Avoid getting hit. If the ball touches your body shape, you lose a life and the round restarts itself.
 - A player with no lives left is out (their HUD P# tag goes gray).
 - Last player standing wins. Press **R** on game over to rematch into ready-up.
+- The final RESULTS card shows a **live winner PiP** on the right, with a small winner tag above the feed; if the winner is missing from frame (or nobody wins), it cover-fills from the full camera image.
 - If you move out of the screen for long (3 seconds), you lose a life
 
 ## Keys
