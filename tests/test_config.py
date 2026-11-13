@@ -21,6 +21,8 @@ def test_from_env_overrides_only_set_fields(monkeypatch):
 def test_from_env_gesture_config(monkeypatch):
     monkeypatch.setenv("MAX_ARM_TILT", "45")
     assert from_env(GestureConfig).max_arm_tilt == 45.0
+    monkeypatch.setenv("MIN_FOREARM_RISE", "8")
+    assert from_env(GestureConfig).min_forearm_rise == 8.0
 
 
 def test_bad_value_names_the_setting(monkeypatch):
@@ -58,3 +60,9 @@ def test_messages_skip_empty_and_avoid_repeats():
 
 def test_messages_fallback_when_empty():
     assert Messages([], "hi").pick() == "hi"
+
+
+def test_cursor_scale_defaults_and_env(monkeypatch):
+    assert GestureNavConfig().cursor_scale == 1.5
+    monkeypatch.setenv("CURSOR_SCALE", "2.0")
+    assert from_env(GestureNavConfig).cursor_scale == 2.0

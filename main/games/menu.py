@@ -83,6 +83,7 @@ class MenuGame:
             required=release_first, open_s=cfg.release_open_s, min_score=cfg.min_score
         )
         self.cursor = nav_cursor(size, config=cfg)
+        self.cursor_scale = cfg.cursor_scale
         self._hard_lock: int | None = None
         self._hover: int | None = None
 
@@ -165,7 +166,12 @@ class MenuGame:
 
         # Pointer last so it sits above the notes.
         widgets.draw_cursor(
-            canvas, f, self.gesture_snapshot, self._thumb.progress, at=self.cursor.position
+            canvas,
+            f,
+            self.gesture_snapshot,
+            self._thumb.progress,
+            at=self.cursor.position,
+            scale=self.cursor_scale,
         )
 
     def handle_command(self, command: MenuCommand) -> None:

@@ -44,6 +44,7 @@ class GestureNavConfig:
     cursor_grace_s: float = 0.35  # keep the cursor through hand dropouts this short
     cursor_min_cutoff: float = 1.0  # One-Euro Hz; lower = steadier when still
     cursor_beta: float = 0.02  # One-Euro speed term; higher = less lag when moving
+    cursor_scale: float = 1.5  # palm / fist cursor + ready-up fist badge size (1.0 = mockup size)
     hold_grace_s: float = 0.2  # fist hold survives label flickers this short
     release_open_s: float = 0.12  # a carried-in fist must open this long to count
 

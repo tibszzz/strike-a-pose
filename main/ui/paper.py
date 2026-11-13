@@ -41,7 +41,7 @@ INK_SOFT = (92, 86, 70)
 INK_FAINT = (150, 140, 112)
 MARGIN_LINE = (212, 150, 128)
 TAPE = (196, 182, 136)
-HOLD_RING = (176, 138, 62)
+HOLD_RING = (247, 192, 10)  # bright yellow fill for fist-hold rings + button hold bars
 HIGHLIGHT = (246, 206, 92)
 VIDEO_SHADE = (24, 20, 12, 120)
 

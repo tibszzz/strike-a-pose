@@ -46,3 +46,6 @@ class GestureConfig:
     min_elbow_angle: float = 140.0
     # Max angle of the shoulder->wrist line away from horizontal, in degrees.
     max_arm_tilt: float = 30.0
+    # Min angle of the elbow->wrist line above horizontal, in degrees. Positive = wrist
+    # above elbow height; a forearm sagging below this doesn't count as drawn.
+    min_forearm_rise: float = 5.0

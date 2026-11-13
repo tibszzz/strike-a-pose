@@ -46,12 +46,17 @@ def _angle_deg(a: np.ndarray, b: np.ndarray) -> float:
 
 
 def is_arm_extended(p: Person, side: str, cfg: GestureConfig = GestureConfig()) -> bool:
-    """Arm held out roughly horizontally at shoulder height with a fairly straight elbow."""
+    """Arm held out roughly horizontally at shoulder height with a fairly straight elbow,
+    forearm tipped up so the wrist sits at least slightly above the elbow."""
     s_i, e_i, w_i = _ARMS[side]
     if not _visible(p, (s_i, e_i, w_i), cfg):
         return False
     s, e, w = p.xy[s_i], p.xy[e_i], p.xy[w_i]
     if _angle_deg(s - e, w - e) < cfg.min_elbow_angle:
+        return False
+    # Image y grows downward, so elbow_y - wrist_y > 0 means the wrist is higher.
+    rise = math.degrees(math.atan2(float(e[1] - w[1]), abs(float(w[0] - e[0]))))
+    if rise < cfg.min_forearm_rise:
         return False
     dx, dy = abs(w[0] - s[0]), abs(w[1] - s[1])
     if dx < 1e-6:

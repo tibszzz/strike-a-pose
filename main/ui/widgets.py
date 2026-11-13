@@ -325,15 +325,16 @@ def draw_hold_badge(
     progress: float,
     *,
     at: tuple[float, float],
+    scale: float = 1.0,
 ) -> None:
     """Paper disc + clockwise hold ring + centre glyph (menu cursor / ready-up hands)."""
     x, y = round(at[0]), round(at[1])
-    r = frame.px(46)
+    r = frame.px(46 * scale)
     shadow = pygame.Surface((r * 2 + 8, r * 2 + 8), pygame.SRCALPHA)
     pygame.draw.circle(shadow, (0, 0, 0, 90), (r + 6, r + 7), r)
     surface.blit(shadow, (x - r - 4, y - r - 4))
     pygame.draw.circle(surface, paper.PAPER, (x, y), r)
-    ring_w = max(2, frame.px(6))
+    ring_w = max(2, frame.px(6 * scale))
     track = tuple(int(c * 0.75) for c in paper.PAPER)
     pygame.draw.circle(surface, track, (x, y), r, ring_w)
     if progress > 0:
@@ -355,18 +356,20 @@ def draw_cursor(
     progress: float,
     *,
     at: tuple[float, float] | None,
+    scale: float = 1.0,
 ) -> None:
     """Open palm: white hand icon at `at`. Fist (or a hold in progress): paper badge + hold ring.
 
     `at` is the page's smoothed cursor (`main.nav.cursor.HandCursor`); None draws nothing.
+    `scale` enlarges both states (`GestureNavConfig.cursor_scale`).
     """
     if at is None:
         return
     label = getattr(snap, "label", None)
     if label != "Closed_Fist" and progress <= 0:
-        box = pygame.Rect(0, 0, frame.px(62), frame.px(66))
+        box = pygame.Rect(0, 0, frame.px(62 * scale), frame.px(66 * scale))
         box.center = (round(at[0]), round(at[1]))
         paper.blit_art(surface, PALM_CURSOR, box)
         return
-    draw_hold_badge(surface, frame, FIST_ICON, progress, at=at)
+    draw_hold_badge(surface, frame, FIST_ICON, progress, at=at, scale=scale)
 

@@ -69,7 +69,9 @@ def draw_ready_up(
 
     hands = getattr(snap, "hands", ()) if snap is not None else ()
     for center, _label, progress in ready.actionable_holds(hands):
-        widgets.draw_hold_badge(canvas, frame, widgets.FIST_ICON, progress, at=center)
+        widgets.draw_hold_badge(
+            canvas, frame, widgets.FIST_ICON, progress, at=center, scale=ready.cursor_scale
+        )
 
 
 def draw_player_marker(
