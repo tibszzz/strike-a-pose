@@ -75,6 +75,8 @@ class ResultsScreen:
     advance_remaining_s: float | None = None
     # 0–1 elapsed fraction of the advance wait; drives the results progress bar.
     advance_progress: float | None = None
+    # Seconds since reveal lock; drives winner score bounce. None before lock.
+    bounce_elapsed_s: float | None = None
 
 
 @dataclass(frozen=True)
