@@ -21,7 +21,7 @@ Gestures are read by MediaPipe's gesture recognizer (`assets/models/gesture_reco
 
 - Stand in front of the camera.
 - A ball appears and moves around the live feed.
-- Lives scale with roster size (**2P: 3 Lives, 3P: 2 Lives, 4P: 1 Life**), shown as hearts in the top-right.
+- Hearts scale with roster size (**2P: ♥♥♥, 3P: ♥♥, 4P: ♥**), shown top-right.
 - Avoid getting hit. If the ball touches your body shape, you lose a life and the round restarts itself.
 - A player with no lives left is out (their HUD P# tag goes gray).
 - Last player standing wins. Press **R** on game over to rematch into ready-up.

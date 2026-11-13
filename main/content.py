@@ -53,7 +53,7 @@ class HowToPlay:
                 ("Dodge!", "Lean, duck or step aside."),
                 ("Stay in view", "Last one standing wins."),
             ),
-            ("Lives by players", "2P: 3 Lives, 3P: 2 Lives, 4P: 1 Life"),
+            ("Player Lives", "2P: ♥♥♥, 3P: ♥♥, 4P: ♥"),
         ),
     }
 
@@ -205,12 +205,12 @@ class Dodgeball:
         "Thumbs up to ready · leave the frame to cancel",
         "Hold a closed fist when enough players are ready to start",
         "Dodge the ball on the live feed — each hit costs a life",
-        "2P: 3 Lives, 3P: 2 Lives, 4P: 1 Life. Last player standing wins",
+        "2P: ♥♥♥, 3P: ♥♥, 4P: ♥. Last player standing wins",
     )
     rules = (
         "Stand in front of the camera",
         "Dodge the ball bouncing around the live feed",
-        "2P: 3 Lives, 3P: 2 Lives, 4P: 1 Life (hearts, top-right)",
+        "2P: ♥♥♥, 3P: ♥♥, 4P: ♥ (top-right)",
         "Ball touches your body: lose a life and the round pauses",
         "The game restarts by itself after a hit. No lives left and you're out",
         "Leave the screen for {offscreen_seconds} seconds: lose a life",
