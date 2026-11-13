@@ -209,8 +209,12 @@ def draw_hint_bar(
             paper.blit_art(surface, hint.icon, box, alpha=a)
             x = box.right + frame.px(18 * scale)
         max_text = left + round(slot_w) - x - frame.px(14)
-        paper.text(surface, hint.heading, head_face, ink(INK), (x, rect.centery + frame.px(2)), "bottomleft", max_width=max_text)
-        paper.text(surface, hint.sub, sub_face, ink(INK_SOFT), (x, rect.centery + frame.px(2)), "topleft", max_width=max_text)
+        paper.text_with_hearts(
+            surface, hint.heading, head_face, ink(INK), (x, rect.centery + frame.px(2)), "bottomleft", max_width=max_text
+        )
+        paper.text_with_hearts(
+            surface, hint.sub, sub_face, ink(INK_SOFT), (x, rect.centery + frame.px(2)), "topleft", max_width=max_text
+        )
 
 
 def draw_hint_stack(

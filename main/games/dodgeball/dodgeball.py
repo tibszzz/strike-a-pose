@@ -1,4 +1,4 @@
-"""Dodgeball Game: Avoid the bouncing ball! Each player has 3 lives; a ball hit costs one."""
+"""Dodgeball Game: Avoid the bouncing ball! Lives scale with player count; a hit costs one."""
 
 from __future__ import annotations
 
@@ -9,10 +9,6 @@ import pygame
 
 from main import audio, content, styles
 from main.countdown import TIMER_VISIBLE_AT_SECONDS
-from main.games.strike.game import draw_countdown_timer
-from main.games.strike.play import _load_sounds
-from main.games.strike.screens import CountdownTick
-from main import content, styles
 from main.end_screen import (
     EndChoice,
     EndScreen,
@@ -23,10 +19,12 @@ from main.end_screen import (
     draw_lives_rows,
     winners_line,
 )
+from main.games.strike.game import draw_countdown_timer
+from main.games.strike.play import _load_sounds
+from main.games.strike.screens import CountdownTick
 from main.nav import MenuCommand, StartGame
 from main.nav.hand_geometry import NAV_GESTURE_HANDS
 from main.pose import Person, PoseFrame
-from main.pose.library import left_to_right
 from main.ready_up import ReadyUp, ReadyUpConfig, draw_ready_up
 from main.settings import ASSETS, DodgeballConfig
 from main.ui import paper
@@ -53,9 +51,23 @@ MAX_PLAYERS = _cfg.max_players
 FPS = _cfg.fps
 COUNTDOWN_SECONDS = 3  # before the ball launches at match start
 HIT_RESTART_SECONDS = 5  # after a hit the round restarts by itself (3, 2, 1 shown)
-LIVES = _cfg.lives
 OFFSCREEN_SECONDS = int(_cfg.offscreen_seconds)
 OFFSCREEN_FRAMES = _cfg.offscreen_frames
+
+# Match length by roster size. 1p kept for debug / soft solo bones.
+LIVES_BY_COUNT = {1: 3, 2: 3, 3: 2, 4: 1}
+
+
+def lives_for_player_count(count: int) -> int:
+    """Hearts each seat starts with for this roster size."""
+    if count in LIVES_BY_COUNT:
+        return LIVES_BY_COUNT[count]
+    raise ValueError(f"unsupported dodgeball player count: {count}")
+
+
+def seat_label_color(player: int, lives: int) -> tuple[int, int, int]:
+    """P# ink while alive; faint gray when out (1-based `player`)."""
+    return paper.player_ink(player) if lives > 0 else INK_FAINT
 
 
 def _still_paths() -> tuple:
@@ -138,6 +150,7 @@ class DodgeballGame:
         self.last_x: list[float] = []
 
         self.lives: list[int] = []
+        self.max_lives = 0  # hearts each seat started with this match
         self.game_over = False
         self.missing_frames: list[int] = []
 
@@ -190,7 +203,8 @@ class DodgeballGame:
         """Leave ready-up and play with `count` players."""
         self.in_lobby = False
         self.player_count = count
-        self.lives = [LIVES] * count
+        self.max_lives = lives_for_player_count(count)
+        self.lives = [self.max_lives] * count
         self.game_over = False
         self._end.reset()
         lobby_x = seed_x if seed_x is not None else []
@@ -283,37 +297,30 @@ class DodgeballGame:
         )
 
     def _assign_players(self, people: list[Person]) -> list[Person | None]:
-        """Map detections to player slots P1..Pn using last known positions."""
+        """Sticky map detections → seats P1..Pn by nearest `last_x` (never L→R rebind)."""
         n = self.player_count
-        tallest = self._nearest_to_players(people) if len(people) > n else list(people)
         slots: list[Person | None] = [None] * n
-        if len(tallest) == n:
-            for i, person in enumerate(left_to_right(tallest)):
-                slots[i] = person
-        else:
-            free = set(range(n))
-            for person in tallest:
-                i = min(free, key=lambda s: abs(self.last_x[s] - person.center_x))
-                slots[i] = person
-                free.discard(i)
-        for i, person in enumerate(slots):
-            if person is not None:
-                self.last_x[i] = person.center_x
-        return slots
-
-    def _nearest_to_players(self, people: list[Person]) -> list[Person]:
+        if n <= 0 or not people:
+            return slots
         pairs = sorted(
             (abs(self.last_x[s] - p.center_x), s, i)
-            for s in range(self.player_count)
+            for s in range(n)
             for i, p in enumerate(people)
         )
         used_s: set[int] = set()
         used_i: set[int] = set()
         for _, s, i in pairs:
-            if s not in used_s and i not in used_i:
-                used_s.add(s)
-                used_i.add(i)
-        return [people[i] for i in sorted(used_i)]
+            if s in used_s or i in used_i:
+                continue
+            slots[s] = people[i]
+            used_s.add(s)
+            used_i.add(i)
+            if len(used_s) == n or len(used_i) == len(people):
+                break
+        for i, person in enumerate(slots):
+            if person is not None:
+                self.last_x[i] = person.center_x
+        return slots
 
     def update(self, frame: PoseFrame) -> None:
         self._frame_ts = frame.timestamp
@@ -440,10 +447,10 @@ class DodgeballGame:
         if not self.debug or self.in_lobby or not self.lives:
             return False
         if len(self.lives) == 1:
-            # Solo: keep the one player alive and end the match.
+            # Solo bone: keep the one player alive and end the match.
             pass
         else:
-            self.lives = [LIVES if i == 0 else 0 for i in range(len(self.lives))]
+            self.lives = [self.max_lives if i == 0 else 0 for i in range(len(self.lives))]
         self.game_over = True
         self.paused = True
         self._end.reset()
@@ -464,8 +471,9 @@ class DodgeballGame:
                 f"Ready-up: {self.ready_up.ready_count} ready / "
                 f"{len(self.ready_up.eligible)} eligible"
             ]
+        max_lives = self.max_lives or lives_for_player_count(max(1, self.player_count))
         return [
-            " | ".join(f"P{i + 1}: {n}/{LIVES} lives" for i, n in enumerate(self.lives)),
+            " | ".join(f"P{i + 1}: {n}/{max_lives} lives" for i, n in enumerate(self.lives)),
             f"Ball speed: {math.sqrt(self.ball.vx**2 + self.ball.vy**2):.1f} px/f",
             "NOTE: Red ball = fast, orange = medium, yellow = slow",
         ]
@@ -490,7 +498,7 @@ class DodgeballGame:
                 LivesRow(
                     player=i + 1,
                     lives=lives,
-                    max_lives=LIVES,
+                    max_lives=self.max_lives,
                     winner=self.player_count > 1 and lives > 0 and alive_count == 1,
                 )
                 for i, lives in enumerate(self.lives)
@@ -534,18 +542,19 @@ class DodgeballGame:
         f = self._frame
         size = f.px(HEART_DESIGN_PX)
         step = size + f.px(HEART_GAP_DESIGN_PX)
-        hearts_w = size + step * (LIVES - 1)
+        max_lives = max(1, self.max_lives)
+        hearts_w = size + step * (max_lives - 1)
         right = self.w - f.px(28)
         row_h = size + f.px(22)
         top = f.px(28) + size // 2
         for i in range(self.player_count):
             cy = top + i * row_h
             hearts_left = right - hearts_w
-            tag_color = paper.player_ink(i + 1) if self.lives[i] > 0 else INK_FAINT
+            tag_color = seat_label_color(i + 1, self.lives[i])
             paper.draw_tag(
                 canvas, f"P{i + 1}", self._tag_face, tag_color, (hearts_left - f.px(16), cy), "midright"
             )
-            for k in range(LIVES):
+            for k in range(max_lives):
                 _draw_heart(canvas, hearts_left + k * step + size // 2, cy, size, filled=k < self.lives[i])
 
     def draw(self, canvas: pygame.Surface, frame: PoseFrame) -> None:

@@ -52,7 +52,7 @@ def test_hit_restarts_by_itself_after_five_seconds(monkeypatch):
     assert game.hit_message == "P1 HIT!"
     assert _run_countdown(game) == 5 * d.FPS
     assert played == ["tick", "tick", "tick", "go"]  # only the visible 3, 2, 1
-    assert game.lives == [d.LIVES - 1]
+    assert game.lives == [d.lives_for_player_count(1) - 1]
 
 
 def test_r_does_nothing_mid_match():

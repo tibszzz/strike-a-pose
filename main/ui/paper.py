@@ -395,6 +395,10 @@ def shade_video(surface: pygame.Surface) -> None:
 # --- small drawings --------------------------------------------------------------
 
 
+# Marker in copy strings; `text_with_hearts` blits `draw_heart` in its place.
+HEART_MARK = "♥"
+
+
 def draw_heart(surface: pygame.Surface, center: tuple[int, int], size: int, filled: bool) -> None:
     """Hand-drawn style heart: red fill with ink outline, or empty outline."""
     cx, cy = center
@@ -409,6 +413,68 @@ def draw_heart(surface: pygame.Surface, center: tuple[int, int], size: int, fill
     if filled:
         pygame.draw.polygon(surface, HEART, pts)
     pygame.draw.polygon(surface, INK, pts, max(1, s // 12))
+
+
+def text_with_hearts(
+    surface: pygame.Surface,
+    value: str,
+    face: pygame.font.Font,
+    color: Rgb,
+    pos: tuple[float, float],
+    anchor: str = "topleft",
+    max_width: int | None = None,
+    alpha: int = 255,
+    *,
+    heart_scale: float = 0.9,
+) -> pygame.Rect:
+    """Like `text`, but each `HEART_MARK` becomes a filled `draw_heart`."""
+    if HEART_MARK not in value:
+        return text(surface, value, face, color, pos, anchor, max_width=max_width, alpha=alpha)
+
+    line_h = face.get_height()
+    heart_size = max(6, round(line_h * heart_scale))
+    pad = max(1, heart_size // 8)
+    parts = value.split(HEART_MARK)
+    pieces: list[tuple[str, pygame.Surface | int]] = []
+    for i, part in enumerate(parts):
+        if part:
+            pieces.append(("text", face.render(part, True, color)))
+        if i < len(parts) - 1:
+            pieces.append(("heart", heart_size))
+
+    total_w = 0
+    for kind, payload in pieces:
+        if kind == "text":
+            assert isinstance(payload, pygame.Surface)
+            total_w += payload.get_width()
+        else:
+            assert isinstance(payload, int)
+            total_w += payload + 2 * pad
+    height = max(line_h, heart_size)
+    row = pygame.Surface((max(1, total_w), height), pygame.SRCALPHA)
+    x = 0
+    for kind, payload in pieces:
+        if kind == "text":
+            assert isinstance(payload, pygame.Surface)
+            row.blit(payload, (x, (height - payload.get_height()) // 2))
+            x += payload.get_width()
+        else:
+            assert isinstance(payload, int)
+            draw_heart(row, (x + pad + payload // 2, height // 2), payload, filled=True)
+            x += payload + 2 * pad
+
+    if max_width is not None and row.get_width() > max_width > 0:
+        ratio = max_width / row.get_width()
+        row = pygame.transform.smoothscale(
+            row, (max_width, max(1, int(height * ratio)))
+        )
+    if alpha < 255:
+        row = row.convert_alpha() if pygame.display.get_surface() is not None else row
+        row.fill((255, 255, 255, max(0, alpha)), special_flags=pygame.BLEND_RGBA_MULT)
+
+    rect = row.get_rect(**{anchor: (round(pos[0]), round(pos[1]))})
+    surface.blit(row, rect)
+    return rect
 
 
 def draw_tag(
