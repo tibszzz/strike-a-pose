@@ -49,7 +49,7 @@ def test_all_screens_render():
     frame = _frame((p1, p2))
 
     t, seen = 0.0, set()
-    floated = False
+    taunted = False
     game.draw(canvas, frame)
     seen.add(game.duel.phase)
     # ready-up request_start -> READY -> P1 draws early in STEADY -> P2 draws after BANG -> replay -> winner
@@ -65,7 +65,7 @@ def test_all_screens_render():
             game.recorder.push(frame.image, t)
         game.draw(canvas, frame)
         seen.add(game.duel.phase)
-        floated |= bool(game.floaters)
+        taunted |= bool(game.early_text[0]) and game._locked_out(0)
 
     assert {
         Phase.WAIT_START,
@@ -75,7 +75,7 @@ def test_all_screens_render():
         Phase.REPLAY,
         Phase.MATCH_OVER,
     } <= seen
-    assert floated
+    assert taunted
     assert game.duel.phase == Phase.MATCH_OVER and game.duel.match_winner == 1
     assert game.shot_msg and game.win_msg and game.win_img is not None
     assert game.duel.can_restart(t)
@@ -93,6 +93,31 @@ def test_preview_placeholder_when_missing():
     rect = game._preview_rect(0)
     sample = canvas.get_at((rect.left + 12, rect.top + 12))
     assert sample[:3] == paper.INK_FAINT
+
+
+def test_early_draw_greys_out_that_players_portrait():
+    pygame.init()
+    game = DuelGame(SIZE, config=DuelConfig(lives=1, start_delay=0.0))
+    game.duel.rng = FixedRng(1.6)
+    canvas = pygame.Surface(SIZE)
+    frame = _frame((_person((40, 40, 180, 300)), _person((400, 40, 560, 300))))
+    game.duel.request_start(0.0)
+    game._needs_ready_up = False
+    t = 0.0
+    for _ in range(10):  # P1 draws during READY -> early
+        t += DT
+        game.step(t, (D, H))
+    assert game.duel.early[0] and game.duel.phase in (Phase.READY, Phase.STEADY)
+    game.draw(canvas, frame)
+
+    def inner(i):
+        rect = game._preview_rect(i)
+        return canvas.get_at(rect.center)[:3]
+
+    r, g, b = inner(0)
+    assert r == g == b  # locked-out player's feed is desaturated
+    r, g, b = inner(1)
+    assert r > g > b  # opponent keeps the live colour feed (BGR camera -> RGB)
 
 
 def test_replay_screen_cover_blits():

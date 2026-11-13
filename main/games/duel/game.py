@@ -12,7 +12,6 @@ behind the same UI.
 from __future__ import annotations
 
 import random
-from dataclasses import dataclass
 
 import numpy as np
 import pygame
@@ -40,7 +39,6 @@ from main.settings import ASSETS, DuelConfig, GestureConfig, Messages, ViewConfi
 from main.ui import paper, sketch
 from main.ui.paper import HEART, INK, INK_FAINT, INK_SOFT, Frame, PaperStyle
 
-from .float_path import FloatPath, ease_out, fade
 from .logic import Duel, Phase
 from .preview import PreviewTracker, cover_crop, resolve_results_portrait
 from .replay import ReplayPlayback, ReplayRecorder
@@ -55,13 +53,6 @@ SOUNDS = ASSETS / "sounds"
 def _still_paths() -> tuple:
     root = ASSETS / "ready_up" / "duel"
     return tuple(sorted(root.glob("pose_*.png")))
-
-
-@dataclass
-class _Floater:
-    path: FloatPath
-    text: str
-    start: float
 
 
 class DuelGame:
@@ -90,8 +81,7 @@ class DuelGame:
         self.shot_msg = ""
         self.win_msg = ""
         self.win_img: pygame.Surface | None = None
-        self.floaters: list[_Floater] = []
-        self.paths = (FloatPath(size, 0), FloatPath(size, 1))
+        self.early_text = ["", ""]  # taunt shown under a player's portrait after an early draw
         aspect = (self.view.preview_width * self.w) / max(1.0, self.view.preview_height * self.h)
         self.previews = (
             PreviewTracker(
@@ -120,8 +110,8 @@ class DuelGame:
         self.tag_face = paper.hand(f, 38)  # Player 1 / Player 2 tags
         self.winner_tag_face = paper.hand(f, 26)  # RESULTS feed winner label
         self.body_face = paper.hand(f, 42)  # reaction times, WAITING FOR
-        self.note_face = paper.hand(f, 34)  # floaters, lower your gun, preview WAITING
-        self.early_face = paper.marker(f, 46)  # "too early" taunts drifting up
+        self.note_face = paper.hand(f, 34)  # lower your gun, preview WAITING
+        self.early_face = paper.marker(f, 46)  # "too early" taunt under a locked-out portrait
         self.heart_px = f.px(50)
         self._wash: pygame.Surface | None = None
         self.cowboys = sorted((SPRITES / "cowboys").glob("*.png"))
@@ -187,7 +177,6 @@ class DuelGame:
 
     def reset(self) -> None:
         self.duel.reset()
-        self.floaters.clear()
         for tracker in self.previews:
             tracker.reset()
         self.recorder.discard()
@@ -215,7 +204,6 @@ class DuelGame:
         self.win_img = self._pick_cowboy()
         self._end.reset()
         self._clear_replay()
-        self.floaters.clear()
         return True
 
     def handle_command(self, command: MenuCommand) -> None:
@@ -259,7 +247,6 @@ class DuelGame:
             return
         # Replay → fresh ReadyUp
         self.duel.reset()
-        self.floaters.clear()
         for tracker in self.previews:
             tracker.reset()
         self.recorder.discard()
@@ -278,8 +265,6 @@ class DuelGame:
         self._needs_ready_up = False
         self._end.reset()
         for name, player in self.duel.request_start(now):
-            if name == "ready":
-                self.floaters.clear()
             audio.play(self.sounds.get(name))
 
     def _slots_from_frame(self, frame: PoseFrame) -> tuple[Person | None, Person | None]:
@@ -306,14 +291,12 @@ class DuelGame:
         self.states = states
         was_replay = self.duel.phase == Phase.REPLAY
         for name, player in self.duel.update(now, states):
-            if name in ("ready", "abort"):
-                self.floaters.clear()
-                if name == "abort":
-                    self._clear_replay()
+            if name == "abort":
+                self._clear_replay()
             elif name == "bang":
                 self.recorder.start(now)
             elif name == "early":
-                self.floaters.append(_Floater(self.paths[player], self.early_msgs.pick(), self.now))
+                self.early_text[player] = self.early_msgs.pick()
             elif name == "hit":
                 self.shot_msg = self.shot_msgs.pick()
                 self._begin_playback()
@@ -396,7 +379,7 @@ class DuelGame:
                 }[d.phase]
                 color = HEART if d.phase == Phase.BANG else INK
                 paper.text(canvas, word, self.cue_face, color, (self.w / 2, self.h / 2), "center", max_width=self._mid_width())
-        self._draw_floaters(canvas)
+                self._draw_early_taunts(canvas)
 
     # -- screens ----------------------------------------------------------------------
 
@@ -447,11 +430,17 @@ class DuelGame:
         for i in (0, 1):
             rect = self._preview_rect(i)
             box = self.previews[i].update(frame.players[i], self.now, fw, fh)
+            locked = self._locked_out(i)
             if box is None:
                 self._draw_preview_placeholder(canvas, rect)
             else:
-                self._blit_preview_crop(canvas, frame.image, box, rect)
-            paper.draw_marker_box(canvas, rect, self.frame, INK, seed=80 + i)
+                self._blit_preview_crop(canvas, frame.image, box, rect, grey=locked)
+            paper.draw_marker_box(canvas, rect, self.frame, HEART if locked else INK, seed=80 + i)
+
+    def _locked_out(self, i: int) -> bool:
+        """Player `i` drew early and can't shoot for the rest of this round's draw."""
+        d = self.duel
+        return d.early[i] and d.phase in (Phase.READY, Phase.STEADY, Phase.BANG)
 
     def _preview_rect(self, i: int) -> pygame.Rect:
         pw = int(self.view.preview_width * self.w)
@@ -478,8 +467,12 @@ class DuelGame:
         *,
         cover: bool = False,
         missing_placeholder: bool = True,
+        grey: bool = False,
     ) -> bool:
-        """Blit person crop into `dest`. `cover` center-crops to fill. Returns False if empty."""
+        """Blit person crop into `dest`. `cover` center-crops to fill; `grey` desaturates.
+
+        Returns False if empty.
+        """
         x1, y1, x2, y2 = (int(v) for v in box)
         x1, x2 = max(0, min(x1, x2)), min(image_bgr.shape[1], max(x1, x2))
         y1, y2 = max(0, min(y1, y2)), min(image_bgr.shape[0], max(y1, y2))
@@ -493,7 +486,9 @@ class DuelGame:
             ix, iy = int(cx), int(cy)
             iw, ih = max(1, int(cw)), max(1, int(ch))
             crop = np.ascontiguousarray(crop[iy : iy + ih, ix : ix + iw])
-        surf = pygame.image.frombuffer(crop.tobytes(), (crop.shape[1], crop.shape[0]), "RGB")
+        if grey:
+            crop = np.ascontiguousarray(np.repeat(crop.mean(axis=2, keepdims=True).astype(np.uint8), 3, axis=2))
+        surf =pygame.image.frombuffer(crop.tobytes(), (crop.shape[1], crop.shape[0]), "RGB")
         canvas.blit(pygame.transform.smoothscale(surf, dest.size), dest)
         return True
 
@@ -630,27 +625,20 @@ class DuelGame:
         seed = 80 if winner is None else 80 + winner
         paper.draw_marker_box(canvas, feed, self.frame, INK, seed=seed)
 
-    def _draw_floaters(self, canvas):
-        dur = max(0.01, self.view.early_float_time)
-        alive = []
-        for f in self.floaters:
-            t = (self.now - f.start) / dur
-            if t >= 1:
-                continue
-            alive.append(f)
-            alpha = int(255 * fade(t, self.view.early_fade_start))
-            x, y = f.path.at(ease_out(t))
-            # keep the whole text on its player's side column (screen edge to the inner
-            # edge of their preview), clear of the READY / STEADY cue in the middle
-            half_w = self.early_face.size(f.text)[0] / 2
-            margin = 0.02 * self.w
-            if f.path.player == 0:
-                lo, hi = 0, self._preview_rect(0).right + margin
-            else:
-                lo, hi = self._preview_rect(1).left - margin, self.w
-            x = min(max(x, lo + margin + half_w), hi - margin - half_w)
-            paper.text(canvas, f.text, self.early_face, HEART, (x, y), "center", alpha=alpha)
-        self.floaters = alive
+    def _draw_early_taunts(self, canvas):
+        """Random "too early" taunt under each locked-out player's portrait, kept to their column."""
+        for i in (0, 1):
+            if self._locked_out(i) and self.early_text[i]:
+                width = self._preview_rect(i).width + self.frame.px(40)
+                paper.text(
+                    canvas,
+                    self.early_text[i],
+                    self.early_face,
+                    HEART,
+                    (self._side_x(i), 0.877 * self.h),
+                    "center",
+                    max_width=width,
+                )
 
     # -- helpers ----------------------------------------------------------------------
 
