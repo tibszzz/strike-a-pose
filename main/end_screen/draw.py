@@ -84,7 +84,9 @@ def draw_end_screen(
         )
 
     if active:
-        widgets.draw_cursor(canvas, f, snap, end.hold_progress, at=end.cursor.position)
+        widgets.draw_cursor(
+            canvas, f, snap, end.hold_progress, at=end.cursor.position, scale=end.cursor_scale
+        )
 
 
 # --- body helpers -------------------------------------------------------------------

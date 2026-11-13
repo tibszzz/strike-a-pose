@@ -2,6 +2,7 @@ import numpy as np
 
 from main.pose import (
     KP,
+    GestureConfig,
     Person,
     PoseState,
     assign_players,
@@ -37,14 +38,29 @@ def test_arms_down_is_neutral():
 
 
 def test_right_arm_pointing_sideways_is_drawn():
-    p = person({KP.R_ELBOW: (190, 162), KP.R_WRIST: (120, 165)})
+    p = person({KP.R_ELBOW: (190, 160), KP.R_WRIST: (120, 150)})
     assert is_arm_extended(p, "right")
     assert classify(p) == PoseState.DRAWN
 
 
 def test_left_arm_pointing_sideways_is_drawn():
-    p = person({KP.L_ELBOW: (410, 160), KP.L_WRIST: (480, 158)})
+    p = person({KP.L_ELBOW: (410, 160), KP.L_WRIST: (480, 150)})
     assert classify(p) == PoseState.DRAWN
+
+
+def test_forearm_level_or_sagging_is_not_drawn():
+    # Straight, level arm, but the wrist isn't above the elbow (rise <= 0 deg < 5 deg).
+    level = person({KP.R_ELBOW: (190, 160), KP.R_WRIST: (120, 160)})
+    sagging = person({KP.R_ELBOW: (190, 162), KP.R_WRIST: (120, 165)})
+    assert not is_arm_extended(level, "right")
+    assert not is_arm_extended(sagging, "right")
+
+
+def test_min_forearm_rise_is_configurable():
+    # Wrist ~3.3 deg above the elbow: below the 5 deg default, fine at 2 deg.
+    p = person({KP.R_ELBOW: (190, 160), KP.R_WRIST: (120, 156)})
+    assert not is_arm_extended(p, "right")
+    assert is_arm_extended(p, "right", GestureConfig(min_forearm_rise=2.0))
 
 
 def test_arm_raised_overhead_is_not_drawn():
@@ -63,7 +79,7 @@ def test_hands_on_chest_is_neutral():
 
 
 def test_low_confidence_is_not_drawn():
-    p = person({KP.R_ELBOW: (190, 162), KP.R_WRIST: (120, 165)}, conf=0.2)
+    p = person({KP.R_ELBOW: (190, 160), KP.R_WRIST: (120, 150)}, conf=0.2)
     assert classify(p) == PoseState.NEUTRAL
 
 

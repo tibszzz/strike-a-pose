@@ -52,6 +52,7 @@ class EndScreen:
             grace_s=nav.hold_grace_s,
         )
         self.cursor = nav_cursor(size, config=nav)
+        self.cursor_scale = nav.cursor_scale
         self._hard_lock: int | None = None
         self._hover: int | None = None
         self._choice: EndChoice | None = None

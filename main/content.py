@@ -19,7 +19,7 @@ class Hints:
     """Gesture hints on the main menu."""
 
     hover_heading = "Open palm to hover"
-    select_heading = "Fist to select"
+    select_heading = "Hold fist to select"
 
 
 class HowToPlay:

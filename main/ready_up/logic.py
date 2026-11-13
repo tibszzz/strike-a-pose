@@ -10,6 +10,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable, Protocol, Sequence
 
+from main.settings import load_gesture_nav_config
+
 THUMB_UP = "Thumb_Up"
 CLOSED_FIST = "Closed_Fist"
 
@@ -87,6 +89,7 @@ class ReadyUp:
     def __init__(self, width: float, config: ReadyUpConfig) -> None:
         self.width = width
         self.config = config
+        self.cursor_scale = load_gesture_nav_config().cursor_scale  # fist badge size
         self.candidates: list[Candidate] = []
         self._next_id = 1
         self.started: Started | None = None

@@ -114,6 +114,7 @@ class HowToPlayGame:
         self._lock: int | None = None  # selected button (sticky)
         self._pending: Nav | None = None
         self.pointer = nav_cursor(size, config=cfg)  # same mapping as the menu: no jump
+        self.cursor_scale = cfg.cursor_scale
 
     # -- layout ----------------------------------------------------------------
 
@@ -191,7 +192,9 @@ class HowToPlayGame:
                 progress=self._thumb.progress if self._lock == idx else 0.0,
             )
 
-        widgets.draw_cursor(canvas, f, self.gesture_snapshot, self._thumb.progress, at=self.cursor)
+        widgets.draw_cursor(
+            canvas, f, self.gesture_snapshot, self._thumb.progress, at=self.cursor, scale=self.cursor_scale
+        )
 
     def handle_command(self, command: MenuCommand) -> None:
         """Debug keyboard: arrows pick a button, Enter confirms (Let's go! if none), Back → menu."""
