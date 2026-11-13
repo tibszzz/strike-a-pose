@@ -53,7 +53,6 @@ def build_registry(
             content.Registry.dodgeball,
             dodgeball,
             {
-                "lives": dodge_cfg.lives,
                 "min_players": dodge_cfg.min_players,
                 "max_players": dodge_cfg.max_players,
             },

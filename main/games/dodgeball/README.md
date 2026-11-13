@@ -21,10 +21,10 @@ Gestures are read by MediaPipe's gesture recognizer (`assets/models/gesture_reco
 
 - Stand in front of the camera.
 - A ball appears and moves around the live feed.
-- Each player starts with **3 lives**, shown as hearts in the top-right.
-- Avoid getting hit. If the ball touches your body shape, you lose a life and the round pauses.
-- Press **R** to resume (5-second countdown). A player with no lives left is out.
-- Last player standing wins (solo: play until your lives run out). Press **R** to start a new match.
+- Lives scale with roster size (**2P: 3 Lives, 3P: 2 Lives, 4P: 1 Life**), shown as hearts in the top-right.
+- Avoid getting hit. If the ball touches your body shape, you lose a life and the round restarts itself.
+- A player with no lives left is out (their HUD P# tag goes gray).
+- Last player standing wins. Press **R** on game over to rematch into ready-up.
 - If you move out of the screen for long (3 seconds), you lose a life
 
 ## Keys

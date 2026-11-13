@@ -7,10 +7,9 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class DodgeballConfig:
-    min_players: int = 1
+    min_players: int = 2
     max_players: int = 4
     fps: int = 30
-    lives: int = 3  # chances per player; at 0 the player is out
     offscreen_seconds: float = 3.0  # out of frame this long during play = lose a life
     debug: bool = False  # SPACE force-start; ReadyUp.required_min floors to 1
 
