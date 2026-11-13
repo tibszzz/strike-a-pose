@@ -24,6 +24,7 @@ from .screens import (
     CountdownScreen,
     FinalScreen,
     LobbyScreen,
+    PlayerResult,
     ResultsScreen,
     Screen,
 )
@@ -51,6 +52,9 @@ SCORE_SCALE = 4.0
 PLAYER_LABEL_SCALE = 1.2
 SCORE_GAP_ABOVE_LABEL = 28  # score baseline above P# baseline
 LABEL_GAP_ABOVE_HEAD = 10  # P# baseline above head top
+# Round-winner score bounce (idle ResultsScreen only). Edit freely.
+RESULTS_WINNER_BOUNCE_PX = 7  # peak vertical travel in canvas pixels
+RESULTS_WINNER_BOUNCE_HZ = 1.0  # full up-down cycles per second
 # Idle results auto-advance bar (menu-button hold style).
 RESULTS_ADVANCE_BAR_HEIGHT = 12
 RESULTS_ADVANCE_BAR_MARGIN_X = 40
@@ -529,6 +533,24 @@ def _results_score_stack_baselines(head_y: int) -> tuple[int, int]:
     return score_y, label_y
 
 
+def round_high_scorers(players: tuple[PlayerResult, ...]) -> frozenset[int]:
+    """1-based seats tied for the highest round score (empty if no players)."""
+    if not players:
+        return frozenset()
+    high = max(player.round_score for player in players)
+    return frozenset(
+        player.player for player in players if player.round_score == high
+    )
+
+
+def winner_score_bounce_y(elapsed_s: float) -> int:
+    """Canvas Y delta for a high-scorer numeral; 0 at lock, then rises (up = negative)."""
+    return round(
+        -RESULTS_WINNER_BOUNCE_PX
+        * math.sin(elapsed_s * math.tau * RESULTS_WINNER_BOUNCE_HZ)
+    )
+
+
 def _draw_results_player_stack(
     canvas: np.ndarray,
     player_number: int,
@@ -537,6 +559,8 @@ def _draw_results_player_stack(
     box: Box,
     transform: Transform,
     color: tuple[int, int, int],
+    *,
+    score_dy: int = 0,
 ) -> None:
     head_x, head_y = _head_anchor_xy(joints, box, transform)
     score_y, label_y = _results_score_stack_baselines(head_y)
@@ -544,7 +568,7 @@ def _draw_results_player_stack(
         canvas,
         str(display_score),
         head_x,
-        score_y,
+        score_y + score_dy,
         SCORE_SCALE,
         color,
         "center",
@@ -577,6 +601,16 @@ def _compose_results(screen: ResultsScreen) -> np.ndarray:
     draw_pose_paper(canvas, target_rect)
     draw_stick_figure(canvas, screen.target.joints, target_rect, POSE_INK)
 
+    winners: frozenset[int] = frozenset()
+    bounce_dy = 0
+    if (
+        screen.idle
+        and screen.bounce_elapsed_s is not None
+        and not screen.holding
+    ):
+        winners = round_high_scorers(screen.players)
+        bounce_dy = winner_score_bounce_y(screen.bounce_elapsed_s)
+
     for player, display_score in zip(
         screen.players, screen.display_scores, strict=True
     ):
@@ -597,6 +631,7 @@ def _compose_results(screen: ResultsScreen) -> np.ndarray:
                 outline=True,
             )
             continue
+        score_dy = bounce_dy if player.player in winners else 0
         _draw_results_player_stack(
             canvas,
             player.player,
@@ -605,6 +640,7 @@ def _compose_results(screen: ResultsScreen) -> np.ndarray:
             player.box,
             transform,
             color,
+            score_dy=score_dy,
         )
 
     if screen.idle and screen.advance_progress is not None:

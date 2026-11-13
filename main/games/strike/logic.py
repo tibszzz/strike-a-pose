@@ -343,6 +343,7 @@ class Game:
                 self._results,
                 advance_remaining_s=remaining,
                 advance_progress=self._results_advance_progress(remaining),
+                bounce_elapsed_s=now - self._results_lock_at(),
             )
             return self._results
         if self._round_number < self._config.rounds:
@@ -385,6 +386,7 @@ class Game:
                 holding=False,
                 advance_remaining_s=self._config.results_advance_s,
                 advance_progress=0.0,
+                bounce_elapsed_s=0.0,
             )
             self._emit(ScoreRevealLocked(scores=finals))
             return
